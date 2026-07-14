@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Node / frontend
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/build/
+frontend/public/issue-case-images/
+frontend/public/neta-reports/
+frontend/public/neta-reports-gc/
+
+# Generated dashboard data
+frontend/public/data/*
+!frontend/public/data/.gitkeep
+
+# Raw/local data inputs
+raw_data/*
+!raw_data/.gitkeep
+!raw_data/module/
+!raw_data/system_elements/
+!raw_data/cases/
+raw_data/module/*
+raw_data/system_elements/*
+raw_data/cases/*
+!raw_data/module/.gitkeep
+!raw_data/system_elements/.gitkeep
+!raw_data/cases/.gitkeep
+
+# Environment and local files
+.env
+.env.*
+*.log
+.DS_Store
+Thumbs.db
