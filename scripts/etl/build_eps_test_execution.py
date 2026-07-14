@@ -932,12 +932,15 @@ def record_is_failed(
     record: TrackerRecord,
     failed_equipment: set[str],
     fixed_equipment: set[str] | None = None,
+    passed_equipment: set[str] | None = None,
 ) -> bool:
     if fixed_equipment and record.equipment_key in fixed_equipment:
         return False
-    return record.equipment_key in failed_equipment or record_has_follow_up_failure(
-        record
-    )
+    if record.equipment_key in failed_equipment:
+        return True
+    if passed_equipment and record.equipment_key in passed_equipment:
+        return False
+    return record_has_follow_up_failure(record)
 
 
 def record_is_complete(record: TrackerRecord, completed_equipment: set[str]) -> bool:
@@ -970,13 +973,19 @@ def summarize_module_status(
     if not records:
         return STATUS_NO_TRACKER_RECORDS, [], [], []
 
+    passed_equipment = completed_equipment - failed_equipment
     completed_records = [
         record for record in records if record_is_complete(record, completed_equipment)
     ]
     failed_records = [
         record
         for record in records
-        if record_is_failed(record, failed_equipment, fixed_equipment)
+        if record_is_failed(
+            record,
+            failed_equipment,
+            fixed_equipment,
+            passed_equipment,
+        )
     ]
     incomplete_records = [
         record
@@ -1271,6 +1280,7 @@ def build_tracker_test_items(
 ) -> list[dict[str, Any]]:
     fixed_equipment_dates = fixed_equipment_dates or {}
     fixed_equipment = set(fixed_equipment_dates)
+    passed_equipment = completed_equipment - failed_equipment
     module_link_index = build_module_link_index(module_links)
     records: list[dict[str, Any]] = []
 
@@ -1287,7 +1297,12 @@ def build_tracker_test_items(
             module_link = link_with_effective_pdm(module_link, equipment_info)
 
         retested_at = fixed_equipment_dates.get(tracker_record.equipment_key)
-        if record_is_failed(tracker_record, failed_equipment, fixed_equipment):
+        if record_is_failed(
+            tracker_record,
+            failed_equipment,
+            fixed_equipment,
+            passed_equipment,
+        ):
             item_status = STATUS_FAILED
         elif record_is_complete(tracker_record, completed_equipment):
             item_status = ITEM_STATUS_FIXED if retested_at else ITEM_STATUS_PASSED
@@ -1324,6 +1339,7 @@ def build_module_execution_records(
 ]:
     fixed_equipment_dates = fixed_equipment_dates or {}
     fixed_equipment = set(fixed_equipment_dates)
+    passed_equipment = completed_equipment - failed_equipment
     module_records: list[dict[str, Any]] = []
     failed_items: list[dict[str, Any]] = []
     incomplete_items: list[dict[str, Any]] = []
@@ -1347,7 +1363,12 @@ def build_module_execution_records(
 
         for record in tracker_records:
             retested_at = fixed_equipment_dates.get(record.equipment_key)
-            if record_is_failed(record, failed_equipment, fixed_equipment):
+            if record_is_failed(
+                record,
+                failed_equipment,
+                fixed_equipment,
+                passed_equipment,
+            ):
                 item_status = STATUS_FAILED
             elif record_is_complete(record, completed_equipment):
                 item_status = ITEM_STATUS_FIXED if retested_at else ITEM_STATUS_PASSED

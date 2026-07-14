@@ -106,6 +106,23 @@ def test_follow_up_req_with_comments_counts_as_failed_only_after_test_started() 
     assert record_is_failed(record, set())
 
 
+def test_explicit_daily_passed_overrides_stale_tracker_follow_up() -> None:
+    record = TrackerRecord(
+        **{
+            **make_tracker_record("PDU6-01A-1-PQM1", "PDU6-01A-1").__dict__,
+            "follow_up_req": "SEE COMMENTS",
+            "comments": "CT setup needs programming",
+            "date_tested": "2026-06-25 00:00:00",
+        }
+    )
+
+    assert not record_is_failed(
+        record,
+        failed_equipment=set(),
+        passed_equipment={"PDU6-01A-1-PQM1"},
+    )
+
+
 def test_snapshot_failed_equipment_keeps_failed_not_in_tracker_items() -> None:
     failed_input_equipment = {"PDU6-01B-4-PQM1-CT01", "PDU6-01B-4-CT-PRI"}
     tracker_equipment_keys = {"PDU6-01B-4-PQM1-CT01"}

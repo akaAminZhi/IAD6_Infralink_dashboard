@@ -121,6 +121,9 @@ function getStatus(
   ) {
     return "testing";
   }
+  if (!netaComplete) {
+    return "testing";
+  }
   return "ready";
 }
 
