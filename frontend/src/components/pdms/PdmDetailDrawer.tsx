@@ -3,7 +3,12 @@ import { useEffect, useMemo, useState } from "react";
 
 import { cn } from "../../utils/cn";
 import { formatNumber } from "../../utils/formatters";
-import type { CaseIssue, PdmEquipmentRecord, PdmRecord } from "../../types/data";
+import type {
+  CaseIssue,
+  EpsTestItemRecord,
+  PdmEquipmentRecord,
+  PdmRecord,
+} from "../../types/data";
 import {
   getDueState,
   hasCorrectiveImages,
@@ -31,6 +36,7 @@ import { PdmReadinessBadge } from "./PdmReadinessBadge";
 
 interface PdmDetailDrawerProps {
   pdm: PdmRecord | null;
+  epsTestItems: EpsTestItemRecord[];
   onClose: () => void;
 }
 
@@ -125,7 +131,7 @@ function getPdmIssues(pdm: PdmRecord): EnrichedIssue[] {
   });
 }
 
-export function PdmDetailDrawer({ pdm, onClose }: PdmDetailDrawerProps) {
+export function PdmDetailDrawer({ pdm, epsTestItems, onClose }: PdmDetailDrawerProps) {
   const [selectedIssue, setSelectedIssue] = useState<EnrichedIssue | null>(null);
   const pdmIssues = useMemo(() => (pdm ? getPdmIssues(pdm) : []), [pdm]);
 
@@ -217,10 +223,10 @@ export function PdmDetailDrawer({ pdm, onClose }: PdmDetailDrawerProps) {
                 <div>
                   <h3 className="text-lg font-semibold tracking-normal">Equipment Under This PDM</h3>
                   <p className="mt-1 text-sm text-muted-foreground">
-                    Expand an equipment row for manufacturer, NETA report details, and related cases.
+                    Expand an equipment row for EPS test items, asset information, NETA reports, and related cases.
                   </p>
                 </div>
-                <PdmEquipmentList equipment={equipment} />
+                <PdmEquipmentList equipment={equipment} epsTestItems={epsTestItems} />
               </CardContent>
             </Card>
 

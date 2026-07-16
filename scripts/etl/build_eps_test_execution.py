@@ -19,8 +19,10 @@ from openpyxl.utils.cell import range_boundaries
 
 try:
     from .json_utils import file_metadata, load_records_json, write_json
+    from .pdm_assignment import choose_effective_pdm_name, is_pdm_name
 except ImportError:
     from json_utils import file_metadata, load_records_json, write_json
+    from pdm_assignment import choose_effective_pdm_name, is_pdm_name
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -80,6 +82,7 @@ class TrackerRecord:
     follow_up_req: str
     comments: str
     date_tested: str
+    report_reviewed: str
 
 
 @dataclass(frozen=True)
@@ -677,6 +680,7 @@ def load_tracker_records(path: Path) -> tuple[dict[str, list[TrackerRecord]], se
     follow_up_req_col = headers.get("FOLLOW UP REQ")
     comments_col = headers.get("COMMENTS")
     date_tested_col = headers.get("DATE TESTED")
+    report_reviewed_col = headers.get("REPORT REVIEWED")
 
     by_substation: dict[str, list[TrackerRecord]] = defaultdict(list)
     equipment_keys: set[str] = set()
@@ -713,6 +717,11 @@ def load_tracker_records(path: Path) -> tuple[dict[str, list[TrackerRecord]], se
             date_tested=(
                 clean(worksheet.cell(row_number, date_tested_col).value)
                 if date_tested_col
+                else ""
+            ),
+            report_reviewed=(
+                clean(worksheet.cell(row_number, report_reviewed_col).value)
+                if report_reviewed_col
                 else ""
             ),
         )
@@ -762,23 +771,12 @@ def lookup_equipment_info(
     return {}
 
 
-def is_pdm_name(value: Any) -> bool:
-    return isinstance(value, str) and value.strip().casefold().startswith(
-        ("iad06-pdm-", "iad6-pdm-")
-    )
-
-
 def get_effective_pdm_name(
     module_link: dict[str, Any], equipment_info: dict[str, Any]
 ) -> str | None:
-    parent = equipment_info.get("parent")
-    if is_pdm_name(parent):
-        return str(parent).strip()
-
-    pdm_name = module_link.get("pdm_name")
-    if isinstance(pdm_name, str) and pdm_name.strip():
-        return pdm_name.strip()
-    return None
+    return choose_effective_pdm_name(
+        module_link.get("pdm_name"), equipment_info.get("parent")
+    )
 
 
 def link_with_effective_pdm(
@@ -924,6 +922,13 @@ def record_has_follow_up_failure(record: TrackerRecord) -> bool:
     )
 
 
+def record_has_reviewed_pass(record: TrackerRecord) -> bool:
+    return bool(
+        date_tested_indicates_tested(record.date_tested)
+        and date_tested_indicates_tested(record.report_reviewed)
+    )
+
+
 def record_is_closed_without_markdown(record: TrackerRecord) -> bool:
     return bool(record.comments and date_tested_indicates_tested(record.date_tested))
 
@@ -940,12 +945,15 @@ def record_is_failed(
         return True
     if passed_equipment and record.equipment_key in passed_equipment:
         return False
+    if record_has_reviewed_pass(record):
+        return False
     return record_has_follow_up_failure(record)
 
 
 def record_is_complete(record: TrackerRecord, completed_equipment: set[str]) -> bool:
     return (
         record.equipment_key in completed_equipment
+        or record_has_reviewed_pass(record)
         or record_is_closed_without_markdown(record)
     )
 
@@ -1044,6 +1052,7 @@ def item_record(
         "follow_up_req": tracker_record.follow_up_req,
         "comments": comments,
         "date_tested": tracker_record.date_tested,
+        "report_reviewed": tracker_record.report_reviewed,
         "retested_and_passed": retested_at is not None,
         "retested_at": retested_at.isoformat() if retested_at else None,
         "equipment_serial_number": equipment_info.get("serial_number"),
@@ -1258,6 +1267,7 @@ def tracker_item_record(
         "follow_up_req": tracker_record.follow_up_req,
         "comments": comments,
         "date_tested": tracker_record.date_tested,
+        "report_reviewed": tracker_record.report_reviewed,
         "retested_and_passed": retested_at is not None,
         "retested_at": retested_at.isoformat() if retested_at else None,
         "equipment_serial_number": equipment_info.get("serial_number"),
@@ -1482,6 +1492,7 @@ def add_unmatched_failed_items(
                     "comments": record.comments
                     or "No matching equipment cell in module list.",
                     "date_tested": record.date_tested,
+                    "report_reviewed": record.report_reviewed,
                     "equipment_serial_number": equipment_info.get("serial_number"),
                     "equipment_manufacturer": equipment_info.get("manufacturer"),
                     "equipment_model": equipment_info.get("model"),
@@ -2053,8 +2064,10 @@ def records_envelope(records: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def build_eps_test_execution() -> dict[str, Any]:
-    tracker_input_path = get_tracker_input_path()
+def build_eps_test_execution(
+    tracker_path: str | Path | None = None,
+) -> dict[str, Any]:
+    tracker_input_path = Path(tracker_path) if tracker_path else get_tracker_input_path()
     missing_inputs = [
         path
         for path in [

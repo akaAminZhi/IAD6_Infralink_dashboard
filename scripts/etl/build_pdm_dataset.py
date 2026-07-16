@@ -14,6 +14,7 @@ try:
         selected_input_files_metadata,
         write_json as write_json_payload,
     )
+    from .pdm_assignment import choose_effective_pdm_name
 except ImportError:
     from file_discovery import get_input_files
     from json_utils import (
@@ -21,6 +22,7 @@ except ImportError:
         selected_input_files_metadata,
         write_json as write_json_payload,
     )
+    from pdm_assignment import choose_effective_pdm_name
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -178,29 +180,17 @@ def is_blank(value: Any) -> bool:
     return value is None or (isinstance(value, str) and value.strip() == "")
 
 
-def is_pdm_name(value: Any) -> bool:
-    return isinstance(value, str) and value.strip().casefold().startswith(("iad06-pdm-", "iad6-pdm-"))
-
-
 def get_effective_pdm_name(
     link: dict[str, Any],
     equipment_by_id: dict[str, dict[str, Any]],
 ) -> str | None:
-    """Prefer SystemElements Parent when a matched equipment row exposes a PDM parent.
-
-    The module list can contain occasional row-level PDM typos. Once an equipment
-    link is matched to SystemElements, Parent is the more reliable PDM association.
-    """
+    """Resolve the module-list PDM against the matched SystemElements Parent."""
     link_pdm_name = link.get("pdm_name")
     matched_equipment_id = link.get("matched_equipment_id")
     equipment = equipment_by_id.get(matched_equipment_id, {}) if matched_equipment_id else {}
     parent = equipment.get("parent")
 
-    if is_pdm_name(parent):
-        return str(parent).strip()
-    if isinstance(link_pdm_name, str) and link_pdm_name.strip():
-        return link_pdm_name.strip()
-    return None
+    return choose_effective_pdm_name(link_pdm_name, parent)
 
 
 def make_pdm_equipment_record(

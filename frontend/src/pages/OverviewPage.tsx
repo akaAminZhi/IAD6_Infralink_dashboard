@@ -909,7 +909,11 @@ export function OverviewPage({ data }: OverviewPageProps) {
       />
       <RiskBreakdown pdms={data.pdms} />
       <EquipmentAttentionTable rows={attentionRows} />
-      <PdmDetailDrawer pdm={selectedPdm} onClose={() => setSelectedPdm(null)} />
+      <PdmDetailDrawer
+        epsTestItems={data.epsTestItems}
+        pdm={selectedPdm}
+        onClose={() => setSelectedPdm(null)}
+      />
     </div>
   );
 }

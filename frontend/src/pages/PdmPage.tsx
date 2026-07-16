@@ -18,6 +18,7 @@ import {
   getPdmTableRows,
   type PdmTableRow,
 } from "../utils/pdmUtils";
+import { matchesSearchQuery } from "../utils/searchUtils";
 
 interface PdmPageProps {
   data: DashboardData;
@@ -53,7 +54,7 @@ function normalizePdmName(value: unknown): string {
 }
 
 function filterRows(rows: PdmTableRow[], filters: PdmFiltersState): PdmTableRow[] {
-  const search = filters.search.trim().toLowerCase();
+  const search = filters.search.trim();
 
   return rows.filter((row) => {
     if (filters.quickFilter === "testingStarted" && !hasNetaTestingStarted(row.pdm)) {
@@ -92,19 +93,13 @@ function filterRows(rows: PdmTableRow[], filters: PdmFiltersState): PdmTableRow[
 }
 
 function rowMatchesSearch(row: PdmTableRow, search: string): boolean {
-  if (row.pdmName.toLowerCase().includes(search)) {
-    return true;
-  }
+  const equipmentValues = (row.pdm.equipment ?? []).flatMap((equipment) => [
+    getEquipmentDisplayId(equipment),
+    equipment.equipment_id,
+    equipment.source_equipment_label,
+  ]);
 
-  return (row.pdm.equipment ?? []).some((equipment) => {
-    const values = [
-      getEquipmentDisplayId(equipment),
-      equipment.equipment_id,
-      equipment.source_equipment_label,
-    ];
-
-    return values.some((value) => String(value ?? "").toLowerCase().includes(search));
-  });
+  return matchesSearchQuery([row.pdmName, ...equipmentValues], search);
 }
 
 function sortRowsForDefaultReadinessView(rows: PdmTableRow[]): PdmTableRow[] {
@@ -201,7 +196,11 @@ export function PdmPage({ data }: PdmPageProps) {
         selectedPdmName={selectedPdm?.pdm_name ?? null}
       />
 
-      <PdmDetailDrawer pdm={selectedPdm} onClose={closePdmDetail} />
+      <PdmDetailDrawer
+        epsTestItems={data.epsTestItems}
+        pdm={selectedPdm}
+        onClose={closePdmDetail}
+      />
     </div>
   );
 }

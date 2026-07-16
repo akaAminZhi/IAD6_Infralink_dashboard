@@ -440,6 +440,7 @@ export interface EpsTestItemRecord {
   follow_up_req?: string | null;
   comments?: string | null;
   date_tested?: string | null;
+  report_reviewed?: string | null;
   retested_and_passed?: boolean;
   retested_at?: string | null;
   equipment_serial_number?: string | null;

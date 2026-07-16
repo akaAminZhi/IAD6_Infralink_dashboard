@@ -1,4 +1,14 @@
-import type { CaseIssue, Equipment, PdmEquipmentRecord, PdmRecord } from "../types/data";
+import type {
+  CaseIssue,
+  Equipment,
+  EpsTestItemRecord,
+  PdmEquipmentRecord,
+  PdmRecord,
+} from "../types/data";
+import {
+  buildEpsTestItemIndex,
+  getIndexedEpsTestItems,
+} from "./epsTestItemUtils";
 import { getNetaReportNames } from "./netaReports";
 
 export { getNetaReportNames };
@@ -30,6 +40,7 @@ export interface FlattenedEquipmentRow {
   neta_test_report: string | null;
   neta_report_status: string | null;
   cases: CaseIssue[];
+  eps_test_items: EpsTestItemRecord[];
   source: "pdms" | "equipment";
 }
 
@@ -152,9 +163,11 @@ export function flattenEquipmentFromPdms(
   pdms: PdmRecord[],
   equipmentRecords: Equipment[] = [],
   caseRecords: CaseIssue[] = [],
+  epsTestItems: EpsTestItemRecord[] = [],
 ): FlattenedEquipmentRow[] {
   const equipmentIndex = buildEquipmentIndex(equipmentRecords);
   const casesIndex = buildCasesIndex(caseRecords);
+  const epsTestItemIndex = buildEpsTestItemIndex(epsTestItems);
   const rows: FlattenedEquipmentRow[] = [];
 
   pdms.forEach((pdm, pdmIndex) => {
@@ -188,6 +201,11 @@ export function flattenEquipmentFromPdms(
         neta_test_report: firstText(equipment.neta_test_report, enrichment?.neta_test_report),
         neta_report_status: firstText(equipment.neta_report_status),
         cases,
+        eps_test_items: getIndexedEpsTestItems(epsTestItemIndex, [
+          equipment.equipment_id,
+          equipment.source_equipment_label,
+          displayId,
+        ]),
         source: "pdms",
       });
     });
@@ -223,6 +241,10 @@ export function flattenEquipmentFromPdms(
       neta_test_report: firstText(equipment.neta_test_report),
       neta_report_status: null,
       cases,
+      eps_test_items: getIndexedEpsTestItems(epsTestItemIndex, [
+        equipment.equipment_id,
+        displayId,
+      ]),
       source: "equipment",
     };
   });

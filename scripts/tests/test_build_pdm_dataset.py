@@ -101,3 +101,34 @@ def test_pdm_dataset_uses_system_elements_parent_for_matched_equipment() -> None
     assert len(pdms) == 1
     assert pdms[0]["pdm_name"] == "IAD06-PDM-E6-110-02-PRIMARY-CDS"
     assert pdms[0]["equipment"][0]["equipment_id"] == "IAD06-PDU6-01B-1"
+
+
+def test_pdm_dataset_keeps_module_pdm_when_parent_scope_conflicts() -> None:
+    equipment = [
+        {
+            "equipment_id": "IAD06-MP6-01A-1",
+            "parent": "IAD06-PDM-E6-110-EAST GALLERY-A",
+            "neta_complete": None,
+            "neta_test_report": None,
+        }
+    ]
+    module_links = [
+        {
+            "pdm_name": "IAD06-PDM-IDF6-201-A",
+            "module_type": None,
+            "length": None,
+            "width": None,
+            "height": None,
+            "weight": None,
+            "source_equipment_label": "MP6-01A-1",
+            "normalized_equipment_id": "IAD06-MP6-01A-1",
+            "matched_equipment_id": "IAD06-MP6-01A-1",
+            "match_status": "matched",
+        }
+    ]
+
+    pdms = build_pdm_dataset(equipment, module_links, [])
+
+    assert len(pdms) == 1
+    assert pdms[0]["pdm_name"] == "IAD06-PDM-IDF6-201-A"
+    assert pdms[0]["equipment"][0]["equipment_id"] == "IAD06-MP6-01A-1"

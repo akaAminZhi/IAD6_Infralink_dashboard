@@ -2,7 +2,7 @@ import { Repeat2 } from "lucide-react";
 import { useState } from "react";
 
 import { useNetaReportManifest } from "../../contexts/NetaReportManifestContext";
-import type { PdmEquipmentRecord } from "../../types/data";
+import type { EpsTestItemRecord, PdmEquipmentRecord } from "../../types/data";
 import { formatDateTime, formatNumber } from "../../utils/formatters";
 import {
   getNetaReportNames,
@@ -14,12 +14,14 @@ import {
   getOpenCaseCountForEquipment,
   isBlank,
 } from "../../utils/pdmUtils";
+import { EpsTestItemsPanel } from "../common/EpsTestItemsPanel";
 import { NetaReportChips } from "../common/NetaReportChips";
 import { NetaStatusBadge } from "./NetaStatusBadge";
 import { PdmCaseList } from "./PdmCaseList";
 
 interface PdmEquipmentDetailProps {
   equipment: PdmEquipmentRecord;
+  epsTestItems: EpsTestItemRecord[];
 }
 
 function Field({ label, value }: { label: string; value: string | number | null | undefined }) {
@@ -32,7 +34,7 @@ function Field({ label, value }: { label: string; value: string | number | null 
   );
 }
 
-export function PdmEquipmentDetail({ equipment }: PdmEquipmentDetailProps) {
+export function PdmEquipmentDetail({ equipment, epsTestItems }: PdmEquipmentDetailProps) {
   const manifest = useNetaReportManifest();
   const [netaReportNameMode, setNetaReportNameMode] =
     useState<NetaReportNameMode>("original");
@@ -94,6 +96,11 @@ export function PdmEquipmentDetail({ equipment }: PdmEquipmentDetailProps) {
           reports={reportNames}
           showLinkedFileNames
         />
+      </div>
+
+      <div className="space-y-2">
+        <div className="text-sm font-semibold">EPS Test Execution</div>
+        <EpsTestItemsPanel items={epsTestItems} />
       </div>
 
       <div className="space-y-2">

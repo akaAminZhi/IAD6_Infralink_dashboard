@@ -25,6 +25,7 @@ import {
   isUrgentIssue,
   type EnrichedIssue,
 } from "../utils/issueUtils";
+import { matchesSearchQuery } from "../utils/searchUtils";
 
 interface IssuesPageProps {
   data: DashboardData;
@@ -72,10 +73,6 @@ function getFiltersFromSearchParams(searchParams: URLSearchParams): IssueFilters
   };
 }
 
-function matchesText(value: unknown, search: string): boolean {
-  return String(value ?? "").toLowerCase().includes(search);
-}
-
 function normalizeFilterValue(value: unknown): string {
   return value === null || value === undefined || String(value).trim() === ""
     ? "Unknown"
@@ -92,22 +89,22 @@ function filterIssues(
   newCaseIdsSinceBaseline: Set<string>,
   resolvedCaseIdsSinceBaseline: Set<string>,
 ): EnrichedIssue[] {
-  const caseSearch = filters.caseSearch.trim().toLowerCase();
-  const equipmentSearch = filters.equipmentSearch.trim().toLowerCase();
-  const pdmSearch = filters.pdmSearch.trim().toLowerCase();
-  const summarySearch = filters.summarySearch.trim().toLowerCase();
+  const caseSearch = filters.caseSearch.trim();
+  const equipmentSearch = filters.equipmentSearch.trim();
+  const pdmSearch = filters.pdmSearch.trim();
+  const summarySearch = filters.summarySearch.trim();
 
   return issues.filter((issue) => {
-    if (caseSearch && !matchesText(issue.case_id, caseSearch)) {
+    if (caseSearch && !matchesSearchQuery([issue.case_id], caseSearch)) {
       return false;
     }
-    if (equipmentSearch && !matchesText(issue.equipment_id, equipmentSearch)) {
+    if (equipmentSearch && !matchesSearchQuery([issue.equipment_id], equipmentSearch)) {
       return false;
     }
-    if (pdmSearch && !matchesText(issue.pdm_name, pdmSearch)) {
+    if (pdmSearch && !matchesSearchQuery([issue.pdm_name], pdmSearch)) {
       return false;
     }
-    if (summarySearch && !matchesText(issue.summary, summarySearch)) {
+    if (summarySearch && !matchesSearchQuery([issue.summary], summarySearch)) {
       return false;
     }
     if (filters.status && normalizeFilterValue(issue.status) !== filters.status) {

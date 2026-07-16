@@ -1,8 +1,12 @@
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { Fragment, useMemo, useState } from "react";
 
-import type { PdmEquipmentRecord } from "../../types/data";
+import type { EpsTestItemRecord, PdmEquipmentRecord } from "../../types/data";
 import { cn } from "../../utils/cn";
+import {
+  buildEpsTestItemIndex,
+  getIndexedEpsTestItems,
+} from "../../utils/epsTestItemUtils";
 import { formatNumber } from "../../utils/formatters";
 import { getNetaReportCount } from "../../utils/netaReports";
 import {
@@ -13,6 +17,7 @@ import {
   isNetaComplete,
 } from "../../utils/pdmUtils";
 import { EmptyState } from "../common/EmptyState";
+import { EpsExecutionBadge } from "../common/EpsTestItemsPanel";
 import { StatusBadge } from "../common/StatusBadge";
 import { Button } from "../ui/button";
 import { NetaStatusBadge } from "./NetaStatusBadge";
@@ -20,20 +25,32 @@ import { PdmEquipmentDetail } from "./PdmEquipmentDetail";
 
 interface PdmEquipmentListProps {
   equipment: PdmEquipmentRecord[];
+  epsTestItems: EpsTestItemRecord[];
 }
 
-export function PdmEquipmentList({ equipment }: PdmEquipmentListProps) {
+export function PdmEquipmentList({ equipment, epsTestItems }: PdmEquipmentListProps) {
   const [expandedEquipmentKey, setExpandedEquipmentKey] = useState<string | null>(null);
+  const epsTestItemIndex = useMemo(
+    () => buildEpsTestItemIndex(epsTestItems),
+    [epsTestItems],
+  );
   const rows = useMemo(
     () =>
-      equipment.map((record, index) => ({
-        record,
-        key: `${record.equipment_id ?? record.source_equipment_label ?? "equipment"}-${index}`,
-        reasons: getEquipmentAttentionReasons(record),
-        openCases: getOpenCaseCountForEquipment(record),
-        reportCount: getNetaReportCount(record.neta_test_report),
-      })),
-    [equipment],
+      equipment.map((record, index) => {
+        const linkedTestItems = getIndexedEpsTestItems(epsTestItemIndex, [
+          record.equipment_id,
+          record.source_equipment_label,
+        ]);
+        return {
+          record,
+          key: `${record.equipment_id ?? record.source_equipment_label ?? "equipment"}-${index}`,
+          reasons: getEquipmentAttentionReasons(record),
+          openCases: getOpenCaseCountForEquipment(record),
+          reportCount: getNetaReportCount(record.neta_test_report),
+          testItems: linkedTestItems,
+        };
+      }),
+    [epsTestItemIndex, equipment],
   );
 
   if (equipment.length === 0) {
@@ -47,12 +64,14 @@ export function PdmEquipmentList({ equipment }: PdmEquipmentListProps) {
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[960px] text-left text-sm">
+      <table className="w-full min-w-[1160px] text-left text-sm">
         <thead className="border-b text-xs uppercase text-muted-foreground">
           <tr>
             <th className="px-3 py-2 font-medium">Equipment ID or Source Label</th>
             <th className="px-3 py-2 font-medium">Equipment Type</th>
             <th className="px-3 py-2 font-medium">Status</th>
+            <th className="px-3 py-2 text-right font-medium">EPS Test Items</th>
+            <th className="px-3 py-2 font-medium">EPS Status</th>
             <th className="px-3 py-2 font-medium">NETA</th>
             <th className="px-3 py-2 font-medium">NETA Test Report</th>
             <th className="px-3 py-2 text-right font-medium">Open Cases</th>
@@ -60,7 +79,7 @@ export function PdmEquipmentList({ equipment }: PdmEquipmentListProps) {
           </tr>
         </thead>
         <tbody>
-          {rows.map(({ record, key, reasons, openCases, reportCount }) => {
+          {rows.map(({ record, key, reasons, openCases, reportCount, testItems }) => {
             const isExpanded = expandedEquipmentKey === key;
             const hasAttention =
               !isNetaComplete(record) ||
@@ -93,6 +112,10 @@ export function PdmEquipmentList({ equipment }: PdmEquipmentListProps) {
                   </td>
                   <td className="px-3 py-2">{record.equipment_type ?? "--"}</td>
                   <td className="px-3 py-2">{record.status ?? "--"}</td>
+                  <td className="px-3 py-2 text-right">{formatNumber(testItems.length)}</td>
+                  <td className="px-3 py-2">
+                    <EpsExecutionBadge items={testItems} />
+                  </td>
                   <td className="px-3 py-2">
                     <NetaStatusBadge equipment={record} />
                   </td>
@@ -117,8 +140,8 @@ export function PdmEquipmentList({ equipment }: PdmEquipmentListProps) {
                 </tr>
                 {isExpanded ? (
                   <tr className="border-b last:border-0">
-                    <td className="px-3 py-3" colSpan={7}>
-                      <PdmEquipmentDetail equipment={record} />
+                    <td className="px-3 py-3" colSpan={9}>
+                      <PdmEquipmentDetail equipment={record} epsTestItems={testItems} />
                     </td>
                   </tr>
                 ) : null}

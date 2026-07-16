@@ -15,6 +15,7 @@ import {
   hasGcNetaReportLinks,
   type NetaReportNameMode,
 } from "../../utils/netaReports";
+import { EpsTestItemsPanel } from "../common/EpsTestItemsPanel";
 import { NetaReportChips } from "../common/NetaReportChips";
 import { Button } from "../ui/button";
 import { Card, CardContent } from "../ui/card";
@@ -167,6 +168,18 @@ export function EquipmentDetailDrawer({
                 <div>
                   <NetaReportNames value={equipment.neta_test_report} />
                 </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="space-y-4 p-4">
+                <div>
+                  <h3 className="text-lg font-semibold tracking-normal">EPS Test Execution</h3>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Field test items matched to this equipment from the EPS tracker.
+                  </p>
+                </div>
+                <EpsTestItemsPanel items={equipment.eps_test_items} />
               </CardContent>
             </Card>
 

@@ -24,6 +24,7 @@ import {
   isBlank,
   type FlattenedEquipmentRow,
 } from "../utils/equipmentUtils";
+import { matchesSearchQuery } from "../utils/searchUtils";
 
 interface EquipmentPageProps {
   data: DashboardData;
@@ -46,30 +47,25 @@ function normalizeFilterValue(value: unknown): string {
   return isBlank(value) ? "Unknown" : String(value).trim();
 }
 
-function matchesText(value: unknown, search: string): boolean {
-  return String(value ?? "").toLowerCase().includes(search);
-}
-
 function filterEquipmentRows(
   rows: FlattenedEquipmentRow[],
   filters: EquipmentFiltersState,
   newNetaCompleteIds: Set<string>,
 ): FlattenedEquipmentRow[] {
-  const equipmentSearch = filters.equipmentSearch.trim().toLowerCase();
-  const pdmSearch = filters.pdmSearch.trim().toLowerCase();
+  const equipmentSearch = filters.equipmentSearch.trim();
+  const pdmSearch = filters.pdmSearch.trim();
 
   return rows.filter((row) => {
     if (
       equipmentSearch &&
-      ![
-        row.display_equipment_id,
-        row.equipment_id,
-        row.source_equipment_label,
-      ].some((value) => matchesText(value, equipmentSearch))
+      !matchesSearchQuery(
+        [row.display_equipment_id, row.equipment_id, row.source_equipment_label],
+        equipmentSearch,
+      )
     ) {
       return false;
     }
-    if (pdmSearch && !matchesText(row.pdm_name, pdmSearch)) {
+    if (pdmSearch && !matchesSearchQuery([row.pdm_name], pdmSearch)) {
       return false;
     }
     if (filters.equipmentType && normalizeFilterValue(row.equipment_type) !== filters.equipmentType) {
@@ -206,8 +202,8 @@ export function EquipmentPage({ data }: EquipmentPageProps) {
   const deferredFilters = useDeferredValue(filters);
 
   const equipmentRows = useMemo(
-    () => flattenEquipmentFromPdms(data.pdms, data.equipment, data.cases),
-    [data.cases, data.equipment, data.pdms],
+    () => flattenEquipmentFromPdms(data.pdms, data.equipment, data.cases, data.epsTestItems),
+    [data.cases, data.epsTestItems, data.equipment, data.pdms],
   );
   const summaryMetrics = useMemo(() => getEquipmentSummaryMetrics(equipmentRows), [equipmentRows]);
   const newNetaCompleteIds = useMemo(() => getNewNetaCompleteIds(data), [data]);

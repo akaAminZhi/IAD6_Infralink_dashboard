@@ -20,6 +20,7 @@ import {
   type FlattenedEquipmentRow,
 } from "../../utils/equipmentUtils";
 import { getNetaReportLinks } from "../../utils/netaReports";
+import { EpsExecutionBadge } from "../common/EpsTestItemsPanel";
 import { EmptyState } from "../common/EmptyState";
 import { NetaReportChips } from "../common/NetaReportChips";
 import { StatusBadge } from "../common/StatusBadge";
@@ -154,6 +155,18 @@ export function EquipmentTable({ rows, selectedRowId, onSelectEquipment }: Equip
         cell: ({ row }) => <span>{row.original.status ?? "--"}</span>,
       },
       {
+        id: "epsTestItems",
+        header: "EPS Test Items",
+        accessorFn: (row) => row.eps_test_items.length,
+        cell: ({ row }) => <span>{formatNumber(row.original.eps_test_items.length)}</span>,
+      },
+      {
+        id: "epsStatus",
+        header: "EPS Status",
+        cell: ({ row }) => <EpsExecutionBadge items={row.original.eps_test_items} />,
+        enableSorting: false,
+      },
+      {
         id: "neta",
         header: "NETA",
         cell: ({ row }) => <EquipmentNetaBadge equipment={row.original} />,
@@ -208,7 +221,7 @@ export function EquipmentTable({ rows, selectedRowId, onSelectEquipment }: Equip
         <div>
           <CardTitle>Equipment Lookup Table</CardTitle>
           <CardDescription>
-            Select an equipment row to inspect status, PDM context, NETA reports, and cases.
+            Select an equipment row to inspect EPS tests, NETA status, PDM context, and cases.
           </CardDescription>
         </div>
         <StatusBadge tone="muted">
@@ -225,7 +238,7 @@ export function EquipmentTable({ rows, selectedRowId, onSelectEquipment }: Equip
           />
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1080px] text-left text-sm">
+            <table className="w-full min-w-[1280px] text-left text-sm">
               <thead className="border-b text-xs uppercase text-muted-foreground">
                 {table.getHeaderGroups().map((headerGroup) => (
                   <tr key={headerGroup.id}>

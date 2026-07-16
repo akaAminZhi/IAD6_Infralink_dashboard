@@ -28,6 +28,7 @@ import type {
 } from "../types/data";
 import { cn } from "../utils/cn";
 import { formatNumber } from "../utils/formatters";
+import { matchesSearchQuery } from "../utils/searchUtils";
 
 interface EpsTestExecutionPageProps {
   data: DashboardData;
@@ -180,7 +181,7 @@ function formatSnapshotDate(value: string | null | undefined): string {
 }
 
 function matchesSearch(record: EpsModuleExecutionRecord, search: string): boolean {
-  const haystack = [
+  return matchesSearchQuery([
     record.pdm_name,
     record.module_equipment,
     record.module_equipment_key,
@@ -188,18 +189,14 @@ function matchesSearch(record: EpsModuleExecutionRecord, search: string): boolea
     record.equipment_serial_number,
     record.equipment_manufacturer,
     record.equipment_model,
-  ]
-    .map((value) => String(value ?? "").toLowerCase())
-    .join(" ");
-
-  return haystack.includes(search);
+  ], search);
 }
 
 function filterModuleRecords(
   records: EpsModuleExecutionRecord[],
   filters: EpsFiltersState,
 ): EpsModuleExecutionRecord[] {
-  const search = filters.search.trim().toLowerCase();
+  const search = filters.search.trim();
 
   return records
     .filter((record) => {

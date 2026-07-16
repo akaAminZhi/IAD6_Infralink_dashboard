@@ -108,23 +108,16 @@ function getStatus(
   openIssues: CaseIssue[],
   netaComplete: boolean,
 ): PowerPlanEquipmentStatus {
+  if (netaComplete) {
+    return "ready";
+  }
   if (openIssues.length > 0) {
     return "action";
   }
   if (testItems.length === 0) {
     return "noData";
   }
-  if (
-    testItems.some(
-      (item) => !isPassedItem(item) && !isPowerPlanWaivedItem(item, netaComplete),
-    )
-  ) {
-    return "testing";
-  }
-  if (!netaComplete) {
-    return "testing";
-  }
-  return "ready";
+  return "testing";
 }
 
 function summarizeTestItems(

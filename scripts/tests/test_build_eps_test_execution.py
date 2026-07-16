@@ -15,6 +15,7 @@ from scripts.etl.build_eps_test_execution import (
     is_one_day_snapshot_diff,
     parse_daily_tested_equipment,
     record_is_failed,
+    record_is_complete,
     tracker_item_record,
     tracker_module_key_for_record,
     tracker_match_keys,
@@ -37,6 +38,7 @@ def make_tracker_record(
         follow_up_req="",
         comments="",
         date_tested="",
+        report_reviewed="",
     )
 
 
@@ -121,6 +123,21 @@ def test_explicit_daily_passed_overrides_stale_tracker_follow_up() -> None:
         failed_equipment=set(),
         passed_equipment={"PDU6-01A-1-PQM1"},
     )
+
+
+def test_reviewed_tracker_item_passes_despite_stale_follow_up_comment() -> None:
+    record = TrackerRecord(
+        **{
+            **make_tracker_record("CUPP6-01R-3", "CUPP6-01R-3").__dict__,
+            "follow_up_req": "SEE COMMENT",
+            "comments": "HAS 2 SECTIONS BONDED BY CABLE",
+            "date_tested": "2026-06-09 00:00:00",
+            "report_reviewed": "2026-06-15 00:00:00",
+        }
+    )
+
+    assert not record_is_failed(record, failed_equipment=set())
+    assert record_is_complete(record, completed_equipment=set())
 
 
 def test_snapshot_failed_equipment_keeps_failed_not_in_tracker_items() -> None:

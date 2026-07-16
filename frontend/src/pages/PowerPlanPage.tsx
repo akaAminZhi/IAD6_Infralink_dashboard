@@ -41,6 +41,7 @@ import {
   type EnrichedPowerPlanEquipment,
   type PowerPlanEquipmentStatus,
 } from "../utils/powerPlanUtils";
+import { getSearchMatchScore, matchesSearchQuery } from "../utils/searchUtils";
 
 interface PowerPlanPageProps {
   data: DashboardData;
@@ -67,6 +68,19 @@ interface SchematicPlacement {
   width: number;
   height: number;
 }
+
+type PowerPlanSearchSuggestion =
+  | {
+      kind: "pdm";
+      key: string;
+      pdmName: string;
+    }
+  | {
+      kind: "equipment";
+      key: string;
+      pdmName: string | null;
+      row: EnrichedPowerPlanEquipment;
+    };
 
 type SchematicEquipmentKind =
   | "pdu"
@@ -559,11 +573,12 @@ function SchematicEquipment({
   const displayName = row.annotation.label;
   const compact = !isCoreEquipment(row);
   const equipmentKind = getSchematicEquipmentKind(displayName);
+  const openIssueCount = row.openIssues.length;
   const markerRadius = compact ? 8 : 10;
 
   return (
     <g
-      aria-label={`${row.equipmentId}: ${POWER_PLAN_STATUS_LABELS[row.status]}`}
+      aria-label={`${row.equipmentId}: ${POWER_PLAN_STATUS_LABELS[row.status]}; ${openIssueCount} open issues`}
       className="cursor-pointer outline-none"
       data-annotation-id={row.annotation.annotation_id}
       data-equipment-marker="true"
@@ -581,13 +596,13 @@ function SchematicEquipment({
       transform={`translate(${x} ${y})`}
     >
       <title>
-        {row.equipmentId} / {POWER_PLAN_STATUS_LABELS[row.status]} / {row.failedCount} failed / {row.openIssues.length} open issues
+        {row.equipmentId} / {POWER_PLAN_STATUS_LABELS[row.status]} / {row.openIssues.length} open issues
       </title>
       {selected && (
         <rect
           fill="none"
           height={height + 18}
-          rx={8}
+          rx={12}
           stroke={colors.stroke}
           strokeDasharray="5 4"
           strokeWidth={3}
@@ -597,14 +612,31 @@ function SchematicEquipment({
         />
       )}
       <rect
+        fill={colors.stroke}
+        fillOpacity={0.18}
+        height={height}
+        rx={8}
+        width={width}
+        x={-width / 2 + 3}
+        y={-height / 2 + 4}
+      />
+      <rect
         fill={colors.fill}
         height={height}
-        rx={6}
+        rx={8}
         stroke={colors.stroke}
         strokeWidth={selected ? 4 : 2.5}
         width={width}
         x={-width / 2}
         y={-height / 2}
+      />
+      <path
+        d={`M${-width / 2 + 10} ${-height / 2 + 6}H${width / 2 - 10}`}
+        fill="none"
+        opacity={0.78}
+        stroke="#ffffff"
+        strokeLinecap="round"
+        strokeWidth={1.5}
       />
       <EquipmentGlyph
         color={colors.text}
@@ -624,22 +656,16 @@ function SchematicEquipment({
         {displayName}
       </text>
       <g transform={`translate(${width / 2 - 2} ${-height / 2 + 2})`}>
-        {row.status === "ready" && (
-          <g>
-            <circle fill={colors.stroke} r={8} stroke="white" strokeWidth={2} />
-            <path d="m-4 0 3 3 5-6" fill="none" stroke="white" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} />
-          </g>
-        )}
-        {row.failedCount > 0 && (
-          <g className="animate-equipment-failed">
+        {openIssueCount > 0 && (
+          <g aria-label={`${openIssueCount} open issues`} className="animate-equipment-failed">
             <circle fill="#b91c1c" r={markerRadius} stroke="white" strokeWidth={2} />
             <text fill="white" fontSize={compact ? 8 : 10} fontWeight={700} textAnchor="middle" y={3}>
-              {row.failedCount}
+              {openIssueCount}
             </text>
           </g>
         )}
         {row.notTestedCount > 0 && (
-          <g transform={`translate(${row.failedCount > 0 ? -23 : 0} 0)`}>
+          <g aria-label={`${row.notTestedCount} tests remaining`} transform={`translate(${openIssueCount > 0 ? -23 : 0} 0)`}>
             <g className="animate-equipment-incomplete">
               <circle fill="#d97706" r={markerRadius} stroke="white" strokeWidth={2} />
               <text fill="white" fontSize={compact ? 8 : 10} fontWeight={700} textAnchor="middle" y={3}>
@@ -648,7 +674,13 @@ function SchematicEquipment({
             </g>
           </g>
         )}
-        {row.status !== "ready" && row.failedCount === 0 && row.notTestedCount === 0 && (
+        {openIssueCount === 0 && row.notTestedCount === 0 && row.status === "ready" && (
+          <g>
+            <circle fill={colors.stroke} r={8} stroke="white" strokeWidth={2} />
+            <path d="m-4 0 3 3 5-6" fill="none" stroke="white" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} />
+          </g>
+        )}
+        {openIssueCount === 0 && row.status !== "ready" && row.failedCount === 0 && row.notTestedCount === 0 && (
           <g>
             <circle fill={colors.stroke} r={8} stroke="white" strokeWidth={2} />
             {row.status === "action" && (
@@ -754,7 +786,7 @@ function EquipmentDetail({
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-4">
+      <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-4 [overflow-anchor:none] [scrollbar-gutter:stable]">
         <section>
           <h3 className="text-xs font-semibold uppercase text-muted-foreground">Current condition</h3>
           <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -917,7 +949,7 @@ function EquipmentQueue({
           Equipment in the selected area family.
         </p>
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto p-2">
+      <div className="min-h-0 flex-1 overflow-y-auto p-2 [overflow-anchor:none] [scrollbar-gutter:stable]">
         {rows.length === 0 ? (
           <p className="p-4 text-sm text-muted-foreground">No equipment matches the current filter.</p>
         ) : (
@@ -943,7 +975,7 @@ function EquipmentQueue({
                 <span className="min-w-0 flex-1">
                   <span className="block break-words text-sm font-medium">{row.equipmentId}</span>
                   <span className="mt-1 block text-xs text-muted-foreground">
-                    {row.failedCount} failed · {row.notTestedCount} not tested
+                    {row.notTestedCount} not tested
                     {row.waivedCount > 0 ? ` · ${row.waivedCount} not required` : ""} · {row.openIssues.length} open issues
                   </span>
                 </span>
@@ -995,21 +1027,22 @@ export function PowerPlanPage({ data }: PowerPlanPageProps) {
   });
   const selectedRow =
     rows.find((row) => row.annotation.annotation_id === selectedAnnotationId) ?? null;
-  const normalizedSearch = search.trim().toLowerCase();
+  const normalizedSearch = search.trim();
   const globalSearchMatches = useMemo(() => {
     if (!normalizedSearch) return [];
     const score = (row: EnrichedPowerPlanEquipment) => {
-      const equipmentId = row.equipmentId.toLowerCase();
-      const sourceLabel = row.annotation.label.toLowerCase();
-      if (equipmentId === normalizedSearch || sourceLabel === normalizedSearch) return 0;
-      if (equipmentId.startsWith(normalizedSearch) || sourceLabel.startsWith(normalizedSearch)) return 1;
-      if (equipmentId.includes(normalizedSearch) || sourceLabel.includes(normalizedSearch)) return 2;
-      return 3;
+      const values = [row.equipmentId, row.annotation.label, row.pdmName];
+      return getSearchMatchScore(
+        [row.equipmentId, row.annotation.label],
+        values,
+        normalizedSearch,
+      );
     };
     return allRows
       .filter((row) =>
-        [row.equipmentId, row.annotation.label, row.pdmName].some((value) =>
-          String(value ?? "").toLowerCase().includes(normalizedSearch),
+        matchesSearchQuery(
+          [row.equipmentId, row.annotation.label, row.pdmName],
+          normalizedSearch,
         ),
       )
       .sort(
@@ -1019,13 +1052,53 @@ export function PowerPlanPage({ data }: PowerPlanPageProps) {
           naturalCompare(a.pdmName ?? "", b.pdmName ?? ""),
       );
   }, [allRows, normalizedSearch]);
-  const globalSearchSuggestions = globalSearchMatches.slice(0, 10);
-  const filteredRows = rows.filter(
-    (row) =>
-      (!statusFilter || row.status === statusFilter) &&
-      (!normalizedSearch ||
-        [row.equipmentId, row.annotation.label, row.pdmName]
-          .some((value) => String(value ?? "").toLowerCase().includes(normalizedSearch))),
+  const globalPdmMatches = useMemo(() => {
+    if (!normalizedSearch) return [];
+
+    return [
+      ...new Set(
+        allRows
+          .map((row) => row.pdmName)
+          .filter((pdmName): pdmName is string => Boolean(pdmName)),
+      ),
+    ]
+      .filter((pdmName) => matchesSearchQuery([pdmName], normalizedSearch))
+      .sort(naturalCompare);
+  }, [allRows, normalizedSearch]);
+  const globalSearchSuggestions = useMemo<PowerPlanSearchSuggestion[]>(() => {
+    if (globalPdmMatches.length > 0) {
+      return globalPdmMatches.slice(0, 10).map((pdmName) => ({
+        kind: "pdm",
+        key: `pdm-${pdmName}`,
+        pdmName,
+      }));
+    }
+
+    return globalSearchMatches.slice(0, 10).map((row) => ({
+      kind: "equipment",
+      key: row.annotation.annotation_id,
+      pdmName: row.pdmName,
+      row,
+    }));
+  }, [globalPdmMatches, globalSearchMatches]);
+  const globalSearchResultCount =
+    globalPdmMatches.length > 0 ? globalPdmMatches.length : globalSearchMatches.length;
+  const filteredRows = useMemo(
+    () =>
+      rows.filter(
+        (row) =>
+          (!statusFilter || row.status === statusFilter) &&
+          (!normalizedSearch ||
+            matchesSearchQuery(
+              [row.equipmentId, row.annotation.label, row.pdmName],
+              normalizedSearch,
+            )),
+      ),
+    [normalizedSearch, rows, statusFilter],
+  );
+  const activeAnnotationIds = useMemo(
+    () => new Set(filteredRows.map((row) => row.annotation.annotation_id)),
+    [filteredRows],
   );
 
   useEffect(() => {
@@ -1079,23 +1152,28 @@ export function PowerPlanPage({ data }: PowerPlanPageProps) {
     },
     { action: 0, testing: 0, ready: 0, noData: 0 },
   );
-  const activeAnnotationIds = new Set(filteredRows.map((row) => row.annotation.annotation_id));
-
   function selectRow(row: EnrichedPowerPlanEquipment) {
     setSelectedAnnotationId(row.annotation.annotation_id);
   }
 
-  function selectGlobalSearchResult(row: EnrichedPowerPlanEquipment) {
-    const targetFamily = getPdmAreaFamily(row.pdmName);
-    setSearch(row.equipmentId);
+  function selectGlobalSearchResult(suggestion: PowerPlanSearchSuggestion) {
+    const targetFamily = getPdmAreaFamily(suggestion.pdmName);
+    setSearch(suggestion.kind === "pdm" ? suggestion.pdmName : suggestion.row.equipmentId);
     setSearchOpen(false);
     setActiveSearchIndex(0);
+    if (suggestion.kind === "pdm") {
+      setSelectedAnnotationId(null);
+      if (targetFamily !== areaFamily) {
+        setAreaFamily(targetFamily);
+      }
+      return;
+    }
     if (targetFamily !== areaFamily) {
-      pendingSearchSelectionRef.current = row.annotation.annotation_id;
+      pendingSearchSelectionRef.current = suggestion.row.annotation.annotation_id;
       setAreaFamily(targetFamily);
       return;
     }
-    selectRow(row);
+    selectRow(suggestion.row);
   }
 
   function handleSearchKeyDown(event: ReactKeyboardEvent<HTMLInputElement>) {
@@ -1280,11 +1358,11 @@ export function PowerPlanPage({ data }: PowerPlanPageProps) {
                 >
                   <div className="flex items-center justify-between px-2 py-1.5 text-[11px] text-muted-foreground">
                     <span>All equipment groups</span>
-                    <span>{globalSearchMatches.length} matches</span>
+                    <span>{globalSearchResultCount} matches</span>
                   </div>
                   {globalSearchSuggestions.length > 0 ? (
-                    globalSearchSuggestions.map((row, index) => {
-                      const targetFamily = getPdmAreaFamily(row.pdmName);
+                    globalSearchSuggestions.map((suggestion, index) => {
+                      const targetFamily = getPdmAreaFamily(suggestion.pdmName);
                       return (
                         <button
                           aria-selected={index === activeSearchIndex}
@@ -1292,8 +1370,8 @@ export function PowerPlanPage({ data }: PowerPlanPageProps) {
                             "flex w-full items-start gap-3 rounded px-2 py-2 text-left hover:bg-muted",
                             index === activeSearchIndex && "bg-muted",
                           )}
-                          key={row.annotation.annotation_id}
-                          onClick={() => selectGlobalSearchResult(row)}
+                          key={suggestion.key}
+                          onClick={() => selectGlobalSearchResult(suggestion)}
                           onMouseEnter={() => setActiveSearchIndex(index)}
                           role="option"
                           type="button"
@@ -1301,10 +1379,14 @@ export function PowerPlanPage({ data }: PowerPlanPageProps) {
                           <Search className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
                           <span className="min-w-0 flex-1">
                             <span className="block truncate text-sm font-medium text-foreground">
-                              {row.equipmentId}
+                              {suggestion.kind === "pdm"
+                                ? suggestion.pdmName
+                                : suggestion.row.equipmentId}
                             </span>
                             <span className="mt-0.5 block truncate text-xs text-muted-foreground">
-                              {row.pdmName || "Unassigned PDM"}
+                              {suggestion.kind === "pdm"
+                                ? "PDM equipment group"
+                                : suggestion.pdmName || "Unassigned PDM"}
                             </span>
                           </span>
                           <span
@@ -1325,7 +1407,7 @@ export function PowerPlanPage({ data }: PowerPlanPageProps) {
                       No equipment or PDM matches found.
                     </div>
                   )}
-                  {globalSearchMatches.length > globalSearchSuggestions.length && (
+                  {globalSearchResultCount > globalSearchSuggestions.length && (
                     <div className="border-t px-2 py-1.5 text-[11px] text-muted-foreground">
                       Refine the search to narrow the remaining results.
                     </div>
@@ -1361,8 +1443,8 @@ export function PowerPlanPage({ data }: PowerPlanPageProps) {
         </div>
       </section>
 
-      <div className="grid min-h-[720px] gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
-        <section className="flex min-w-0 flex-col overflow-hidden rounded-md border bg-card">
+      <div className="grid min-h-[720px] gap-4 [overflow-anchor:none] xl:h-[780px] xl:min-h-0 xl:grid-cols-[minmax(0,1fr)_380px]">
+        <section className="flex min-w-0 flex-col overflow-hidden rounded-md border bg-card xl:h-full">
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b px-3 py-2">
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <span className="font-medium text-foreground">{areaFamily}</span>
@@ -1383,6 +1465,18 @@ export function PowerPlanPage({ data }: PowerPlanPageProps) {
                   {POWER_PLAN_STATUS_LABELS[status]}
                 </span>
               ))}
+              <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-red-700 px-1 text-[9px] font-bold text-white">
+                  #
+                </span>
+                Open Issues
+              </span>
+              <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-600 px-1 text-[9px] font-bold text-white">
+                  n
+                </span>
+                Tests Remaining
+              </span>
             </div>
             <div className="ml-auto flex items-center gap-1">
               <span className="min-w-12 text-center text-[11px] font-medium text-muted-foreground">
@@ -1429,12 +1523,13 @@ export function PowerPlanPage({ data }: PowerPlanPageProps) {
               preserveAspectRatio="xMidYMid meet"
               ref={svgRef}
               role="img"
+              shapeRendering="geometricPrecision"
               style={{ touchAction: "none" }}
               viewBox={`${viewport.x} ${viewport.y} ${viewport.width} ${viewport.height}`}
             >
               <defs>
                 <pattern height="40" id="engineering-grid" patternUnits="userSpaceOnUse" width="40">
-                  <path d="M40 0H0V40" fill="none" stroke="#dbe4ee" strokeWidth="1" />
+                  <path d="M40 0H0V40" fill="none" opacity="0.72" stroke="#dbe4ee" strokeWidth="1" />
                 </pattern>
               </defs>
               <rect fill="#f8fafc" height={layout.height} width={layout.width} />
@@ -1443,10 +1538,19 @@ export function PowerPlanPage({ data }: PowerPlanPageProps) {
               {layout.roomBoundaries.map((boundary) => (
                 <g key={boundary.id}>
                   <rect
-                    fill="#ffffff"
-                    fillOpacity={0.7}
+                    fill="#64748b"
+                    fillOpacity={0.11}
                     height={boundary.height}
-                    rx={4}
+                    rx={10}
+                    width={boundary.width}
+                    x={boundary.x + 5}
+                    y={boundary.y + 7}
+                  />
+                  <rect
+                    fill="#ffffff"
+                    fillOpacity={0.82}
+                    height={boundary.height}
+                    rx={10}
                     stroke="#64748b"
                     strokeWidth={2}
                     width={boundary.width}
@@ -1467,10 +1571,19 @@ export function PowerPlanPage({ data }: PowerPlanPageProps) {
                   <g data-pdm-region={region.label} key={region.id}>
                     <title>{`${region.label}: ${region.equipmentCount} equipment`}</title>
                     <rect
-                      fill={palette.fill}
-                      fillOpacity={0.88}
+                      fill={palette.stroke}
+                      fillOpacity={0.12}
                       height={region.height}
-                      rx={4}
+                      rx={8}
+                      width={region.width}
+                      x={region.x + 4}
+                      y={region.y + 6}
+                    />
+                    <rect
+                      fill={palette.fill}
+                      fillOpacity={0.94}
+                      height={region.height}
+                      rx={8}
                       stroke={palette.stroke}
                       strokeDasharray={region.kind === "unassigned" ? "6 4" : undefined}
                       strokeWidth={1.5}
@@ -1479,10 +1592,11 @@ export function PowerPlanPage({ data }: PowerPlanPageProps) {
                       y={region.y}
                     />
                     <line
+                      strokeLinecap="round"
                       stroke={palette.stroke}
                       strokeWidth={3}
-                      x1={region.x}
-                      x2={region.x + region.width}
+                      x1={region.x + 8}
+                      x2={region.x + region.width - 8}
                       y1={region.y}
                       y2={region.y}
                     />
@@ -1546,12 +1660,11 @@ export function PowerPlanPage({ data }: PowerPlanPageProps) {
                   selected={selectedAnnotationId === placement.row.annotation.annotation_id}
                 />
               ))}
-
             </svg>
           </div>
         </section>
 
-        <aside className="flex min-h-0 max-h-[780px] flex-col overflow-hidden rounded-md border bg-card">
+        <aside className="flex min-h-0 max-h-[780px] flex-col overflow-hidden rounded-md border bg-card [overflow-anchor:none] xl:h-full xl:max-h-none">
           {selectedRow ? (
             <EquipmentDetail
               onBack={() => setSelectedAnnotationId(null)}
