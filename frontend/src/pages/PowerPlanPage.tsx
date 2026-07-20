@@ -28,6 +28,7 @@ import type {
   EpsTestItemRecord,
 } from "../types/data";
 import { cn } from "../utils/cn";
+import { getEpsTestItemStatusLabel } from "../utils/epsTestItemUtils";
 import {
   enrichIssuesWithPdmContext,
   isOpenIssue,
@@ -703,7 +704,7 @@ function issueTone(issue: CaseIssue): "danger" | "success" | "muted" {
 function testItemTone(
   item: EpsTestItemRecord,
   netaComplete: boolean,
-): "danger" | "success" | "warning" | "muted" {
+): "danger" | "success" | "teal" | "warning" | "muted" {
   if (isPowerPlanWaivedItem(item, netaComplete)) {
     return "success";
   }
@@ -711,9 +712,10 @@ function testItemTone(
   if (status.startsWith("failed")) {
     return "danger";
   }
-  if (status.startsWith("passed") || status.startsWith("fixed")) {
+  if (status.startsWith("passed")) {
     return "success";
   }
+  if (status.startsWith("fixed")) return "teal";
   if (status === "not tested" || status === "incomplete") {
     return "warning";
   }
@@ -724,7 +726,7 @@ function testItemStatusLabel(item: EpsTestItemRecord, netaComplete: boolean): st
   if (isPowerPlanWaivedItem(item, netaComplete)) {
     return "Not Required";
   }
-  return String(item.item_status ?? "Unknown");
+  return getEpsTestItemStatusLabel(item.item_status);
 }
 
 function EquipmentDetail({

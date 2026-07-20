@@ -6,6 +6,7 @@ import {
   LayoutDashboard,
   Map,
   ShieldCheck,
+  Workflow,
 } from "lucide-react";
 import { NavLink } from "react-router-dom";
 
@@ -19,6 +20,7 @@ const navigationItems = [
   { label: "EPS Test Execution", path: "/eps-test-execution", icon: ClipboardCheck },
   { label: "Power Plan", path: "/power-plan", icon: Map },
   { label: "Data Quality", path: "/data-quality", icon: ShieldCheck },
+  { label: "Data Operations", path: "/data-operations", icon: Workflow },
 ];
 
 export function Sidebar() {

@@ -187,6 +187,35 @@ export interface NetaReportManifest {
   [key: string]: unknown;
 }
 
+export type CxalloyReportUploadStatus = "uploaded" | "pending" | "missing_pdf";
+
+export interface CxalloyReportStatusRecord {
+  equipment_id?: string | null;
+  target_equipment?: string | null;
+  upload_status?: CxalloyReportUploadStatus | null;
+  expected_report_count?: number;
+  available_report_count?: number;
+  report_names?: string[];
+  missing_report_names?: string[];
+  current_sha256?: string | null;
+  last_attempt_status?: string | null;
+  last_attempt_error?: string | null;
+  last_attempt_at?: string | null;
+}
+
+export interface CxalloyReportStatusManifest {
+  generated_at?: string;
+  source_files?: SourceFileMap;
+  summary?: {
+    equipment_with_gc_reports?: number;
+    uploaded_equipment?: number;
+    pending_equipment?: number;
+    missing_pdf_equipment?: number;
+    expected_report_files?: number;
+  };
+  records?: CxalloyReportStatusRecord[];
+}
+
 export interface IssueAttachmentFileRecord {
   case_id?: string | null;
   field?: string | null;
@@ -473,5 +502,6 @@ export interface DashboardData {
   epsNotFoundItems: EpsTestItemRecord[];
   issueAttachmentManifest: IssueAttachmentManifest | null;
   netaReportManifest: NetaReportManifest | null;
+  cxalloyReportStatus: CxalloyReportStatusManifest | null;
   powerPlanManifest: PowerPlanManifest | null;
 }

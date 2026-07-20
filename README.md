@@ -23,7 +23,50 @@ frontend/public/data/ Generated JSON/CSV data consumed by the frontend.
 frontend/src/         Future React + TypeScript application source.
 ```
 
-## Weekly Update Workflow
+## Local Dashboard And Data Operations
+
+Install the Python dependencies and Playwright Chromium once:
+
+```powershell
+python -m pip install -r requirements.txt
+playwright install chromium
+```
+
+Install the frontend dependencies once:
+
+```powershell
+cd frontend
+npm install
+cd ..
+```
+
+Start the local automation service and Vite together:
+
+```powershell
+python scripts/start_dashboard.py
+```
+
+Open `http://127.0.0.1:5173/data-operations` to:
+
+- Enter or edit daily EPS test reports.
+- Refresh JC2 browser sessions and Excel exports.
+- Download NETA reports and issue attachments.
+- Organize renamed reports for GC.
+- Run the dashboard ETL as a resumable daily workflow.
+- Preview or explicitly confirm CxAlloy uploads as a separate operation.
+
+The automation API listens only on `127.0.0.1:8765`. It uses the sibling
+`IAD6_EPS_Testing_Tracker` directory by default. Set `IAD6_EPS_TRACKER_ROOT`
+when the tracker repository is stored elsewhere:
+
+```powershell
+$env:IAD6_EPS_TRACKER_ROOT = "C:\path\to\IAD6_EPS_Testing_Tracker"
+python scripts/start_dashboard.py
+```
+
+Run logs are stored under `runtime/automation/` and are not committed.
+
+## Manual Weekly Update Workflow
 
 1. Put the latest module list Excel file into:
    `raw_data/module/`
@@ -59,6 +102,7 @@ Key generated outputs:
 - `summary.json`
 - `data_quality_report.json`
 - `etl_run_metadata.json`
+- `cxalloy_report_status.json` (current GC report packages compared with successful CxAlloy upload records)
 
 Normalized JSON files include source file metadata so the dashboard can show exactly which weekly exports were used.
 
@@ -70,9 +114,9 @@ Run:
 pytest scripts/tests
 ```
 
-## Scope
+## Architecture
 
-- No backend.
-- No database.
-- No frontend build in this task.
-- `frontend/package.json` will be created later when the frontend is initialized.
+- React and Vite provide the dashboard UI.
+- FastAPI provides a local-only, allowlisted task runner.
+- Existing EPS Tracker scripts remain the source of download, cleanup, and upload behavior.
+- No database is required; generated datasets remain under `frontend/public/data/`.

@@ -8,6 +8,7 @@ import { IssueAttachmentManifestProvider } from "./contexts/IssueAttachmentManif
 import { NetaReportManifestProvider } from "./contexts/NetaReportManifestContext";
 import { useDashboardData } from "./hooks/useDashboardData";
 import { DataQualityPage } from "./pages/DataQualityPage";
+import { DataOperationsPage } from "./pages/DataOperationsPage";
 import { EquipmentPage } from "./pages/EquipmentPage";
 import { EpsTestExecutionPage } from "./pages/EpsTestExecutionPage";
 import { IssuesPage } from "./pages/IssuesPage";
@@ -18,6 +19,7 @@ import { PowerPlanPage } from "./pages/PowerPlanPage";
 function App() {
   const dashboardData = useDashboardData();
   const location = useLocation();
+  const isDataOperations = location.pathname === "/data-operations";
   const needsDetailData =
     location.pathname === "/equipment" ||
     location.pathname === "/issues" ||
@@ -47,12 +49,15 @@ function App() {
     <IssueAttachmentManifestProvider manifest={dashboardData.issueAttachmentManifest}>
       <NetaReportManifestProvider manifest={dashboardData.netaReportManifest}>
         <AppLayout etlRunMetadata={dashboardData.etlRunMetadata}>
-          {dashboardData.loading ||
-          (needsDetailData && !dashboardData.detailDataLoaded && !dashboardData.detailDataError) ? (
+          {!isDataOperations &&
+          (dashboardData.loading ||
+            (needsDetailData &&
+              !dashboardData.detailDataLoaded &&
+              !dashboardData.detailDataError)) ? (
             <LoadingState />
-          ) : dashboardData.error ? (
+          ) : !isDataOperations && dashboardData.error ? (
             <ErrorState message={dashboardData.error} onRetry={dashboardData.reload} />
-          ) : needsDetailData && dashboardData.detailDataError ? (
+          ) : !isDataOperations && needsDetailData && dashboardData.detailDataError ? (
             <ErrorState message={dashboardData.detailDataError} onRetry={dashboardData.loadDetailData} />
           ) : (
             <Routes>
@@ -64,6 +69,10 @@ function App() {
               <Route element={<EpsTestExecutionPage data={dashboardData} />} path="/eps-test-execution" />
               <Route element={<PowerPlanPage data={dashboardData} />} path="/power-plan" />
               <Route element={<DataQualityPage data={dashboardData} />} path="/data-quality" />
+              <Route
+                element={<DataOperationsPage onDashboardReload={dashboardData.reload} />}
+                path="/data-operations"
+              />
               <Route element={<Navigate replace to="/overview" />} path="*" />
             </Routes>
           )}

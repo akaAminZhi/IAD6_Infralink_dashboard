@@ -16,6 +16,7 @@ try:
         write_json as write_json_payload,
     )
     from . import build_data_quality_report
+    from . import build_cxalloy_report_status
     from . import build_eps_test_execution
     from . import build_history_comparison
     from . import build_issue_attachment_manifest
@@ -38,6 +39,7 @@ except ImportError:
     )
 
     import build_data_quality_report
+    import build_cxalloy_report_status
     import build_eps_test_execution
     import build_history_comparison
     import build_issue_attachment_manifest
@@ -82,6 +84,7 @@ OUTPUT_FILES = {
     "eps_not_found_items": DATA_DIR / "eps_not_found_items.json",
     "issue_attachment_manifest": DATA_DIR / "issue_attachment_manifest.json",
     "neta_report_manifest": DATA_DIR / "neta_report_manifest.json",
+    "cxalloy_report_status": DATA_DIR / "cxalloy_report_status.json",
     "power_plan": DATA_DIR / "power_plan.json",
     "etl_run_metadata": ETL_METADATA_OUTPUT_PATH,
 }
@@ -122,6 +125,7 @@ def build_pipeline_steps(input_files: dict[str, str]) -> list[tuple[str, Callabl
         ("build_history_comparison.py", lambda: build_history_comparison.run_build(input_files)),
         ("build_eps_test_execution.py", lambda: build_eps_test_execution.run_build(input_files)),
         ("build_neta_report_manifest.py", build_neta_report_manifest.main),
+        ("build_cxalloy_report_status.py", build_cxalloy_report_status.main),
         ("build_issue_attachment_manifest.py", build_issue_attachment_manifest.main),
         ("build_power_plan.py", build_power_plan.main),
     ]
@@ -263,6 +267,16 @@ def print_final_summary(metadata: dict[str, object]) -> None:
         manifest = load_json(neta_manifest_path)
         records = manifest.get("records", []) if isinstance(manifest, dict) else []
         print(f"  linked NETA report files: {len(records)}")
+    cxalloy_status_path = DATA_DIR / "cxalloy_report_status.json"
+    if cxalloy_status_path.exists():
+        cxalloy_status = load_json(cxalloy_status_path)
+        summary = cxalloy_status.get("summary", {}) if isinstance(cxalloy_status, dict) else {}
+        if isinstance(summary, dict):
+            print(
+                "  CxAlloy report equipment uploaded / pending: "
+                f"{summary.get('uploaded_equipment', 0)} / "
+                f"{summary.get('pending_equipment', 0)}"
+            )
     history_comparison_path = DATA_DIR / "history_comparison.json"
     if history_comparison_path.exists():
         comparison = load_json(history_comparison_path)

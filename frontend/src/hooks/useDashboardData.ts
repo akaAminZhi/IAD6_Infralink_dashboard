@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import type {
   CaseIssue,
+  CxalloyReportStatusManifest,
   DashboardData,
   DashboardSummary,
   DataQualityReport,
@@ -48,6 +49,7 @@ const emptyDashboardData: DashboardData = {
   epsNotFoundItems: [],
   issueAttachmentManifest: null,
   netaReportManifest: null,
+  cxalloyReportStatus: null,
   powerPlanManifest: null,
 };
 
@@ -129,6 +131,7 @@ export function useDashboardData(): DashboardDataState {
           epsNotFoundItemsJson,
           issueAttachmentManifest,
           netaReportManifest,
+          cxalloyReportStatus,
           powerPlanManifest,
         ] = await Promise.all([
           fetchJson<unknown>("/data/pdms.json"),
@@ -144,6 +147,7 @@ export function useDashboardData(): DashboardDataState {
           fetchOptionalJson<unknown>("/data/eps_not_found_items.json"),
           fetchOptionalJson<IssueAttachmentManifest>("/data/issue_attachment_manifest.json"),
           fetchOptionalJson<NetaReportManifest>("/data/neta_report_manifest.json"),
+          fetchOptionalJson<CxalloyReportStatusManifest>("/data/cxalloy_report_status.json"),
           fetchOptionalJson<PowerPlanManifest>("/data/power_plan.json"),
         ]);
 
@@ -169,6 +173,7 @@ export function useDashboardData(): DashboardDataState {
           epsNotFoundItems: unwrapRecords<EpsTestItemRecord>(epsNotFoundItemsJson),
           issueAttachmentManifest,
           netaReportManifest,
+          cxalloyReportStatus,
           powerPlanManifest,
         });
         setDetailDataLoaded(false);

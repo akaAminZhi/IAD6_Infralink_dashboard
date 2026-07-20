@@ -20,6 +20,7 @@ import { NetaReportChips } from "../common/NetaReportChips";
 import { Button } from "../ui/button";
 import { Card, CardContent } from "../ui/card";
 import { EquipmentCaseList } from "./EquipmentCaseList";
+import { CxalloyUploadBadge } from "./CxalloyUploadBadge";
 import { EquipmentNetaBadge } from "./EquipmentNetaBadge";
 import { EquipmentPdmAssociations } from "./EquipmentPdmAssociations";
 
@@ -168,6 +169,45 @@ export function EquipmentDetailDrawer({
                 <div>
                   <NetaReportNames value={equipment.neta_test_report} />
                 </div>
+                {equipment.cxalloy_upload_status ? (
+                  <div className="space-y-3 border-t pt-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <div className="text-xs font-medium uppercase text-muted-foreground">
+                          CxAlloy Report Upload
+                        </div>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                          Compared with the latest successful upload manifest entry.
+                        </p>
+                      </div>
+                      <CxalloyUploadBadge equipment={equipment} />
+                    </div>
+                    {equipment.cxalloy_upload_status !== "uploaded" ? (
+                      <div className="flex flex-wrap gap-2">
+                        {equipment.cxalloy_report_names.map((reportName) => (
+                          <span
+                            className="max-w-full break-all rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs text-amber-950"
+                            key={reportName}
+                          >
+                            {reportName}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
+                    {equipment.cxalloy_last_attempt_error ? (
+                      <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+                        <span className="font-medium">Last upload attempt: </span>
+                        {equipment.cxalloy_last_attempt_error}
+                      </div>
+                    ) : null}
+                    {equipment.cxalloy_missing_report_names.length > 0 ? (
+                      <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+                        <span className="font-medium">Missing local files: </span>
+                        {equipment.cxalloy_missing_report_names.join(", ")}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
               </CardContent>
             </Card>
 

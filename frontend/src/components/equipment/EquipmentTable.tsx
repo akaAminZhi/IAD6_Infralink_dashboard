@@ -20,13 +20,13 @@ import {
   type FlattenedEquipmentRow,
 } from "../../utils/equipmentUtils";
 import { getNetaReportLinks } from "../../utils/netaReports";
-import { EpsExecutionBadge } from "../common/EpsTestItemsPanel";
 import { EmptyState } from "../common/EmptyState";
 import { NetaReportChips } from "../common/NetaReportChips";
 import { StatusBadge } from "../common/StatusBadge";
 import { Button } from "../ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
 import { EquipmentAttentionBadges } from "./EquipmentAttentionBadges";
+import { CxalloyUploadBadge } from "./CxalloyUploadBadge";
 import { EquipmentNetaBadge } from "./EquipmentNetaBadge";
 
 interface EquipmentTableProps {
@@ -161,15 +161,15 @@ export function EquipmentTable({ rows, selectedRowId, onSelectEquipment }: Equip
         cell: ({ row }) => <span>{formatNumber(row.original.eps_test_items.length)}</span>,
       },
       {
-        id: "epsStatus",
-        header: "EPS Status",
-        cell: ({ row }) => <EpsExecutionBadge items={row.original.eps_test_items} />,
-        enableSorting: false,
-      },
-      {
         id: "neta",
         header: "NETA",
         cell: ({ row }) => <EquipmentNetaBadge equipment={row.original} />,
+      },
+      {
+        id: "cxalloyUpload",
+        header: "CxAlloy Report",
+        accessorFn: (row) => row.cxalloy_upload_status ?? "not_applicable",
+        cell: ({ row }) => <CxalloyUploadBadge equipment={row.original} />,
       },
       {
         id: "openCases",
@@ -238,7 +238,7 @@ export function EquipmentTable({ rows, selectedRowId, onSelectEquipment }: Equip
           />
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1280px] text-left text-sm">
+            <table className="w-full min-w-[1420px] text-left text-sm">
               <thead className="border-b text-xs uppercase text-muted-foreground">
                 {table.getHeaderGroups().map((headerGroup) => (
                   <tr key={headerGroup.id}>

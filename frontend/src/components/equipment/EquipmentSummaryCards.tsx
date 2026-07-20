@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle2, FileWarning, ImageOff, TrendingUp } from "lucide-react";
+import { AlertTriangle, CheckCircle2, CloudUpload, FileWarning, ImageOff, TrendingUp } from "lucide-react";
 
 import { cn } from "../../utils/cn";
 import { formatNumber } from "../../utils/formatters";
@@ -10,7 +10,8 @@ export type EquipmentQuickFilter =
   | "missingNetaReport"
   | "missingIssueImages"
   | "netaComplete"
-  | "recentNetaComplete";
+  | "recentNetaComplete"
+  | "cxalloyPending";
 
 interface EquipmentSummaryCardsProps {
   activeFilter: EquipmentQuickFilter | null;
@@ -47,6 +48,14 @@ export function EquipmentSummaryCards({
   onSelectFilter,
 }: EquipmentSummaryCardsProps) {
   const cards = [
+    {
+      description: "Current GC report package is not recorded as uploaded.",
+      filter: "cxalloyPending" as const,
+      icon: CloudUpload,
+      label: "Pending CxAlloy Upload",
+      tone: "warning" as const,
+      value: metrics.cxalloyPendingEquipment,
+    },
     {
       description: "Equipment entries with active cases.",
       filter: "openCases" as const,
@@ -129,7 +138,7 @@ export function EquipmentSummaryCards({
         </div>
       </button>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         {cards.map((card) => {
           const Icon = card.icon;
           const isActive = activeFilter === card.filter;

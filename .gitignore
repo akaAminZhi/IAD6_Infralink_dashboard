@@ -37,5 +37,6 @@ raw_data/cases/*
 .env
 .env.*
 *.log
+runtime/
 .DS_Store
 Thumbs.db

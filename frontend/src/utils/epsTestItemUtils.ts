@@ -107,9 +107,21 @@ export function summarizeEpsTestItems(items: EpsTestItemRecord[]): EpsTestItemSu
 
 export function getEpsStatusTone(
   status: EpsEquipmentStatus,
-): "success" | "warning" | "danger" | "muted" {
-  if (status === "Passed" || status === "Fixed") return "success";
+): "success" | "teal" | "warning" | "danger" | "muted" {
+  if (status === "Passed") return "success";
+  if (status === "Fixed") return "teal";
   if (status === "Failed") return "danger";
   if (status === "In Progress" || status === "Not Started") return "warning";
   return "muted";
+}
+
+export function getEpsTestItemStatusLabel(status: unknown): string {
+  const value = String(status ?? "Unknown");
+  if (value === "Fixed") return "Fixed After Failure";
+  if (value === "Fixed - Not In Tracker") {
+    return "Fixed After Failure - Not In Tracker";
+  }
+  if (value === "Failed") return "Current Failed";
+  if (value === "Failed - Not In Tracker") return "Current Failed - Not In Tracker";
+  return value;
 }

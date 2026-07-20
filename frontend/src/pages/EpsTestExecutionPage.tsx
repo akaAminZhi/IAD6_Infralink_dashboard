@@ -27,6 +27,7 @@ import type {
   EpsTestSummary,
 } from "../types/data";
 import { cn } from "../utils/cn";
+import { getEpsTestItemStatusLabel } from "../utils/epsTestItemUtils";
 import { formatNumber } from "../utils/formatters";
 import { matchesSearchQuery } from "../utils/searchUtils";
 
@@ -39,7 +40,14 @@ interface EpsFiltersState {
   status: string;
 }
 
-type EpsTestItemFilter = "" | "Passed" | "Fixed" | "Failed" | "Not Tested" | "Not In Tracker";
+type EpsTestItemFilter =
+  | ""
+  | "Passed"
+  | "Fixed"
+  | "Failed"
+  | "Failure History"
+  | "Not Tested"
+  | "Not In Tracker";
 type EpsActivityFilter =
   | ""
   | "yesterdayPassed"
@@ -252,12 +260,14 @@ function statusTone(status: string | null | undefined): "default" | "success" | 
   return "default";
 }
 
-function itemStatusTone(status: string | null | undefined): "default" | "success" | "warning" | "danger" | "muted" {
+function itemStatusTone(
+  status: string | null | undefined,
+): "default" | "success" | "teal" | "warning" | "danger" | "muted" {
   if (status === "Passed") {
     return "success";
   }
   if (status === "Fixed" || status === "Fixed - Not In Tracker") {
-    return "success";
+    return "teal";
   }
   if (status === "Passed - Not In Tracker") {
     return "default";
@@ -435,6 +445,10 @@ function isFixedTestItem(item: EpsTestItemRecord): boolean {
   return item.item_status === "Fixed" || item.item_status === "Fixed - Not In Tracker";
 }
 
+function isFailureHistoryTestItem(item: EpsTestItemRecord): boolean {
+  return isFailedTestItem(item) || isFixedTestItem(item);
+}
+
 function isNotInTrackerTestItem(item: EpsTestItemRecord): boolean {
   return (
     String(item.item_status ?? "").includes("Not In Tracker") &&
@@ -449,6 +463,9 @@ function matchesTestItemFilter(item: EpsTestItemRecord, filter: EpsTestItemFilte
   }
   if (filter === "Failed") {
     return isFailedTestItem(item);
+  }
+  if (filter === "Failure History") {
+    return isFailureHistoryTestItem(item);
   }
   if (filter === "Not In Tracker") {
     return isNotInTrackerTestItem(item);
@@ -581,13 +598,13 @@ function buildTestItemBreakdown(items: EpsTestItemRecord[]): TestItemChartDatum[
     },
     {
       id: "Fixed",
-      name: "Fixed",
+      name: "Fixed After Failure",
       value: items.filter(isFixedTestItem).length,
       color: "#0d9488",
     },
     {
       id: "Failed",
-      name: "Failed",
+      name: "Current Failed",
       value: items.filter(isFailedTestItem).length,
       color: "#dc2626",
     },
@@ -613,12 +630,18 @@ function buildTestItemBreakdown(items: EpsTestItemRecord[]): TestItemChartDatum[
     }));
 }
 
-function buildFailedTrackerTypeBreakdown(items: EpsTestItemRecord[]): TrackerTypeChartDatum[] {
-  const failedItems = items.filter(isFailedTestItem);
-  const total = failedItems.length || 1;
+function testItemFilterLabel(filter: EpsTestItemFilter): string {
+  if (filter === "Fixed") return "Fixed After Failure";
+  if (filter === "Failed") return "Current Failed";
+  return filter || "All";
+}
+
+function buildFailureHistoryTrackerTypeBreakdown(items: EpsTestItemRecord[]): TrackerTypeChartDatum[] {
+  const failureHistoryItems = items.filter(isFailureHistoryTestItem);
+  const total = failureHistoryItems.length || 1;
   const counts = new Map<string, number>();
 
-  for (const item of failedItems) {
+  for (const item of failureHistoryItems) {
     const trackerType = normalizeTrackerType(item.tracker_type) || "Unknown";
     counts.set(trackerType, (counts.get(trackerType) ?? 0) + 1);
   }
@@ -1077,7 +1100,10 @@ function TestItemBreakdownPanel({
 }) {
   const data = useMemo(() => buildTestItemBreakdown(items), [items]);
   const total = items.length;
-  const activeLabel = activeFilter || "All";
+  const activeLabel = testItemFilterLabel(activeFilter);
+  const currentFailedCount = items.filter(isFailedTestItem).length;
+  const fixedAfterFailureCount = items.filter(isFixedTestItem).length;
+  const failureHistoryCount = currentFailedCount + fixedAfterFailureCount;
 
   return (
     <Card>
@@ -1087,7 +1113,15 @@ function TestItemBreakdownPanel({
             <CardTitle className="text-base">Test Item Breakdown</CardTitle>
             <CardDescription>Field execution status by individual EPS tracker test item.</CardDescription>
           </div>
-          <StatusBadge tone={activeFilter ? "default" : "muted"}>
+          <StatusBadge
+            tone={
+              activeFilter === "Failure History" || activeFilter === "Fixed"
+                ? "teal"
+                : activeFilter
+                  ? "default"
+                  : "muted"
+            }
+          >
             {activeFilter ? `${activeLabel} filter` : "All test items"}
           </StatusBadge>
         </div>
@@ -1150,6 +1184,32 @@ function TestItemBreakdownPanel({
               <div className="text-xs font-medium uppercase text-muted-foreground">Total Test Items</div>
               <div className="mt-1 text-2xl font-semibold tracking-normal">{formatNumber(total)}</div>
             </button>
+            <button
+              aria-pressed={activeFilter === "Failure History"}
+              className={cn(
+                "w-full border-l-4 border-l-teal-500 bg-teal-50/50 px-3 py-2 text-left transition-colors hover:bg-teal-50",
+                activeFilter === "Failure History" ? "ring-2 ring-teal-500" : "",
+              )}
+              onClick={() => onSelectFilter("Failure History")}
+              type="button"
+            >
+              <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
+                <div>
+                  <div className="text-xs font-semibold uppercase text-teal-800">Failure History</div>
+                  <div className="mt-1 text-2xl font-semibold tracking-normal text-red-600">
+                    {formatNumber(failureHistoryCount)}
+                  </div>
+                </div>
+                <div className="space-y-1 text-right text-xs font-medium">
+                  <div className="font-semibold text-red-900">
+                    {formatNumber(currentFailedCount)} current failed
+                  </div>
+                  <div className="text-teal-700">
+                    {formatNumber(fixedAfterFailureCount)} fixed after failure
+                  </div>
+                </div>
+              </div>
+            </button>
             {data.map((entry) => (
               <button
                 aria-pressed={activeFilter === entry.id}
@@ -1170,7 +1230,7 @@ function TestItemBreakdownPanel({
                   <span className="truncate font-medium">{entry.name}</span>
                 </div>
                 <span className="shrink-0 text-muted-foreground">
-                  {formatNumber(entry.value)} - {entry.percent}%
+                  {formatNumber(entry.value)} - {entry.percent === 0 && entry.value > 0 ? "<1%" : `${entry.percent}%`}
                 </span>
               </button>
             ))}
@@ -1181,45 +1241,47 @@ function TestItemBreakdownPanel({
   );
 }
 
-function FailedTrackerTypeBreakdownPanel({
+function FailureHistoryTrackerTypeBreakdownPanel({
   activeTestItemFilter,
   activeTrackerType,
   items,
-  onSelectAllFailed,
+  onSelectAllFailureHistory,
   onSelectTrackerType,
 }: {
   activeTestItemFilter: EpsTestItemFilter;
   activeTrackerType: string;
   items: EpsTestItemRecord[];
-  onSelectAllFailed: () => void;
+  onSelectAllFailureHistory: () => void;
   onSelectTrackerType: (trackerType: string) => void;
 }) {
-  const data = useMemo(() => buildFailedTrackerTypeBreakdown(items), [items]);
+  const data = useMemo(() => buildFailureHistoryTrackerTypeBreakdown(items), [items]);
   const total = data.reduce((sum, entry) => sum + entry.value, 0);
-  const isFailedFilterActive = activeTestItemFilter === "Failed";
+  const currentFailedCount = items.filter(isFailedTestItem).length;
+  const fixedAfterFailureCount = items.filter(isFixedTestItem).length;
+  const isFailureHistoryFilterActive = activeTestItemFilter === "Failure History";
 
   return (
     <Card>
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <CardTitle className="text-base">Failed Tracker Type Breakdown</CardTitle>
+            <CardTitle className="text-base">Failure History by Tracker Type</CardTitle>
             <CardDescription>
-              Failed and failed-not-in-tracker test items grouped by EPS tracker type.
+              Current Failed and Fixed After Failure test items grouped by EPS tracker type.
             </CardDescription>
           </div>
-          <StatusBadge tone={isFailedFilterActive || activeTrackerType ? "danger" : "muted"}>
+          <StatusBadge tone={isFailureHistoryFilterActive || activeTrackerType ? "teal" : "muted"}>
             {activeTrackerType
-              ? `Failed + ${activeTrackerType}`
-              : isFailedFilterActive
-                ? "Failed filter"
-                : "All failed types"}
+              ? `Failure History + ${activeTrackerType}`
+              : isFailureHistoryFilterActive
+                ? "Failure History filter"
+                : "All historical failure types"}
           </StatusBadge>
         </div>
       </CardHeader>
       <CardContent>
         {total === 0 ? (
-          <EmptyState title="No failed test items found." />
+          <EmptyState title="No failure history found." />
         ) : (
           <div className="grid gap-6 md:grid-cols-[minmax(0,1.35fr)_minmax(280px,0.65fr)] md:items-center">
             <div className="relative h-[300px] rounded-md border bg-muted/20 p-3">
@@ -1260,27 +1322,37 @@ function FailedTrackerTypeBreakdownPanel({
                   <div className="text-3xl font-semibold leading-none tracking-normal">
                     {formatNumber(total)}
                   </div>
-                  <div className="mt-1 text-xs font-medium uppercase text-muted-foreground">Failed</div>
+                  <div className="mt-1 text-xs font-medium uppercase text-muted-foreground">Failure History</div>
                 </div>
               </div>
             </div>
 
             <div className="space-y-3">
               <button
-                aria-pressed={isFailedFilterActive && !activeTrackerType}
+                aria-pressed={isFailureHistoryFilterActive && !activeTrackerType}
                 className={cn(
                   "w-full rounded-md border bg-background px-3 py-2 text-left transition-colors hover:bg-muted/60",
-                  isFailedFilterActive && !activeTrackerType ? "border-primary bg-primary/5" : "",
+                  isFailureHistoryFilterActive && !activeTrackerType
+                    ? "border-teal-400 bg-teal-50/70"
+                    : "",
                 )}
-                onClick={onSelectAllFailed}
+                onClick={onSelectAllFailureHistory}
                 type="button"
               >
-                <div className="text-xs font-medium uppercase text-muted-foreground">Total Failed Tests</div>
+                <div className="text-xs font-medium uppercase text-muted-foreground">
+                  Total Historical Failures
+                </div>
                 <div className="mt-1 text-2xl font-semibold tracking-normal">{formatNumber(total)}</div>
+                <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs font-medium">
+                  <span className="text-red-700">{formatNumber(currentFailedCount)} current failed</span>
+                  <span className="text-teal-700">
+                    {formatNumber(fixedAfterFailureCount)} fixed after failure
+                  </span>
+                </div>
               </button>
               {data.map((entry) => {
                 const isActive =
-                  isFailedFilterActive &&
+                  isFailureHistoryFilterActive &&
                   activeTrackerType.toLowerCase() === entry.id.toLowerCase();
 
                 return (
@@ -1303,7 +1375,7 @@ function FailedTrackerTypeBreakdownPanel({
                       <span className="truncate font-medium">{entry.name}</span>
                     </div>
                     <span className="shrink-0 text-muted-foreground">
-                      {formatNumber(entry.value)} - {entry.percent}%
+                      {formatNumber(entry.value)} - {entry.percent === 0 && entry.value > 0 ? "<1%" : `${entry.percent}%`}
                     </span>
                   </button>
                 );
@@ -1665,9 +1737,9 @@ function PdmExecutionTable({
                                     <th className="px-3 py-2 font-medium">Equipment ID or Source Label</th>
                                     <th className="px-3 py-2 font-medium">EPS Status</th>
                                     <th className="px-3 py-2 text-right font-medium">Passed</th>
-                                    <th className="px-3 py-2 text-right font-medium">Fixed</th>
+                                    <th className="px-3 py-2 text-right font-medium">Fixed After Failure</th>
                                     <th className="px-3 py-2 text-right font-medium">Not Tested</th>
-                                    <th className="px-3 py-2 text-right font-medium">Failed</th>
+                                    <th className="px-3 py-2 text-right font-medium">Current Failed</th>
                                     <th className="px-3 py-2 text-right font-medium">Not In Tracker</th>
                                     <th className="px-3 py-2 text-right font-medium">Test Items</th>
                                     <th className="px-3 py-2 text-right font-medium">Completion</th>
@@ -1789,7 +1861,7 @@ function PdmExecutionTable({
                                                           </td>
                                                           <td className="px-3 py-2">
                                                             <StatusBadge tone={itemStatusTone(item.item_status)}>
-                                                              {item.item_status ?? "Unknown"}
+                                                              {getEpsTestItemStatusLabel(item.item_status)}
                                                             </StatusBadge>
                                                           </td>
                                                           <td className="px-3 py-2">
@@ -1999,7 +2071,7 @@ function TestItemTable({
                     <td className="px-3 py-3">{row.pdm_name ?? "--"}</td>
                     <td className="px-3 py-3">
                       <StatusBadge tone={itemStatusTone(row.item_status)}>
-                        {row.item_status ?? "--"}
+                        {getEpsTestItemStatusLabel(row.item_status ?? "--")}
                       </StatusBadge>
                     </td>
                     <td className="px-3 py-3">
@@ -2131,19 +2203,20 @@ export function EpsTestExecutionPage({ data }: EpsTestExecutionPageProps) {
       currentTrackerType.toLowerCase() === trackerType.toLowerCase() ? "" : trackerType,
     );
   };
-  const selectAllFailedTestItems = () => {
-    if (testItemFilter === "Failed" && !trackerTypeFilter) {
+  const selectAllFailureHistoryTestItems = () => {
+    if (testItemFilter === "Failure History" && !trackerTypeFilter) {
       setTestItemFilter("");
       return;
     }
 
-    setTestItemFilter("Failed");
+    setTestItemFilter("Failure History");
     setTrackerTypeFilter("");
   };
-  const selectFailedTrackerType = (trackerType: string) => {
-    setTestItemFilter("Failed");
+  const selectFailureHistoryTrackerType = (trackerType: string) => {
+    setTestItemFilter("Failure History");
     setTrackerTypeFilter((currentTrackerType) =>
-      testItemFilter === "Failed" && currentTrackerType.toLowerCase() === trackerType.toLowerCase()
+      testItemFilter === "Failure History" &&
+      currentTrackerType.toLowerCase() === trackerType.toLowerCase()
         ? ""
         : trackerType,
     );
@@ -2177,12 +2250,12 @@ export function EpsTestExecutionPage({ data }: EpsTestExecutionPageProps) {
           setTestItemFilter((currentFilter) => (currentFilter === filter ? "" : filter))
         }
       />
-      <FailedTrackerTypeBreakdownPanel
+      <FailureHistoryTrackerTypeBreakdownPanel
         activeTestItemFilter={testItemFilter}
         activeTrackerType={trackerTypeFilter}
         items={data.epsTestItems}
-        onSelectAllFailed={selectAllFailedTestItems}
-        onSelectTrackerType={selectFailedTrackerType}
+        onSelectAllFailureHistory={selectAllFailureHistoryTestItems}
+        onSelectTrackerType={selectFailureHistoryTrackerType}
       />
       <StatusBreakdown
         activeStatus={filters.status}

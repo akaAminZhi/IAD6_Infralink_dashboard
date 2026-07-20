@@ -3,10 +3,19 @@ function normalizeSearchText(value: unknown): string {
 }
 
 export function getSearchTerms(query: string): string[] {
+  return getSearchGroups(query).flat();
+}
+
+export function getSearchGroups(query: string): string[][] {
   return normalizeSearchText(query)
-    .split(/[\s*,;|]+/)
-    .map((term) => term.trim())
-    .filter(Boolean);
+    .split(/[,，]+/)
+    .map((group) =>
+      group
+        .split(/[\s*;|]+/)
+        .map((term) => term.trim())
+        .filter(Boolean),
+    )
+    .filter((group) => group.length > 0);
 }
 
 export function matchesSearchQuery(values: unknown[], query: string): boolean {
@@ -15,15 +24,15 @@ export function matchesSearchQuery(values: unknown[], query: string): boolean {
     return true;
   }
 
-  const terms = getSearchTerms(normalizedQuery);
-  if (terms.length === 0) {
+  const groups = getSearchGroups(normalizedQuery);
+  if (groups.length === 0) {
     return false;
   }
 
-  return values
-    .map(normalizeSearchText)
-    .filter(Boolean)
-    .some((value) => terms.every((term) => value.includes(term)));
+  const normalizedValues = values.map(normalizeSearchText).filter(Boolean);
+  return groups.some((terms) =>
+    normalizedValues.some((value) => terms.every((term) => value.includes(term))),
+  );
 }
 
 export function getSearchMatchScore(
@@ -31,17 +40,25 @@ export function getSearchMatchScore(
   allValues: unknown[],
   query: string,
 ): number {
-  const normalizedQuery = normalizeSearchText(query);
   const primary = primaryValues.map(normalizeSearchText).filter(Boolean);
+  const groupQueries = normalizeSearchText(query)
+    .split(/[,，]+/)
+    .map((group) => group.trim())
+    .filter(Boolean);
 
-  if (primary.some((value) => value === normalizedQuery)) {
-    return 0;
-  }
-  if (primary.some((value) => value.startsWith(normalizedQuery))) {
-    return 1;
-  }
-  if (primary.some((value) => value.includes(normalizedQuery))) {
-    return 2;
-  }
-  return matchesSearchQuery(allValues, query) ? 3 : Number.POSITIVE_INFINITY;
+  return groupQueries.reduce((bestScore, groupQuery) => {
+    if (primary.some((value) => value === groupQuery)) {
+      return Math.min(bestScore, 0);
+    }
+    if (primary.some((value) => value.startsWith(groupQuery))) {
+      return Math.min(bestScore, 1);
+    }
+    if (primary.some((value) => value.includes(groupQuery))) {
+      return Math.min(bestScore, 2);
+    }
+    if (matchesSearchQuery(allValues, groupQuery)) {
+      return Math.min(bestScore, 3);
+    }
+    return bestScore;
+  }, Number.POSITIVE_INFINITY);
 }

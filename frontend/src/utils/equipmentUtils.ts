@@ -1,5 +1,7 @@
 import type {
   CaseIssue,
+  CxalloyReportStatusManifest,
+  CxalloyReportStatusRecord,
   Equipment,
   EpsTestItemRecord,
   PdmEquipmentRecord,
@@ -39,6 +41,14 @@ export interface FlattenedEquipmentRow {
   neta_completed_at: string | null;
   neta_test_report: string | null;
   neta_report_status: string | null;
+  cxalloy_upload_status: "uploaded" | "pending" | "missing_pdf" | null;
+  cxalloy_expected_report_count: number;
+  cxalloy_available_report_count: number;
+  cxalloy_report_names: string[];
+  cxalloy_missing_report_names: string[];
+  cxalloy_last_attempt_status: string | null;
+  cxalloy_last_attempt_error: string | null;
+  cxalloy_last_attempt_at: string | null;
   cases: CaseIssue[];
   eps_test_items: EpsTestItemRecord[];
   source: "pdms" | "equipment";
@@ -52,6 +62,7 @@ export interface EquipmentSummaryMetrics {
   missingNetaReports: number;
   equipmentWithOpenCases: number;
   casesMissingIssueImage: number;
+  cxalloyPendingEquipment: number;
   mostCommonStatus: string | null;
   mostCommonStatusCount: number;
 }
@@ -115,6 +126,41 @@ function buildEquipmentIndex(equipmentRecords: Equipment[]): Map<string, Equipme
   return index;
 }
 
+function equipmentLookupKeys(value: unknown): string[] {
+  const normalized = normalizeLookup(value);
+  if (!normalized) {
+    return [];
+  }
+  return normalized.startsWith("IAD06-")
+    ? [normalized, normalized.slice(6)]
+    : [normalized, `IAD06-${normalized}`];
+}
+
+function buildCxalloyStatusIndex(
+  manifest: CxalloyReportStatusManifest | null,
+): Map<string, CxalloyReportStatusRecord> {
+  const index = new Map<string, CxalloyReportStatusRecord>();
+  for (const record of manifest?.records ?? []) {
+    for (const key of equipmentLookupKeys(record.equipment_id ?? record.target_equipment)) {
+      index.set(key, record);
+    }
+  }
+  return index;
+}
+
+function cxalloyFields(record: CxalloyReportStatusRecord | undefined) {
+  return {
+    cxalloy_upload_status: record?.upload_status ?? null,
+    cxalloy_expected_report_count: record?.expected_report_count ?? 0,
+    cxalloy_available_report_count: record?.available_report_count ?? 0,
+    cxalloy_report_names: record?.report_names ?? [],
+    cxalloy_missing_report_names: record?.missing_report_names ?? [],
+    cxalloy_last_attempt_status: firstText(record?.last_attempt_status),
+    cxalloy_last_attempt_error: firstText(record?.last_attempt_error),
+    cxalloy_last_attempt_at: firstText(record?.last_attempt_at),
+  };
+}
+
 function buildCasesIndex(cases: CaseIssue[]): Map<string, CaseIssue[]> {
   const index = new Map<string, CaseIssue[]>();
   for (const caseItem of cases) {
@@ -164,10 +210,12 @@ export function flattenEquipmentFromPdms(
   equipmentRecords: Equipment[] = [],
   caseRecords: CaseIssue[] = [],
   epsTestItems: EpsTestItemRecord[] = [],
+  cxalloyReportStatus: CxalloyReportStatusManifest | null = null,
 ): FlattenedEquipmentRow[] {
   const equipmentIndex = buildEquipmentIndex(equipmentRecords);
   const casesIndex = buildCasesIndex(caseRecords);
   const epsTestItemIndex = buildEpsTestItemIndex(epsTestItems);
+  const cxalloyStatusIndex = buildCxalloyStatusIndex(cxalloyReportStatus);
   const rows: FlattenedEquipmentRow[] = [];
 
   pdms.forEach((pdm, pdmIndex) => {
@@ -176,6 +224,11 @@ export function flattenEquipmentFromPdms(
       const enrichment = equipmentIndex.get(normalizeLookup(equipment.equipment_id));
       const fallbackCases = casesIndex.get(normalizeLookup(equipment.equipment_id)) ?? [];
       const cases = mergeCases(equipment.cases ?? [], fallbackCases);
+      const cxalloyStatus = equipmentLookupKeys(
+        equipment.equipment_id ?? equipment.source_equipment_label ?? displayId,
+      )
+        .map((key) => cxalloyStatusIndex.get(key))
+        .find(Boolean);
 
       rows.push({
         row_id: `${displayId}-${pdm.pdm_name ?? "no-pdm"}-${pdmIndex}-${equipmentIndexInPdm}`,
@@ -200,6 +253,7 @@ export function flattenEquipmentFromPdms(
         neta_completed_at: firstText(equipment.neta_completed_at, enrichment?.neta_completed_at),
         neta_test_report: firstText(equipment.neta_test_report, enrichment?.neta_test_report),
         neta_report_status: firstText(equipment.neta_report_status),
+        ...cxalloyFields(cxalloyStatus),
         cases,
         eps_test_items: getIndexedEpsTestItems(epsTestItemIndex, [
           equipment.equipment_id,
@@ -218,6 +272,9 @@ export function flattenEquipmentFromPdms(
   return equipmentRecords.map((equipment, index) => {
     const displayId = getEquipmentDisplayId(equipment);
     const cases = casesIndex.get(normalizeLookup(equipment.equipment_id)) ?? [];
+    const cxalloyStatus = equipmentLookupKeys(equipment.equipment_id ?? displayId)
+      .map((key) => cxalloyStatusIndex.get(key))
+      .find(Boolean);
     return {
       row_id: `${displayId}-equipment-${index}`,
       pdm_name: null,
@@ -240,6 +297,7 @@ export function flattenEquipmentFromPdms(
       neta_completed_at: firstText(equipment.neta_completed_at),
       neta_test_report: firstText(equipment.neta_test_report),
       neta_report_status: null,
+      ...cxalloyFields(cxalloyStatus),
       cases,
       eps_test_items: getIndexedEpsTestItems(epsTestItemIndex, [
         equipment.equipment_id,
@@ -280,6 +338,13 @@ export function hasMissingNetaReport(equipment: FlattenedEquipmentRow): boolean 
   return (
     equipment.neta_complete === true &&
     (isBlank(equipment.neta_test_report) || equipment.neta_report_status === "missing_report")
+  );
+}
+
+export function hasPendingCxalloyReport(equipment: FlattenedEquipmentRow): boolean {
+  return (
+    equipment.cxalloy_upload_status === "pending" ||
+    equipment.cxalloy_upload_status === "missing_pdf"
   );
 }
 
@@ -371,6 +436,12 @@ export function getEquipmentSummaryMetrics(
       (total, row) => total + getCasesMissingIssueImageCount(row),
       0,
     ),
+    cxalloyPendingEquipment: new Set(
+      equipmentRows
+        .filter(hasPendingCxalloyReport)
+        .map((row) => normalizeLookup(row.display_equipment_id))
+        .filter(Boolean),
+    ).size,
     mostCommonStatus: mostCommonStatus?.[0] ?? null,
     mostCommonStatusCount: mostCommonStatus?.[1] ?? 0,
   };

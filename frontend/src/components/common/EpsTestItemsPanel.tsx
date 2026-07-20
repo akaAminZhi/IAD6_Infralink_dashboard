@@ -1,5 +1,6 @@
 import type { EpsTestItemRecord } from "../../types/data";
 import {
+  getEpsTestItemStatusLabel,
   getEpsStatusTone,
   summarizeEpsTestItems,
 } from "../../utils/epsTestItemUtils";
@@ -13,7 +14,8 @@ interface EpsTestItemsPanelProps {
 
 export function EpsExecutionBadge({ items }: EpsTestItemsPanelProps) {
   const summary = summarizeEpsTestItems(items);
-  return <StatusBadge tone={getEpsStatusTone(summary.status)}>{summary.status}</StatusBadge>;
+  const label = summary.status === "Fixed" ? "Fixed After Failure" : summary.status;
+  return <StatusBadge tone={getEpsStatusTone(summary.status)}>{label}</StatusBadge>;
 }
 
 export function EpsTestItemsPanel({ items }: EpsTestItemsPanelProps) {
@@ -41,8 +43,8 @@ export function EpsTestItemsPanel({ items }: EpsTestItemsPanelProps) {
           </span>
         ) : null}
         {summary.fixed > 0 ? (
-          <span className="text-xs font-medium text-emerald-700">
-            {formatNumber(summary.fixed)} fixed
+          <span className="text-xs font-medium text-teal-700">
+            {formatNumber(summary.fixed)} fixed after failure
           </span>
         ) : null}
         {summary.failed > 0 ? (
@@ -70,6 +72,7 @@ export function EpsTestItemsPanel({ items }: EpsTestItemsPanelProps) {
           <tbody>
             {items.map((item, index) => {
               const itemStatus = String(item.item_status ?? item.status ?? "Unknown");
+              const itemStatusLabel = getEpsTestItemStatusLabel(itemStatus);
               const itemSummary = summarizeEpsTestItems([{ ...item, item_status: itemStatus }]);
               return (
                 <tr
@@ -81,7 +84,9 @@ export function EpsTestItemsPanel({ items }: EpsTestItemsPanelProps) {
                   </td>
                   <td className="px-3 py-2">{item.tracker_type ?? item.tracker_equipment_type ?? "--"}</td>
                   <td className="px-3 py-2">
-                    <StatusBadge tone={getEpsStatusTone(itemSummary.status)}>{itemStatus}</StatusBadge>
+                    <StatusBadge tone={getEpsStatusTone(itemSummary.status)}>
+                      {itemStatusLabel}
+                    </StatusBadge>
                   </td>
                   <td className="px-3 py-2">{formatDateTime(item.date_tested)}</td>
                 </tr>

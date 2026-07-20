@@ -21,6 +21,7 @@ import {
   getNetaDisplayStatus,
   getOpenCaseCount,
   hasMissingNetaReport,
+  hasPendingCxalloyReport,
   isBlank,
   type FlattenedEquipmentRow,
 } from "../utils/equipmentUtils";
@@ -41,6 +42,7 @@ const defaultFilters: EquipmentFiltersState = {
   missingIssueImagesOnly: false,
   missingNetaReportOnly: false,
   newNetaCompleteOnly: false,
+  cxalloyPendingOnly: false,
 };
 
 function normalizeFilterValue(value: unknown): string {
@@ -96,6 +98,9 @@ function filterEquipmentRows(
     if (filters.missingNetaReportOnly && !hasMissingNetaReport(row)) {
       return false;
     }
+    if (filters.cxalloyPendingOnly && !hasPendingCxalloyReport(row)) {
+      return false;
+    }
     if (
       filters.newNetaCompleteOnly &&
       ![
@@ -142,6 +147,9 @@ function getActiveQuickFilter(filters: EquipmentFiltersState): EquipmentQuickFil
   if (filters.newNetaCompleteOnly) {
     return "recentNetaComplete";
   }
+  if (filters.cxalloyPendingOnly) {
+    return "cxalloyPending";
+  }
 
   return null;
 }
@@ -161,6 +169,9 @@ function getFiltersForQuickFilter(filter: string | null): EquipmentFiltersState 
   }
   if (filter === "recentNetaComplete") {
     return { ...defaultFilters, newNetaCompleteOnly: true };
+  }
+  if (filter === "cxalloyPending") {
+    return { ...defaultFilters, cxalloyPendingOnly: true };
   }
 
   return defaultFilters;
@@ -202,8 +213,15 @@ export function EquipmentPage({ data }: EquipmentPageProps) {
   const deferredFilters = useDeferredValue(filters);
 
   const equipmentRows = useMemo(
-    () => flattenEquipmentFromPdms(data.pdms, data.equipment, data.cases, data.epsTestItems),
-    [data.cases, data.epsTestItems, data.equipment, data.pdms],
+    () =>
+      flattenEquipmentFromPdms(
+        data.pdms,
+        data.equipment,
+        data.cases,
+        data.epsTestItems,
+        data.cxalloyReportStatus,
+      ),
+    [data.cases, data.cxalloyReportStatus, data.epsTestItems, data.equipment, data.pdms],
   );
   const summaryMetrics = useMemo(() => getEquipmentSummaryMetrics(equipmentRows), [equipmentRows]);
   const newNetaCompleteIds = useMemo(() => getNewNetaCompleteIds(data), [data]);
@@ -245,8 +263,9 @@ export function EquipmentPage({ data }: EquipmentPageProps) {
       return;
     }
 
-      setFilters({
+    setFilters({
       ...defaultFilters,
+      cxalloyPendingOnly: filter === "cxalloyPending",
       missingIssueImagesOnly: filter === "missingIssueImages",
       missingNetaReportOnly: filter === "missingNetaReport",
       newNetaCompleteOnly: filter === "recentNetaComplete",
