@@ -13,9 +13,12 @@ import type { DashboardData } from "../types/data";
 import {
   enrichIssuesWithPdmContext,
   getAssigneeFilterOptions,
+  getInferredIssueType,
   getIssueNetaStatus,
   getIssueSummaryMetrics,
+  getIssueTypeFilterOptions,
   getUniqueFilterOptions,
+  hasCtReference,
   hasIssueImage,
   hasMissingNetaReportForIssue,
   issueHasAnyAssignee,
@@ -25,7 +28,7 @@ import {
   isUrgentIssue,
   type EnrichedIssue,
 } from "../utils/issueUtils";
-import { matchesSearchQuery } from "../utils/searchUtils";
+import { getSearchGroups, matchesSearchQuery } from "../utils/searchUtils";
 
 interface IssuesPageProps {
   data: DashboardData;
@@ -36,6 +39,7 @@ const defaultFilters: IssueFiltersState = {
   equipmentSearch: "",
   pdmSearch: "",
   summarySearch: "",
+  issueType: "",
   status: "",
   priority: "",
   assignedTo: [],
@@ -83,6 +87,19 @@ function normalizeCaseId(value: unknown): string {
   return String(value ?? "").trim().toUpperCase();
 }
 
+function matchesIssueSummaryQuery(summary: unknown, query: string): boolean {
+  const normalizedSummary = String(summary ?? "").trim().toLowerCase();
+  const groups = getSearchGroups(query);
+
+  return groups.some((terms) =>
+    terms.every((term) =>
+      term === "ct" || term === "cts"
+        ? hasCtReference(summary)
+        : normalizedSummary.includes(term),
+    ),
+  );
+}
+
 function filterIssues(
   issues: EnrichedIssue[],
   filters: IssueFiltersState,
@@ -104,7 +121,10 @@ function filterIssues(
     if (pdmSearch && !matchesSearchQuery([issue.pdm_name], pdmSearch)) {
       return false;
     }
-    if (summarySearch && !matchesSearchQuery([issue.summary], summarySearch)) {
+    if (summarySearch && !matchesIssueSummaryQuery(issue.summary, summarySearch)) {
+      return false;
+    }
+    if (filters.issueType && getInferredIssueType(issue) !== filters.issueType) {
       return false;
     }
     if (filters.status && normalizeFilterValue(issue.status) !== filters.status) {
@@ -214,6 +234,7 @@ export function IssuesPage({ data }: IssuesPageProps) {
       priorities: getUniqueFilterOptions(enrichedIssues, "priority"),
       assignees: getAssigneeFilterOptions(enrichedIssues),
       dueStates: getUniqueFilterOptions(enrichedIssues, "due_state"),
+      issueTypes: getIssueTypeFilterOptions(enrichedIssues),
     }),
     [enrichedIssues],
   );
@@ -327,6 +348,7 @@ export function IssuesPage({ data }: IssuesPageProps) {
         assignees={filterOptions.assignees}
         dueStates={filterOptions.dueStates}
         filters={filters}
+        issueTypes={filterOptions.issueTypes}
         onChange={setFilters}
         onReset={() => setFilters(defaultFilters)}
         priorities={filterOptions.priorities}

@@ -10,6 +10,7 @@ export interface IssueFiltersState {
   equipmentSearch: string;
   pdmSearch: string;
   summarySearch: string;
+  issueType: string;
   status: string;
   priority: string;
   assignedTo: string[];
@@ -30,6 +31,7 @@ interface IssueFiltersProps {
   priorities: string[];
   assignees: string[];
   dueStates: string[];
+  issueTypes: string[];
   onChange: (filters: IssueFiltersState) => void;
   onReset: () => void;
 }
@@ -215,6 +217,7 @@ export function IssueFilters({
   priorities,
   assignees,
   dueStates,
+  issueTypes,
   onChange,
   onReset,
 }: IssueFiltersProps) {
@@ -226,6 +229,7 @@ export function IssueFilters({
     filters.equipmentSearch.trim(),
     filters.pdmSearch.trim(),
     filters.summarySearch.trim(),
+    filters.issueType,
     filters.status,
     filters.priority,
     filters.assignedTo.length,
@@ -269,7 +273,14 @@ export function IssueFilters({
           />
         </div>
 
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+          <SelectFilter
+            allLabel="All issue types"
+            label="Issue Type"
+            onChange={(issueType) => update({ issueType })}
+            options={issueTypes}
+            value={filters.issueType}
+          />
           <SelectFilter
             allLabel="All statuses"
             label="Status"

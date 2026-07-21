@@ -12,6 +12,7 @@ import {
   CircleAlert,
   CircleDashed,
   ClipboardCheck,
+  Clock3,
   Maximize2,
   Minus,
   Plus,
@@ -48,9 +49,13 @@ interface PowerPlanPageProps {
   data: DashboardData;
 }
 
-const statusTone: Record<PowerPlanEquipmentStatus, "danger" | "warning" | "success" | "muted"> = {
+const statusTone: Record<
+  PowerPlanEquipmentStatus,
+  "danger" | "warning" | "lime" | "success" | "muted"
+> = {
   action: "danger",
   testing: "warning",
+  waitingNeta: "lime",
   ready: "success",
   noData: "muted",
 };
@@ -58,6 +63,7 @@ const statusTone: Record<PowerPlanEquipmentStatus, "danger" | "warning" | "succe
 const statusIcon: Record<PowerPlanEquipmentStatus, typeof CircleAlert> = {
   action: CircleAlert,
   testing: ClipboardCheck,
+  waitingNeta: Clock3,
   ready: CheckCircle2,
   noData: CircleDashed,
 };
@@ -126,6 +132,7 @@ interface PanState {
   clientX: number;
   clientY: number;
   equipmentAnnotationId: string | null;
+  pdmName: string | null;
   moved: boolean;
   viewport: SchematicViewport;
 }
@@ -990,6 +997,147 @@ function EquipmentQueue({
   );
 }
 
+function PdmOverview({
+  pdmName,
+  rows,
+  onBack,
+  onSelectEquipment,
+}: {
+  pdmName: string;
+  rows: EnrichedPowerPlanEquipment[];
+  onBack: () => void;
+  onSelectEquipment: (row: EnrichedPowerPlanEquipment) => void;
+}) {
+  const statusCounts = rows.reduce<Record<PowerPlanEquipmentStatus, number>>(
+    (result, row) => {
+      result[row.status] += 1;
+      return result;
+    },
+    { action: 0, testing: 0, waitingNeta: 0, ready: 0, noData: 0 },
+  );
+  const netaCompleteCount = rows.filter(
+    (row) => row.equipment?.neta_complete === true,
+  ).length;
+  const openIssueCount = rows.reduce(
+    (total, row) => total + row.openIssues.length,
+    0,
+  );
+  const testsRemainingCount = rows.reduce(
+    (total, row) => total + row.notTestedCount,
+    0,
+  );
+  const statuses = Object.keys(POWER_PLAN_STATUS_LABELS) as PowerPlanEquipmentStatus[];
+  const metrics = [
+    { label: "Equipment", value: rows.length },
+    { label: "NETA Complete", value: netaCompleteCount },
+    { label: "Open Issues", value: openIssueCount },
+    { label: "Tests Remaining", value: testsRemainingCount },
+  ];
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="border-b p-4">
+        <button
+          className="mb-3 inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
+          onClick={onBack}
+          type="button"
+        >
+          <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
+          Area equipment
+        </button>
+        <p className="text-xs font-medium uppercase text-muted-foreground">PDM Overview</p>
+        <h2 className="mt-1 break-words text-base font-semibold">{pdmName}</h2>
+      </div>
+
+      <div className="grid grid-cols-2 divide-x divide-y border-b">
+        {metrics.map((metric) => (
+          <div className="p-3" key={metric.label}>
+            <div className="text-xl font-semibold">{metric.value}</div>
+            <div className="mt-0.5 text-[11px] text-muted-foreground">{metric.label}</div>
+          </div>
+        ))}
+      </div>
+
+      <section className="border-b p-4">
+        <h3 className="text-xs font-semibold uppercase text-muted-foreground">
+          Equipment Status
+        </h3>
+        <div className="mt-3 flex h-2 overflow-hidden rounded-full bg-muted">
+          {statuses.map((status) =>
+            statusCounts[status] > 0 ? (
+              <span
+                key={status}
+                style={{
+                  backgroundColor: POWER_PLAN_STATUS_COLORS[status].stroke,
+                  width: `${(statusCounts[status] / Math.max(1, rows.length)) * 100}%`,
+                }}
+                title={`${POWER_PLAN_STATUS_LABELS[status]}: ${statusCounts[status]}`}
+              />
+            ) : null,
+          )}
+        </div>
+        <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2">
+          {statuses.map((status) => (
+            <div className="flex min-w-0 items-center gap-2 text-xs" key={status}>
+              <span
+                aria-hidden="true"
+                className="h-3 w-3 shrink-0 rounded-[3px] border"
+                style={{
+                  backgroundColor: POWER_PLAN_STATUS_COLORS[status].fill,
+                  borderColor: POWER_PLAN_STATUS_COLORS[status].stroke,
+                }}
+              />
+              <span className="min-w-0 flex-1 truncate text-muted-foreground">
+                {POWER_PLAN_STATUS_LABELS[status]}
+              </span>
+              <span className="font-semibold">{statusCounts[status]}</span>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="flex min-h-0 flex-1 flex-col">
+        <div className="flex items-center justify-between border-b px-4 py-3">
+          <h3 className="text-xs font-semibold uppercase text-muted-foreground">Equipment</h3>
+          <span className="text-xs text-muted-foreground">{rows.length} total</span>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto [overflow-anchor:none] [scrollbar-gutter:stable]">
+          {rows.map((row) => {
+            const Icon = statusIcon[row.status];
+            return (
+              <button
+                className="flex w-full items-start gap-3 border-b px-4 py-3 text-left transition-colors hover:bg-muted"
+                key={row.annotation.annotation_id}
+                onClick={() => onSelectEquipment(row)}
+                type="button"
+              >
+                <span
+                  className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md border"
+                  style={{
+                    backgroundColor: POWER_PLAN_STATUS_COLORS[row.status].fill,
+                    borderColor: POWER_PLAN_STATUS_COLORS[row.status].stroke,
+                    color: POWER_PLAN_STATUS_COLORS[row.status].text,
+                  }}
+                >
+                  <Icon className="h-4 w-4" aria-hidden="true" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block break-words text-sm font-medium">{row.equipmentId}</span>
+                  <span className="mt-1 block text-xs text-muted-foreground">
+                    {POWER_PLAN_STATUS_LABELS[row.status]}
+                    {row.openIssues.length > 0 ? ` · ${row.openIssues.length} open` : ""}
+                    {row.notTestedCount > 0 ? ` · ${row.notTestedCount} remaining` : ""}
+                  </span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </section>
+    </div>
+  );
+}
+
 export function PowerPlanPage({ data }: PowerPlanPageProps) {
   const allRows = useMemo(() => enrichPdmSchematicEquipment(data), [data]);
   const areaFamilies = useMemo(
@@ -1007,6 +1155,7 @@ export function PowerPlanPage({ data }: PowerPlanPageProps) {
   const [activeSearchIndex, setActiveSearchIndex] = useState(0);
   const [statusFilter, setStatusFilter] = useState<PowerPlanEquipmentStatus | "">("");
   const [selectedAnnotationId, setSelectedAnnotationId] = useState<string | null>(null);
+  const [selectedPdmName, setSelectedPdmName] = useState<string | null>(null);
   const [selectedIssue, setSelectedIssue] = useState<EnrichedIssue | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
   const panRef = useRef<PanState | null>(null);
@@ -1029,6 +1178,13 @@ export function PowerPlanPage({ data }: PowerPlanPageProps) {
   });
   const selectedRow =
     rows.find((row) => row.annotation.annotation_id === selectedAnnotationId) ?? null;
+  const selectedPdmRows = useMemo(
+    () =>
+      selectedPdmName
+        ? rows.filter((row) => (row.pdmName?.trim() || "Unassigned PDM") === selectedPdmName)
+        : [],
+    [rows, selectedPdmName],
+  );
   const normalizedSearch = search.trim();
   const globalSearchMatches = useMemo(() => {
     if (!normalizedSearch) return [];
@@ -1116,6 +1272,16 @@ export function PowerPlanPage({ data }: PowerPlanPageProps) {
         ? pendingSelection
         : null,
     );
+    setSelectedPdmName((current) =>
+      current &&
+      allRows.some(
+        (row) =>
+          (row.pdmName?.trim() || "Unassigned PDM") === current &&
+          getPdmAreaFamily(row.pdmName) === areaFamily,
+      )
+        ? current
+        : null,
+    );
     pendingSearchSelectionRef.current = null;
   }, [allRows, areaFamily, layout.height, layout.width]);
 
@@ -1152,10 +1318,16 @@ export function PowerPlanPage({ data }: PowerPlanPageProps) {
       result[row.status] += 1;
       return result;
     },
-    { action: 0, testing: 0, ready: 0, noData: 0 },
+    { action: 0, testing: 0, waitingNeta: 0, ready: 0, noData: 0 },
   );
   function selectRow(row: EnrichedPowerPlanEquipment) {
+    setSelectedPdmName(row.pdmName?.trim() || "Unassigned PDM");
     setSelectedAnnotationId(row.annotation.annotation_id);
+  }
+
+  function selectPdm(pdmName: string) {
+    setSelectedAnnotationId(null);
+    setSelectedPdmName(pdmName);
   }
 
   function selectGlobalSearchResult(suggestion: PowerPlanSearchSuggestion) {
@@ -1164,7 +1336,7 @@ export function PowerPlanPage({ data }: PowerPlanPageProps) {
     setSearchOpen(false);
     setActiveSearchIndex(0);
     if (suggestion.kind === "pdm") {
-      setSelectedAnnotationId(null);
+      selectPdm(suggestion.pdmName);
       if (targetFamily !== areaFamily) {
         setAreaFamily(targetFamily);
       }
@@ -1172,6 +1344,7 @@ export function PowerPlanPage({ data }: PowerPlanPageProps) {
     }
     if (targetFamily !== areaFamily) {
       pendingSearchSelectionRef.current = suggestion.row.annotation.annotation_id;
+      setSelectedPdmName(suggestion.row.pdmName?.trim() || "Unassigned PDM");
       setAreaFamily(targetFamily);
       return;
     }
@@ -1214,11 +1387,13 @@ export function PowerPlanPage({ data }: PowerPlanPageProps) {
     event.preventDefault();
     event.currentTarget.setPointerCapture(event.pointerId);
     const equipmentMarker = (event.target as Element).closest('[data-equipment-marker="true"]');
+    const pdmRegion = (event.target as Element).closest('[data-pdm-region-marker="true"]');
     panRef.current = {
       pointerId: event.pointerId,
       clientX: event.clientX,
       clientY: event.clientY,
       equipmentAnnotationId: equipmentMarker?.getAttribute("data-annotation-id") ?? null,
+      pdmName: pdmRegion?.getAttribute("data-pdm-region") ?? null,
       moved: false,
       viewport,
     };
@@ -1262,6 +1437,10 @@ export function PowerPlanPage({ data }: PowerPlanPageProps) {
         (candidate) => candidate.annotation.annotation_id === pan.equipmentAnnotationId,
       );
       if (row) selectRow(row);
+      return;
+    }
+    if (!pan.moved && pan.pdmName) {
+      selectPdm(pan.pdmName);
       return;
     }
     if (pan.moved) {
@@ -1420,7 +1599,7 @@ export function PowerPlanPage({ data }: PowerPlanPageProps) {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 divide-x divide-y sm:grid-cols-5 sm:divide-y-0">
+        <div className="grid grid-cols-2 divide-x divide-y sm:grid-cols-3 lg:grid-cols-6 lg:divide-y-0">
           <button
             className={cn("px-4 py-3 text-left hover:bg-muted", !statusFilter && "bg-muted")}
             onClick={() => setStatusFilter("")}
@@ -1563,6 +1742,7 @@ export function PowerPlanPage({ data }: PowerPlanPageProps) {
               ))}
 
               {layout.pdmRegions.map((region) => {
+                const isSelected = selectedPdmName === region.label;
                 const palette =
                   region.kind === "unassigned"
                     ? { fill: "#fffbeb", stroke: "#d97706", text: "#92400e" }
@@ -1570,7 +1750,24 @@ export function PowerPlanPage({ data }: PowerPlanPageProps) {
                       ? { fill: "#f8fafc", stroke: "#64748b", text: "#1e3a5f" }
                       : { fill: "#f1f5f9", stroke: "#94a3b8", text: "#334155" };
                 return (
-                  <g data-pdm-region={region.label} key={region.id}>
+                  <g
+                    aria-label={`${region.label}: ${region.equipmentCount} equipment`}
+                    className="cursor-pointer outline-none"
+                    data-pdm-region={region.label}
+                    data-pdm-region-marker="true"
+                    key={region.id}
+                    onClick={() => {
+                      if (!suppressCanvasClickRef.current) selectPdm(region.label);
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        selectPdm(region.label);
+                      }
+                    }}
+                    role="button"
+                    tabIndex={0}
+                  >
                     <title>{`${region.label}: ${region.equipmentCount} equipment`}</title>
                     <rect
                       fill={palette.stroke}
@@ -1583,12 +1780,12 @@ export function PowerPlanPage({ data }: PowerPlanPageProps) {
                     />
                     <rect
                       fill={palette.fill}
-                      fillOpacity={0.94}
+                      fillOpacity={isSelected ? 1 : 0.94}
                       height={region.height}
                       rx={8}
                       stroke={palette.stroke}
                       strokeDasharray={region.kind === "unassigned" ? "6 4" : undefined}
-                      strokeWidth={1.5}
+                      strokeWidth={isSelected ? 3 : 1.5}
                       width={region.width}
                       x={region.x}
                       y={region.y}
@@ -1596,7 +1793,7 @@ export function PowerPlanPage({ data }: PowerPlanPageProps) {
                     <line
                       strokeLinecap="round"
                       stroke={palette.stroke}
-                      strokeWidth={3}
+                      strokeWidth={isSelected ? 5 : 3}
                       x1={region.x + 8}
                       x2={region.x + region.width - 8}
                       y1={region.y}
@@ -1672,6 +1869,13 @@ export function PowerPlanPage({ data }: PowerPlanPageProps) {
               onBack={() => setSelectedAnnotationId(null)}
               onSelectIssue={selectIssue}
               row={selectedRow}
+            />
+          ) : selectedPdmName ? (
+            <PdmOverview
+              onBack={() => setSelectedPdmName(null)}
+              onSelectEquipment={selectRow}
+              pdmName={selectedPdmName}
+              rows={selectedPdmRows}
             />
           ) : (
             <EquipmentQueue rows={filteredRows} onSelect={selectRow} />

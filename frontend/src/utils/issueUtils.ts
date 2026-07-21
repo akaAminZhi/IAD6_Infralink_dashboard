@@ -61,6 +61,7 @@ const CLOSED_STATUSES = new Set([
 ]);
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+const CT_REFERENCE_PATTERN = /(^|[^A-Z0-9])CT(?:S|\d+)?(?=$|[^A-Z0-9])/i;
 
 export function isBlank(value: unknown): boolean {
   return value === null || value === undefined || String(value).trim() === "";
@@ -109,6 +110,33 @@ export function isUrgentIssue(issue: Pick<EnrichedIssue, "priority"> | CaseIssue
 
 export function isHighPriorityIssue(issue: Pick<EnrichedIssue, "priority"> | CaseIssue): boolean {
   return String(issue.priority ?? "").toLowerCase().includes("high");
+}
+
+export function getInferredIssueType(
+  issue: Pick<EnrichedIssue, "summary"> | Pick<CaseIssue, "summary">,
+): string {
+  const summary = String(issue.summary ?? "").trim();
+  const explicitType = summary.match(/^\s*Type\s*:\s*([^\r\n,;]+)/im)?.[1]?.trim();
+
+  if (explicitType) {
+    return /^CTS?$/i.test(explicitType) ? "CT" : explicitType;
+  }
+  if (hasCtReference(summary)) {
+    return "CT";
+  }
+  return "Other";
+}
+
+export function hasCtReference(summary: unknown): boolean {
+  return CT_REFERENCE_PATTERN.test(String(summary ?? ""));
+}
+
+export function getIssueTypeFilterOptions(issues: EnrichedIssue[]): string[] {
+  return [...new Set(issues.map(getInferredIssueType))].sort((left, right) => {
+    if (left === "Other") return 1;
+    if (right === "Other") return -1;
+    return left.localeCompare(right, undefined, { numeric: true, sensitivity: "base" });
+  });
 }
 
 export function hasIssueImage(issue: Pick<EnrichedIssue, "issue_image"> | CaseIssue): boolean {

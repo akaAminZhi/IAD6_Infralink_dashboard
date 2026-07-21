@@ -2,6 +2,7 @@ import type {
   CaseIssue,
   DashboardData,
   Equipment,
+  EpsModuleExecutionRecord,
   EpsTestItemRecord,
   PdmRecord,
   PowerPlanAnnotation,
@@ -9,7 +10,12 @@ import type {
 } from "../types/data";
 import { isOpenIssue } from "./issueUtils";
 
-export type PowerPlanEquipmentStatus = "action" | "testing" | "ready" | "noData";
+export type PowerPlanEquipmentStatus =
+  | "action"
+  | "testing"
+  | "waitingNeta"
+  | "ready"
+  | "noData";
 
 export interface EnrichedPowerPlanEquipment {
   annotation: PowerPlanAnnotation;
@@ -29,6 +35,7 @@ export interface EnrichedPowerPlanEquipment {
 export const POWER_PLAN_STATUS_LABELS: Record<PowerPlanEquipmentStatus, string> = {
   action: "Open Case",
   testing: "Testing Incomplete",
+  waitingNeta: "Awaiting Infralink NETA",
   ready: "Ready",
   noData: "No EPS Data",
 };
@@ -39,9 +46,13 @@ export const POWER_PLAN_STATUS_COLORS: Record<
 > = {
   action: { fill: "#fee2e2", stroke: "#dc2626", text: "#991b1b" },
   testing: { fill: "#fef3c7", stroke: "#d97706", text: "#92400e" },
+  waitingNeta: { fill: "#ecfccb", stroke: "#65a30d", text: "#3f6212" },
   ready: { fill: "#d1fae5", stroke: "#059669", text: "#065f46" },
   noData: { fill: "#e2e8f0", stroke: "#64748b", text: "#334155" },
 };
+
+const EPS_STATUS_WAITING_INFRALINK_NETA =
+  "Complete, Waiting Infralink NETA Completion";
 
 export function normalizePowerPlanEquipmentKey(value: unknown): string {
   const normalized = String(value ?? "")
@@ -78,6 +89,40 @@ function buildPdmIndex(pdms: PdmRecord[]): Map<string, string> {
   return index;
 }
 
+function normalizePdmKey(value: unknown): string {
+  return String(value ?? "").trim().toUpperCase();
+}
+
+function buildEpsModuleStatusIndex(
+  records: EpsModuleExecutionRecord[],
+): Map<string, string> {
+  const index = new Map<string, string>();
+  records.forEach((record) => {
+    const pdmKey = normalizePdmKey(record.pdm_name);
+    const status = String(record.eps_test_status ?? "").trim();
+    const equipmentKeys = [
+      record.matched_equipment_id,
+      record.module_equipment,
+      record.module_equipment_key,
+    ]
+      .map(normalizePowerPlanEquipmentKey)
+      .filter(Boolean);
+
+    equipmentKeys.forEach((equipmentKey) => {
+      index.set(`${pdmKey}|${equipmentKey}`, status);
+    });
+  });
+  return index;
+}
+
+function getEpsModuleStatus(
+  index: Map<string, string>,
+  pdmName: string | null,
+  equipmentKey: string,
+): string | null {
+  return index.get(`${normalizePdmKey(pdmName)}|${equipmentKey}`) ?? null;
+}
+
 function isFailedItem(item: EpsTestItemRecord): boolean {
   return String(item.item_status ?? "").toLowerCase().startsWith("failed");
 }
@@ -107,9 +152,13 @@ function getStatus(
   testItems: EpsTestItemRecord[],
   openIssues: CaseIssue[],
   netaComplete: boolean,
+  epsTestStatus: string | null,
 ): PowerPlanEquipmentStatus {
   if (netaComplete) {
     return "ready";
+  }
+  if (epsTestStatus === EPS_STATUS_WAITING_INFRALINK_NETA) {
+    return "waitingNeta";
   }
   if (openIssues.length > 0) {
     return "action";
@@ -147,6 +196,7 @@ export function enrichPowerPlanEquipment(
 ): EnrichedPowerPlanEquipment[] {
   const equipmentIndex = buildEquipmentIndex(data.equipment);
   const pdmIndex = buildPdmIndex(data.pdms);
+  const epsModuleStatusIndex = buildEpsModuleStatusIndex(data.epsModuleExecution);
 
   return annotations
     .filter((annotation) => annotation.kind === "equipment")
@@ -164,26 +214,33 @@ export function enrichPowerPlanEquipment(
         (item) => normalizePowerPlanEquipmentKey(item.module_equipment) === key,
       );
       const netaComplete = equipment?.neta_complete === true;
+      const pdmName = pdmIndex.get(key) || null;
 
       return {
         annotation,
         equipment,
         equipmentId:
           String(annotation.matched_equipment_id || equipment?.equipment_id || annotation.label),
-        pdmName: pdmIndex.get(key) || null,
+        pdmName,
         issues,
         openIssues,
         testItems,
         ...summarizeTestItems(testItems, netaComplete),
-        status: getStatus(testItems, openIssues, netaComplete),
+        status: getStatus(
+          testItems,
+          openIssues,
+          netaComplete,
+          getEpsModuleStatus(epsModuleStatusIndex, pdmName, key),
+        ),
       };
     })
     .sort((a, b) => {
       const statusOrder: Record<PowerPlanEquipmentStatus, number> = {
         action: 0,
         testing: 1,
-        ready: 2,
-        noData: 3,
+        waitingNeta: 2,
+        ready: 3,
+        noData: 4,
       };
       return statusOrder[a.status] - statusOrder[b.status] || a.equipmentId.localeCompare(b.equipmentId);
     });
@@ -193,6 +250,7 @@ export function enrichPdmSchematicEquipment(
   data: DashboardData,
 ): EnrichedPowerPlanEquipment[] {
   const equipmentIndex = buildEquipmentIndex(data.equipment);
+  const epsModuleStatusIndex = buildEpsModuleStatusIndex(data.epsModuleExecution);
   const issueIndex = new Map<string, CaseIssue[]>();
   const testItemIndex = new Map<string, EpsTestItemRecord[]>();
 
@@ -247,7 +305,12 @@ export function enrichPdmSchematicEquipment(
         openIssues,
         testItems,
         ...summarizeTestItems(testItems, netaComplete),
-        status: getStatus(testItems, openIssues, netaComplete),
+        status: getStatus(
+          testItems,
+          openIssues,
+          netaComplete,
+          getEpsModuleStatus(epsModuleStatusIndex, pdmName, key),
+        ),
       });
     });
   });
@@ -255,8 +318,9 @@ export function enrichPdmSchematicEquipment(
   const statusOrder: Record<PowerPlanEquipmentStatus, number> = {
     action: 0,
     testing: 1,
-    ready: 2,
-    noData: 3,
+    waitingNeta: 2,
+    ready: 3,
+    noData: 4,
   };
   return rows.sort(
     (a, b) =>
