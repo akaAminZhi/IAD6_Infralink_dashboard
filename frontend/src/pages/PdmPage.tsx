@@ -8,7 +8,10 @@ import {
   type PdmFiltersState,
 } from "../components/pdms/PdmFilters";
 import { PdmDetailDrawer } from "../components/pdms/PdmDetailDrawer";
-import { PdmSummaryCards } from "../components/pdms/PdmSummaryCards";
+import {
+  PdmSummaryCards,
+  type PdmSummaryFilter,
+} from "../components/pdms/PdmSummaryCards";
 import { PdmTable } from "../components/pdms/PdmTable";
 import type { DashboardData, PdmRecord } from "../types/data";
 import {
@@ -35,7 +38,15 @@ const defaultFilters: PdmFiltersState = {
 };
 
 function getQuickFilter(value: string | null): PdmQuickFilter {
-  if (value === "testingStarted" || value === "fullyReady" || value === "needsAttention") {
+  if (
+    value === "testingStarted" ||
+    value === "fullyReady" ||
+    value === "needsAttention" ||
+    value === "watch" ||
+    value === "attention" ||
+    value === "critical" ||
+    value === "notStarted"
+  ) {
     return value;
   }
 
@@ -67,6 +78,18 @@ function filterRows(rows: PdmTableRow[], filters: PdmFiltersState): PdmTableRow[
       filters.quickFilter === "needsAttention" &&
       !["Watch", "Attention", "Critical"].includes(row.readinessLevel)
     ) {
+      return false;
+    }
+    if (filters.quickFilter === "watch" && row.readinessLevel !== "Watch") {
+      return false;
+    }
+    if (filters.quickFilter === "attention" && row.readinessLevel !== "Attention") {
+      return false;
+    }
+    if (filters.quickFilter === "critical" && row.readinessLevel !== "Critical") {
+      return false;
+    }
+    if (filters.quickFilter === "notStarted" && row.readinessLevel !== "Not Started") {
       return false;
     }
     if (search && !rowMatchesSearch(row, search)) {
@@ -117,6 +140,37 @@ function sortRowsForDefaultReadinessView(rows: PdmTableRow[]): PdmTableRow[] {
   });
 }
 
+function getActiveSummaryFilter(filters: PdmFiltersState): PdmSummaryFilter | null {
+  if (filters.openCasesOnly) {
+    return "openCases";
+  }
+  if (filters.missingReportsOnly) {
+    return "missingReports";
+  }
+  if (filters.missingIssueImagesOnly) {
+    return "missingImages";
+  }
+  if (filters.quickFilter) {
+    return filters.quickFilter;
+  }
+  if (filters.readiness === "Good") {
+    return "fullyReady";
+  }
+  if (filters.readiness === "Watch") {
+    return "watch";
+  }
+  if (filters.readiness === "Attention") {
+    return "attention";
+  }
+  if (filters.readiness === "Critical") {
+    return "critical";
+  }
+  if (filters.readiness === "Not Started") {
+    return "notStarted";
+  }
+  return null;
+}
+
 export function PdmPage({ data }: PdmPageProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const filterParamsKey = searchParams.get("quickFilter") ?? "";
@@ -156,6 +210,38 @@ export function PdmPage({ data }: PdmPageProps) {
     setSelectedPdm(row.pdm);
   }
 
+  function handleSummaryFilter(filter: PdmSummaryFilter) {
+    const activeFilter = getActiveSummaryFilter(filters);
+    if (activeFilter === filter) {
+      setFilters(defaultFilters);
+      setSearchParams({});
+      return;
+    }
+
+    const quickFilters: PdmQuickFilter[] = [
+      "testingStarted",
+      "fullyReady",
+      "needsAttention",
+      "watch",
+      "attention",
+      "critical",
+      "notStarted",
+    ];
+    const quickFilter = quickFilters.includes(filter as PdmQuickFilter)
+      ? (filter as PdmQuickFilter)
+      : "";
+    const nextFilters: PdmFiltersState = {
+      ...defaultFilters,
+      quickFilter,
+      openCasesOnly: filter === "openCases",
+      missingReportsOnly: filter === "missingReports",
+      missingIssueImagesOnly: filter === "missingImages",
+    };
+
+    setFilters(nextFilters);
+    setSearchParams(quickFilter ? { quickFilter } : {});
+  }
+
   function closePdmDetail() {
     setSelectedPdm(null);
     if (!searchParams.has("pdmName") && !searchParams.has("selectedPdm")) {
@@ -179,7 +265,12 @@ export function PdmPage({ data }: PdmPageProps) {
 
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
-      <PdmSummaryCards metrics={summaryMetrics} />
+      <PdmSummaryCards
+        activeFilter={getActiveSummaryFilter(filters)}
+        metrics={summaryMetrics}
+        onSelectFilter={handleSummaryFilter}
+        rows={tableRows}
+      />
 
       <PdmFilters
         filters={filters}

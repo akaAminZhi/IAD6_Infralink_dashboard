@@ -1,5 +1,14 @@
-import { AlertTriangle, CheckCircle2, CloudUpload, FileWarning, ImageOff, TrendingUp } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  CloudUpload,
+  FileWarning,
+  ImageOff,
+  TrendingUp,
+} from "lucide-react";
 
+import { StatusBadge } from "../common/StatusBadge";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
 import { cn } from "../../utils/cn";
 import { formatNumber } from "../../utils/formatters";
 import type { HistoryComparison } from "../../types/data";
@@ -21,12 +30,6 @@ interface EquipmentSummaryCardsProps {
   onSelectFilter: (filter: EquipmentQuickFilter) => void;
 }
 
-const cardToneClass = {
-  positive: "border-emerald-200 bg-emerald-50/60 text-emerald-950",
-  warning: "border-amber-200 bg-amber-50/70 text-amber-950",
-  critical: "border-red-200 bg-red-50/70 text-red-950",
-};
-
 function formatSnapshotDate(value: string | null | undefined): string {
   if (!value) {
     return "No baseline";
@@ -47,129 +50,169 @@ export function EquipmentSummaryCards({
   newNetaCompleteCount,
   onSelectFilter,
 }: EquipmentSummaryCardsProps) {
-  const cards = [
+  const netaHistory = historyComparison?.neta_complete ?? null;
+  const baselineDate = formatSnapshotDate(netaHistory?.baseline_date);
+
+  const exceptions = [
     {
-      description: "Current GC report package is not recorded as uploaded.",
+      description: "GC report packages not confirmed as uploaded.",
       filter: "cxalloyPending" as const,
       icon: CloudUpload,
       label: "Pending CxAlloy Upload",
-      tone: "warning" as const,
       value: metrics.cxalloyPendingEquipment,
+      activeClass: "text-blue-700",
+      alertClass: "text-blue-700",
     },
     {
-      description: "Equipment entries with active cases.",
-      filter: "openCases" as const,
-      icon: AlertTriangle,
-      label: "Equipment With Open Cases",
-      tone: "warning" as const,
-      value: metrics.equipmentWithOpenCases,
-    },
-    {
-      description: "NETA complete but report is missing.",
+      description: "NETA complete equipment missing report evidence.",
       filter: "missingNetaReport" as const,
       icon: FileWarning,
-      label: "Missing NETA Test Report",
-      tone: "critical" as const,
+      label: "Missing NETA Report",
       value: metrics.missingNetaReports,
+      activeClass: "text-red-700",
+      alertClass: "text-red-700",
     },
     {
-      description: "Related cases missing image references.",
+      description: "Related cases without issue image references.",
       filter: "missingIssueImages" as const,
       icon: ImageOff,
-      label: "Cases Missing Issue Image",
-      tone: "critical" as const,
+      label: "Missing Issue Images",
       value: metrics.casesMissingIssueImage,
-    },
-    {
-      description: "Complete with report available.",
-      filter: "netaComplete" as const,
-      icon: CheckCircle2,
-      label: "NETA Complete With Report",
-      tone: "positive" as const,
-      value: metrics.netaComplete,
+      activeClass: "text-amber-700",
+      alertClass: "text-amber-700",
     },
   ];
-  const netaHistory = historyComparison?.neta_complete ?? null;
-  const recentNetaActive = activeFilter === "recentNetaComplete";
-  const baselineDate = formatSnapshotDate(netaHistory?.baseline_date);
-  const currentCount = netaHistory?.current_count ?? metrics.netaComplete;
-  const baselineCount = netaHistory?.baseline_count ?? null;
 
   return (
-    <section className="grid gap-4">
-      <button
-        aria-pressed={recentNetaActive}
-        className={cn(
-          "rounded-lg border-2 p-4 text-left shadow-sm transition-colors hover:border-primary/50 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-          recentNetaActive
-            ? "border-primary bg-primary/5"
-            : "border-emerald-200 bg-emerald-50/60 text-emerald-950",
-        )}
-        disabled={!netaHistory?.available && newNetaCompleteCount === 0}
-        onClick={() => onSelectFilter("recentNetaComplete")}
-        type="button"
-      >
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div
-              className={cn(
-                "flex h-11 w-11 items-center justify-center rounded-md",
-                recentNetaActive ? "bg-primary text-primary-foreground" : "bg-emerald-100 text-emerald-900",
-              )}
-            >
-              <TrendingUp className="h-5 w-5" aria-hidden="true" />
-            </div>
-            <div>
-              <div className="text-base font-semibold">NETA Complete Added Since 7-Day Baseline</div>
-              <div className="mt-1 text-sm text-muted-foreground">
-                Compared with {baselineDate}; current complete {formatNumber(currentCount)}
-                {baselineCount === null ? "" : `, baseline ${formatNumber(baselineCount)}`}.
-              </div>
-            </div>
-          </div>
-          <div className="text-right">
-            <div className="text-4xl font-semibold leading-none tracking-normal">
-              +{formatNumber(newNetaCompleteCount)}
-            </div>
-            <div className="mt-2 text-xs font-medium text-primary">
-              {recentNetaActive ? "Filtering lookup table" : "Click to filter"}
-            </div>
-          </div>
+    <Card className="overflow-hidden">
+      <CardHeader className="gap-3 border-b bg-slate-50/60 md:flex-row md:items-center md:justify-between">
+        <div>
+          <CardTitle>Equipment Readiness & Exceptions</CardTitle>
+          <CardDescription>Use each metric to filter the equipment lookup table.</CardDescription>
         </div>
-      </button>
+        <StatusBadge tone="muted">
+          {`${formatNumber(metrics.uniqueEquipmentIds)} unique equipment IDs`}
+        </StatusBadge>
+      </CardHeader>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-        {cards.map((card) => {
-          const Icon = card.icon;
-          const isActive = activeFilter === card.filter;
-
-          return (
+      <CardContent className="p-0">
+        <div className="grid xl:grid-cols-[1.45fr_0.9fr]">
+          <div className="grid border-b sm:grid-cols-[1fr_0.65fr] xl:border-b-0 xl:border-r">
             <button
-              aria-pressed={isActive}
+              aria-pressed={activeFilter === "netaComplete"}
               className={cn(
-                "rounded-lg border p-4 text-left shadow-sm transition-colors hover:border-primary/40 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                cardToneClass[card.tone],
-                isActive ? "border-primary ring-2 ring-primary/20" : "",
+                "flex min-h-32 items-center gap-4 border-b px-5 py-5 text-left transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring sm:border-b-0 sm:border-r",
+                activeFilter === "netaComplete" ? "bg-emerald-50/70" : "bg-background",
               )}
-              key={card.filter}
-              onClick={() => onSelectFilter(card.filter)}
+              onClick={() => onSelectFilter("netaComplete")}
               type="button"
             >
-              <div className="flex items-start justify-between gap-3">
-                <div className="text-sm font-medium text-muted-foreground">{card.label}</div>
-                <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
-              </div>
-              <div className="mt-2 text-2xl font-semibold tracking-normal">
-                {formatNumber(card.value)}
-              </div>
-              <div className="mt-1 text-xs text-muted-foreground">{card.description}</div>
-              <div className="mt-3 text-xs font-medium text-primary">
-                {isActive ? "Filtering lookup table" : "Click to filter"}
+              <CheckCircle2 className="h-6 w-6 shrink-0 text-emerald-700" aria-hidden="true" />
+              <div>
+                <div className="text-xs font-semibold uppercase text-muted-foreground">
+                  NETA Complete With Report
+                </div>
+                <div className="mt-1 text-3xl font-semibold text-emerald-800">
+                  {formatNumber(metrics.netaComplete)}
+                </div>
+                <div className="mt-1 text-xs text-muted-foreground">
+                  Complete equipment with report evidence
+                </div>
               </div>
             </button>
-          );
-        })}
-      </div>
-    </section>
+
+            <button
+              aria-pressed={activeFilter === "recentNetaComplete"}
+              className={cn(
+                "flex min-h-32 items-center gap-4 px-5 py-5 text-left transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+                activeFilter === "recentNetaComplete" ? "bg-blue-50/70" : "bg-background",
+              )}
+              disabled={!netaHistory?.available && newNetaCompleteCount === 0}
+              onClick={() => onSelectFilter("recentNetaComplete")}
+              type="button"
+            >
+              <TrendingUp className="h-6 w-6 shrink-0 text-blue-700" aria-hidden="true" />
+              <div>
+                <div className="text-xs font-semibold uppercase text-muted-foreground">
+                  Added In 7 Days
+                </div>
+                <div className="mt-1 text-3xl font-semibold text-blue-800">
+                  +{formatNumber(newNetaCompleteCount)}
+                </div>
+                <div className="mt-1 text-xs text-muted-foreground">Since {baselineDate}</div>
+              </div>
+            </button>
+          </div>
+
+          <button
+            aria-pressed={activeFilter === "openCases"}
+            className={cn(
+              "flex min-h-32 items-center gap-4 px-5 py-5 text-left transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+              activeFilter === "openCases" ? "bg-red-50/70" : "bg-background",
+            )}
+            onClick={() => onSelectFilter("openCases")}
+            type="button"
+          >
+            <AlertTriangle className="h-6 w-6 shrink-0 text-red-700" aria-hidden="true" />
+            <div>
+              <div className="text-xs font-semibold uppercase text-muted-foreground">
+                Equipment With Open Cases
+              </div>
+              <div className="mt-1 text-3xl font-semibold text-red-800">
+                {formatNumber(metrics.equipmentWithOpenCases)}
+              </div>
+              <div className="mt-1 text-xs text-muted-foreground">
+                Highest-priority equipment workload
+              </div>
+            </div>
+          </button>
+        </div>
+
+        <div className="grid border-t lg:grid-cols-3">
+          {exceptions.map((item, index) => {
+            const Icon = item.icon;
+            const isActive = activeFilter === item.filter;
+            const hasException = item.value > 0;
+            return (
+              <button
+                aria-pressed={isActive}
+                className={cn(
+                  "flex min-h-24 items-center gap-3 px-5 py-4 text-left transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+                  index < exceptions.length - 1 ? "border-b lg:border-b-0 lg:border-r" : "",
+                  isActive ? "bg-blue-50/70" : "bg-background",
+                )}
+                key={item.filter}
+                onClick={() => onSelectFilter(item.filter)}
+                type="button"
+              >
+                <Icon
+                  className={cn(
+                    "h-5 w-5 shrink-0",
+                    hasException ? item.alertClass : "text-emerald-700",
+                  )}
+                  aria-hidden="true"
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs font-semibold uppercase text-muted-foreground">
+                    {item.label}
+                  </div>
+                  <div
+                    className={cn(
+                      "mt-1 text-xl font-semibold",
+                      hasException ? item.activeClass : "text-slate-700",
+                    )}
+                  >
+                    {formatNumber(item.value)}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {hasException ? item.description : "No current exception"}
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </CardContent>
+    </Card>
   );
 }

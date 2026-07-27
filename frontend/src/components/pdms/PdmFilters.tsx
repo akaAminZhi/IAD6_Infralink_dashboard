@@ -4,7 +4,15 @@ import type { PdmReadinessLevel } from "../../utils/pdmUtils";
 import { CollapsibleFilterCard } from "../common/CollapsibleFilterCard";
 import { Button } from "../ui/button";
 
-export type PdmQuickFilter = "" | "testingStarted" | "fullyReady" | "needsAttention";
+export type PdmQuickFilter =
+  | ""
+  | "testingStarted"
+  | "fullyReady"
+  | "needsAttention"
+  | "watch"
+  | "attention"
+  | "critical"
+  | "notStarted";
 
 export interface PdmFiltersState {
   search: string;
