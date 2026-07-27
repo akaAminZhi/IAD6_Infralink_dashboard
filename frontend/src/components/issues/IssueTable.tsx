@@ -6,7 +6,7 @@ import {
   type SortingState,
   useReactTable,
 } from "@tanstack/react-table";
-import { ArrowDown, ArrowUp, ChevronsUpDown, Download } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronsUpDown, Download, RotateCcw, X } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { cn } from "../../utils/cn";
@@ -28,7 +28,10 @@ import { IssueStatusBadge } from "./IssueStatusBadge";
 
 interface IssueTableProps {
   issues: EnrichedIssue[];
+  excludedCount: number;
   selectedIssueId: string | null;
+  onExcludeIssue: (issue: EnrichedIssue) => void;
+  onRestoreExcluded: () => void;
   onSelectIssue: (issue: EnrichedIssue) => void;
 }
 
@@ -91,7 +94,14 @@ const dueDateToneClass: Record<IssueDueState, string> = {
   Closed: "border-slate-200 bg-slate-50 text-slate-600",
 };
 
-export function IssueTable({ issues, selectedIssueId, onSelectIssue }: IssueTableProps) {
+export function IssueTable({
+  issues,
+  excludedCount,
+  selectedIssueId,
+  onExcludeIssue,
+  onRestoreExcluded,
+  onSelectIssue,
+}: IssueTableProps) {
   const [sorting, setSorting] = useState<SortingState>([
     { id: "dueDate", desc: true },
   ]);
@@ -111,6 +121,25 @@ export function IssueTable({ issues, selectedIssueId, onSelectIssue }: IssueTabl
 
   const columns = useMemo<ColumnDef<EnrichedIssue>[]>(
     () => [
+      {
+        id: "exclude",
+        header: "",
+        enableSorting: false,
+        cell: ({ row }) => (
+          <button
+            aria-label={`Exclude ${row.original.case_id ?? "issue"} from table and export`}
+            className="inline-flex h-7 w-7 items-center justify-center rounded text-red-600 opacity-0 transition-opacity hover:bg-red-50 hover:text-red-700 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-red-300 group-hover:opacity-100"
+            onClick={(event) => {
+              event.stopPropagation();
+              onExcludeIssue(row.original);
+            }}
+            title="Exclude from table and export"
+            type="button"
+          >
+            <X className="h-4 w-4" aria-hidden="true" />
+          </button>
+        ),
+      },
       {
         accessorKey: "case_id",
         header: "Case ID",
@@ -187,7 +216,7 @@ export function IssueTable({ issues, selectedIssueId, onSelectIssue }: IssueTabl
         cell: ({ row }) => <CorrectiveImagesBadge compact issue={row.original} />,
       },
     ],
-    [],
+    [onExcludeIssue],
   );
 
   const table = useReactTable({
@@ -209,6 +238,17 @@ export function IssueTable({ issues, selectedIssueId, onSelectIssue }: IssueTabl
           </CardDescription>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {excludedCount > 0 ? (
+            <Button
+              className="gap-2"
+              onClick={onRestoreExcluded}
+              type="button"
+              variant="ghost"
+            >
+              <RotateCcw className="h-4 w-4" aria-hidden="true" />
+              {`Restore ${formatNumber(excludedCount)}`}
+            </Button>
+          ) : null}
           <Button
             className="gap-2"
             disabled={issues.length === 0 || isExporting}
@@ -260,7 +300,7 @@ export function IssueTable({ issues, selectedIssueId, onSelectIssue }: IssueTabl
                   return (
                     <tr
                       className={cn(
-                        "cursor-pointer border-b align-top transition-colors last:border-0 hover:bg-muted/50",
+                        "group cursor-pointer border-b align-top transition-colors last:border-0 hover:bg-muted/50",
                         isSelected ? "bg-primary/5" : "",
                         isAttention ? "border-l-4 border-l-amber-300" : "",
                         !isOpenIssue(issue) ? "opacity-80" : "",
@@ -269,7 +309,13 @@ export function IssueTable({ issues, selectedIssueId, onSelectIssue }: IssueTabl
                       onClick={() => onSelectIssue(issue)}
                     >
                       {row.getVisibleCells().map((cell) => (
-                        <td className="px-3 py-3" key={cell.id}>
+                        <td
+                          className={cn(
+                            "px-3 py-3",
+                            cell.column.id === "exclude" && "w-9 px-1 text-center",
+                          )}
+                          key={cell.id}
+                        >
                           {flexRender(cell.column.columnDef.cell, cell.getContext())}
                         </td>
                       ))}

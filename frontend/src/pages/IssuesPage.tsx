@@ -204,6 +204,9 @@ export function IssuesPage({ data }: IssuesPageProps) {
     getFiltersFromSearchParams(searchParams),
   );
   const [selectedIssue, setSelectedIssue] = useState<EnrichedIssue | null>(null);
+  const [excludedIssueIds, setExcludedIssueIds] = useState<Set<string>>(
+    () => new Set(),
+  );
 
   const enrichedIssues = useMemo(
     () => enrichIssuesWithPdmContext(data.cases, data.pdms, data.equipment),
@@ -249,6 +252,10 @@ export function IssuesPage({ data }: IssuesPageProps) {
         ),
       ),
     [enrichedIssues, filters, newCaseIdsSinceBaseline, resolvedCaseIdsSinceBaseline],
+  );
+  const visibleIssues = useMemo(
+    () => filteredIssues.filter((issue) => !excludedIssueIds.has(issue.row_id)),
+    [excludedIssueIds, filteredIssues],
   );
   const activeYesterdayFilter: YesterdayIssueFilter | null = filters.createdYesterdayOnly
     ? filters.openOnly
@@ -313,6 +320,15 @@ export function IssuesPage({ data }: IssuesPageProps) {
     );
   }
 
+  function handleExcludeIssue(issue: EnrichedIssue) {
+    setExcludedIssueIds((current) => {
+      const next = new Set(current);
+      next.add(issue.row_id);
+      return next;
+    });
+    setSelectedIssue((current) => (current?.row_id === issue.row_id ? null : current));
+  }
+
   if (enrichedIssues.length === 0) {
     return (
       <EmptyState
@@ -356,7 +372,10 @@ export function IssuesPage({ data }: IssuesPageProps) {
       />
 
       <IssueTable
-        issues={filteredIssues}
+        excludedCount={excludedIssueIds.size}
+        issues={visibleIssues}
+        onExcludeIssue={handleExcludeIssue}
+        onRestoreExcluded={() => setExcludedIssueIds(new Set())}
         onSelectIssue={setSelectedIssue}
         selectedIssueId={selectedIssue?.row_id ?? null}
       />

@@ -214,18 +214,6 @@ export function EquipmentDetailDrawer({
             <Card>
               <CardContent className="space-y-4 p-4">
                 <div>
-                  <h3 className="text-lg font-semibold tracking-normal">EPS Test Execution</h3>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Field test items matched to this equipment from the EPS tracker.
-                  </p>
-                </div>
-                <EpsTestItemsPanel items={equipment.eps_test_items} />
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardContent className="space-y-4 p-4">
-                <div>
                   <h3 className="text-lg font-semibold tracking-normal">Asset Information</h3>
                 </div>
                 <div className="grid gap-3 md:grid-cols-3">
@@ -233,6 +221,18 @@ export function EquipmentDetailDrawer({
                   <Field label="Model" value={equipment.model} />
                   <Field label="Serial Number" value={equipment.serial_number} />
                 </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="space-y-4 p-4">
+                <div>
+                  <h3 className="text-lg font-semibold tracking-normal">EPS Test Execution</h3>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Field test items matched to this equipment from the EPS tracker.
+                  </p>
+                </div>
+                <EpsTestItemsPanel items={equipment.eps_test_items} />
               </CardContent>
             </Card>
 

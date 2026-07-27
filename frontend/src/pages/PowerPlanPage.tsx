@@ -863,6 +863,32 @@ function EquipmentDetail({
         </section>
 
         <section>
+          <h3 className="text-xs font-semibold uppercase text-muted-foreground">
+            Asset Information
+          </h3>
+          <dl className="mt-2 divide-y rounded-md border bg-background">
+            <div className="grid grid-cols-[110px_minmax(0,1fr)] gap-3 px-3 py-2.5 text-xs">
+              <dt className="text-muted-foreground">Manufacturer</dt>
+              <dd className="break-words font-medium">
+                {String(row.equipment?.manufacturer ?? "--")}
+              </dd>
+            </div>
+            <div className="grid grid-cols-[110px_minmax(0,1fr)] gap-3 px-3 py-2.5 text-xs">
+              <dt className="text-muted-foreground">Model</dt>
+              <dd className="break-words font-medium">
+                {String(row.equipment?.model ?? "--")}
+              </dd>
+            </div>
+            <div className="grid grid-cols-[110px_minmax(0,1fr)] gap-3 px-3 py-2.5 text-xs">
+              <dt className="text-muted-foreground">Serial Number</dt>
+              <dd className="break-words font-medium">
+                {String(row.equipment?.serial_number ?? "--")}
+              </dd>
+            </div>
+          </dl>
+        </section>
+
+        <section>
           <div className="flex items-center justify-between gap-3">
             <h3 className="text-xs font-semibold uppercase text-muted-foreground">Issues</h3>
             <span className="text-xs text-muted-foreground">{row.issues.length} total</span>
