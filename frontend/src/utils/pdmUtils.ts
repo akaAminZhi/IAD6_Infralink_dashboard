@@ -1,4 +1,9 @@
-import type { CaseIssue, PdmEquipmentRecord, PdmRecord } from "../types/data";
+import type {
+  CaseIssue,
+  EpsPdmExecutionRecord,
+  PdmEquipmentRecord,
+  PdmRecord,
+} from "../types/data";
 
 export type PdmReadinessLevel = "Not Started" | "Good" | "Watch" | "Attention" | "Critical";
 
@@ -17,6 +22,7 @@ export interface PdmTableRow {
   pdm: PdmRecord;
   pdmName: string;
   moduleType: string;
+  testingStarted: boolean;
   equipmentCount: number;
   netaCompleteCount: number;
   netaIncompleteCount: number;
@@ -82,6 +88,25 @@ export function hasNetaTestingSignal(equipment: PdmEquipmentRecord): boolean {
     !isBlank(equipment.neta_completed_at) ||
     !isBlank(equipment.neta_test_report)
   );
+}
+
+export function hasEpsTestingStarted(
+  epsExecution: EpsPdmExecutionRecord | null | undefined,
+): boolean {
+  if (!epsExecution) {
+    return false;
+  }
+
+  if (
+    (asNumber(epsExecution.started_module_equipment_count) ?? 0) > 0 ||
+    (asNumber(epsExecution.completed_test_item_count) ?? 0) > 0 ||
+    (asNumber(epsExecution.failed_test_item_count) ?? 0) > 0
+  ) {
+    return true;
+  }
+
+  const status = String(epsExecution.eps_execution_status ?? "").trim().toLowerCase();
+  return status !== "" && status !== "not started" && status !== "no tracker records";
 }
 
 export function getOpenCaseCountForEquipment(equipment: PdmEquipmentRecord): number {
@@ -150,7 +175,14 @@ export function getPdmEquipmentCount(pdm: PdmRecord): number {
   return asNumber(pdm.equipment_count) ?? (pdm.equipment ?? []).length;
 }
 
-export function hasNetaTestingStarted(pdm: PdmRecord): boolean {
+export function hasPdmTestingStarted(
+  pdm: PdmRecord,
+  epsExecution?: EpsPdmExecutionRecord | null,
+): boolean {
+  if (hasEpsTestingStarted(epsExecution)) {
+    return true;
+  }
+
   const equipmentCount = getPdmEquipmentCount(pdm);
   if (equipmentCount === 0) {
     return false;
@@ -163,8 +195,11 @@ export function hasNetaTestingStarted(pdm: PdmRecord): boolean {
   return getNetaIncompleteCount(pdm) !== equipmentCount;
 }
 
-export function getPdmReadinessScore(pdm: PdmRecord): number {
-  if (!hasNetaTestingStarted(pdm)) {
+export function getPdmReadinessScore(
+  pdm: PdmRecord,
+  epsExecution?: EpsPdmExecutionRecord | null,
+): number {
+  if (!hasPdmTestingStarted(pdm, epsExecution)) {
     return 0;
   }
 
@@ -176,12 +211,15 @@ export function getPdmReadinessScore(pdm: PdmRecord): number {
   );
 }
 
-export function getPdmReadinessLevel(pdm: PdmRecord): PdmReadinessLevel {
-  if (!hasNetaTestingStarted(pdm)) {
+export function getPdmReadinessLevel(
+  pdm: PdmRecord,
+  epsExecution?: EpsPdmExecutionRecord | null,
+): PdmReadinessLevel {
+  if (!hasPdmTestingStarted(pdm, epsExecution)) {
     return "Not Started";
   }
 
-  const score = getPdmReadinessScore(pdm);
+  const score = getPdmReadinessScore(pdm, epsExecution);
 
   if (score === 0) {
     return "Good";
@@ -268,20 +306,38 @@ export function getEquipmentDisplayId(equipment: PdmEquipmentRecord): string {
   return "Unknown equipment";
 }
 
-export function getPdmTableRows(pdms: PdmRecord[]): PdmTableRow[] {
-  return pdms.map((pdm) => ({
-    pdm,
-    pdmName: isBlank(pdm.pdm_name) ? "Unknown PDM" : String(pdm.pdm_name).trim(),
-    moduleType: isBlank(pdm.module_type) ? "Unknown" : String(pdm.module_type).trim(),
-    equipmentCount: getPdmEquipmentCount(pdm),
-    netaCompleteCount: getNetaCompleteCount(pdm),
-    netaIncompleteCount: getNetaIncompleteCount(pdm),
-    netaMissingReportCount: getMissingNetaReportCount(pdm),
-    openCaseCount: getPdmOpenCaseCount(pdm),
-    casesMissingIssueImageCount: getCasesMissingIssueImageCount(pdm),
-    readinessScore: getPdmReadinessScore(pdm),
-    readinessLevel: getPdmReadinessLevel(pdm),
-  }));
+function normalizePdmKey(value: unknown): string {
+  return String(value ?? "").trim().toUpperCase().replace(/\s+/g, " ");
+}
+
+export function getPdmTableRows(
+  pdms: PdmRecord[],
+  epsPdmExecution: EpsPdmExecutionRecord[] = [],
+): PdmTableRow[] {
+  const epsByPdm = new Map(
+    epsPdmExecution.map((record) => [normalizePdmKey(record.pdm_name), record]),
+  );
+
+  return pdms.map((pdm) => {
+    const pdmName = isBlank(pdm.pdm_name) ? "Unknown PDM" : String(pdm.pdm_name).trim();
+    const epsExecution = epsByPdm.get(normalizePdmKey(pdmName));
+    const testingStarted = hasPdmTestingStarted(pdm, epsExecution);
+
+    return {
+      pdm,
+      pdmName,
+      moduleType: isBlank(pdm.module_type) ? "Unknown" : String(pdm.module_type).trim(),
+      testingStarted,
+      equipmentCount: getPdmEquipmentCount(pdm),
+      netaCompleteCount: getNetaCompleteCount(pdm),
+      netaIncompleteCount: getNetaIncompleteCount(pdm),
+      netaMissingReportCount: getMissingNetaReportCount(pdm),
+      openCaseCount: getPdmOpenCaseCount(pdm),
+      casesMissingIssueImageCount: getCasesMissingIssueImageCount(pdm),
+      readinessScore: getPdmReadinessScore(pdm, epsExecution),
+      readinessLevel: getPdmReadinessLevel(pdm, epsExecution),
+    };
+  });
 }
 
 export function getModuleTypeOptions(pdms: PdmRecord[]): string[] {

@@ -5,6 +5,7 @@ import { cn } from "../../utils/cn";
 import { formatNumber } from "../../utils/formatters";
 import type {
   CaseIssue,
+  EpsPdmExecutionRecord,
   EpsTestItemRecord,
   PdmEquipmentRecord,
   PdmRecord,
@@ -36,6 +37,7 @@ import { PdmReadinessBadge } from "./PdmReadinessBadge";
 
 interface PdmDetailDrawerProps {
   pdm: PdmRecord | null;
+  epsPdmExecution: EpsPdmExecutionRecord[];
   epsTestItems: EpsTestItemRecord[];
   onClose: () => void;
 }
@@ -47,6 +49,10 @@ function valueOrDash(value: string | number | null | undefined): string {
 function firstText(...values: Array<unknown>): string | null {
   const value = values.find((candidate) => !isIssueBlank(candidate));
   return value === undefined ? null : String(value).trim();
+}
+
+function normalizePdmKey(value: unknown): string {
+  return String(value ?? "").trim().toUpperCase().replace(/\s+/g, " ");
 }
 
 function SummaryMetric({ label, value, className }: { label: string; value: string; className?: string }) {
@@ -131,7 +137,12 @@ function getPdmIssues(pdm: PdmRecord): EnrichedIssue[] {
   });
 }
 
-export function PdmDetailDrawer({ pdm, epsTestItems, onClose }: PdmDetailDrawerProps) {
+export function PdmDetailDrawer({
+  pdm,
+  epsPdmExecution,
+  epsTestItems,
+  onClose,
+}: PdmDetailDrawerProps) {
   const [selectedIssue, setSelectedIssue] = useState<EnrichedIssue | null>(null);
   const pdmIssues = useMemo(() => (pdm ? getPdmIssues(pdm) : []), [pdm]);
 
@@ -144,8 +155,11 @@ export function PdmDetailDrawer({ pdm, epsTestItems, onClose }: PdmDetailDrawerP
   }
 
   const equipment = pdm.equipment ?? [];
-  const readinessLevel = getPdmReadinessLevel(pdm);
-  const readinessScore = getPdmReadinessScore(pdm);
+  const epsExecution = epsPdmExecution.find(
+    (record) => normalizePdmKey(record.pdm_name) === normalizePdmKey(pdm.pdm_name),
+  );
+  const readinessLevel = getPdmReadinessLevel(pdm, epsExecution);
+  const readinessScore = getPdmReadinessScore(pdm, epsExecution);
   const missingIssueImages = getCasesMissingIssueImageCount(pdm);
   const missingReports = getMissingNetaReportCount(pdm);
   const openCases = getPdmOpenCaseCount(pdm);

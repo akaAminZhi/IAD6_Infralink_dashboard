@@ -16,7 +16,6 @@ import { PdmTable } from "../components/pdms/PdmTable";
 import type { DashboardData, PdmRecord } from "../types/data";
 import {
   getEquipmentDisplayId,
-  hasNetaTestingStarted,
   getPdmSummaryMetrics,
   getPdmTableRows,
   type PdmTableRow,
@@ -68,7 +67,7 @@ function filterRows(rows: PdmTableRow[], filters: PdmFiltersState): PdmTableRow[
   const search = filters.search.trim();
 
   return rows.filter((row) => {
-    if (filters.quickFilter === "testingStarted" && !hasNetaTestingStarted(row.pdm)) {
+    if (filters.quickFilter === "testingStarted" && !row.testingStarted) {
       return false;
     }
     if (filters.quickFilter === "fullyReady" && row.readinessLevel !== "Good") {
@@ -127,8 +126,8 @@ function rowMatchesSearch(row: PdmTableRow, search: string): boolean {
 
 function sortRowsForDefaultReadinessView(rows: PdmTableRow[]): PdmTableRow[] {
   return [...rows].sort((a, b) => {
-    const aPartialNeta = hasNetaTestingStarted(a.pdm) && a.netaIncompleteCount > 0 ? 1 : 0;
-    const bPartialNeta = hasNetaTestingStarted(b.pdm) && b.netaIncompleteCount > 0 ? 1 : 0;
+    const aPartialNeta = a.testingStarted && a.netaIncompleteCount > 0 ? 1 : 0;
+    const bPartialNeta = b.testingStarted && b.netaIncompleteCount > 0 ? 1 : 0;
 
     return (
       bPartialNeta - aPartialNeta ||
@@ -182,7 +181,10 @@ export function PdmPage({ data }: PdmPageProps) {
   const [selectedPdm, setSelectedPdm] = useState<PdmRecord | null>(null);
 
   const summaryMetrics = useMemo(() => getPdmSummaryMetrics(data.pdms), [data.pdms]);
-  const tableRows = useMemo(() => getPdmTableRows(data.pdms), [data.pdms]);
+  const tableRows = useMemo(
+    () => getPdmTableRows(data.pdms, data.epsPdmExecution),
+    [data.epsPdmExecution, data.pdms],
+  );
   const filteredRows = useMemo(
     () => sortRowsForDefaultReadinessView(filterRows(tableRows, filters)),
     [filters, tableRows],
@@ -288,6 +290,7 @@ export function PdmPage({ data }: PdmPageProps) {
       />
 
       <PdmDetailDrawer
+        epsPdmExecution={data.epsPdmExecution}
         epsTestItems={data.epsTestItems}
         pdm={selectedPdm}
         onClose={closePdmDetail}

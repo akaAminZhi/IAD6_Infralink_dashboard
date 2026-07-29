@@ -14,7 +14,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui
 import { cn } from "../../utils/cn";
 import { formatNumber } from "../../utils/formatters";
 import {
-  hasNetaTestingStarted,
   type PdmSummaryMetrics,
   type PdmTableRow,
 } from "../../utils/pdmUtils";
@@ -44,7 +43,7 @@ export function PdmSummaryCards({
   onSelectFilter,
   rows,
 }: PdmSummaryCardsProps) {
-  const testingStarted = rows.filter((row) => hasNetaTestingStarted(row.pdm)).length;
+  const testingStarted = rows.filter((row) => row.testingStarted).length;
   const readinessCounts = {
     ready: rows.filter((row) => row.readinessLevel === "Good").length,
     watch: rows.filter((row) => row.readinessLevel === "Watch").length,

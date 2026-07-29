@@ -27,7 +27,6 @@ import type { CaseIssue, DashboardData, PdmRecord } from "../types/data";
 import { formatDateTime } from "../utils/formatters";
 import {
   getPdmTableRows,
-  hasNetaTestingStarted,
   isOpenCase,
   type PdmReadinessLevel,
   type PdmTableRow,
@@ -174,7 +173,7 @@ function getPdmActionRows(data: DashboardData): PdmActionRow[] {
     "Not Started": 0,
   };
 
-  return getPdmTableRows(data.pdms)
+  return getPdmTableRows(data.pdms, data.epsPdmExecution)
     .map((row) => {
       const pdmCaseIds = getCaseIdsForPdm(row.pdm);
       const newIssuesSevenDay = Array.from(pdmCaseIds).filter((caseId) =>
@@ -266,9 +265,9 @@ function ReadinessOverview({
   data: DashboardData;
   onNavigate: (path: string) => void;
 }) {
-  const rows = getPdmTableRows(data.pdms);
+  const rows = getPdmTableRows(data.pdms, data.epsPdmExecution);
   const totalPdms = rows.length;
-  const testingStarted = data.pdms.filter(hasNetaTestingStarted).length;
+  const testingStarted = rows.filter((row) => row.testingStarted).length;
   const ready = rows.filter((row) => row.readinessLevel === "Good").length;
   const watch = rows.filter((row) => row.readinessLevel === "Watch").length;
   const attention = rows.filter((row) => row.readinessLevel === "Attention").length;
@@ -656,7 +655,7 @@ function ManagementExceptions({
   data: DashboardData;
   onNavigate: (path: string) => void;
 }) {
-  const pdmRows = getPdmTableRows(data.pdms);
+  const pdmRows = getPdmTableRows(data.pdms, data.epsPdmExecution);
   const cases = getOverviewCases(data);
   const missingNetaReports = pdmRows.reduce(
     (total, row) => total + row.netaMissingReportCount,
@@ -879,6 +878,7 @@ export function OverviewPage({ data }: OverviewPageProps) {
       <ManagementExceptions data={data} onNavigate={navigate} />
       <EpsExecutionSummary data={data} onOpen={() => navigate("/eps-test-execution")} />
       <PdmDetailDrawer
+        epsPdmExecution={data.epsPdmExecution}
         epsTestItems={data.epsTestItems}
         pdm={selectedPdm}
         onClose={() => setSelectedPdm(null)}
