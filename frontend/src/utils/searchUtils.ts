@@ -2,6 +2,50 @@ function normalizeSearchText(value: unknown): string {
   return String(value ?? "").trim().toLowerCase();
 }
 
+function getSearchGroupQueries(query: string): string[] {
+  return normalizeSearchText(query)
+    .split(new RegExp("[,\\uFF0C]+"))
+    .map((group) => group.trim())
+    .filter(Boolean);
+}
+
+function matchesWildcardExpression(value: string, expression: string): boolean {
+  const segments = expression
+    .split(/\*+/)
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+
+  if (segments.length === 0) {
+    return false;
+  }
+
+  let cursor = 0;
+  return segments.every((segment) => {
+    const matchIndex = value.indexOf(segment, cursor);
+    if (matchIndex < 0) {
+      return false;
+    }
+    cursor = matchIndex + segment.length;
+    return true;
+  });
+}
+
+function matchesSearchGroup(value: string, groupQuery: string): boolean {
+  const expressions = groupQuery
+    .split(/[\s;|]+/)
+    .map((expression) => expression.trim())
+    .filter(Boolean);
+
+  return (
+    expressions.length > 0 &&
+    expressions.every((expression) =>
+      expression.includes("*")
+        ? matchesWildcardExpression(value, expression)
+        : value.includes(expression),
+    )
+  );
+}
+
 export function getSearchTerms(query: string): string[] {
   return getSearchGroups(query).flat();
 }
@@ -24,14 +68,14 @@ export function matchesSearchQuery(values: unknown[], query: string): boolean {
     return true;
   }
 
-  const groups = getSearchGroups(normalizedQuery);
+  const groups = getSearchGroupQueries(normalizedQuery);
   if (groups.length === 0) {
     return false;
   }
 
   const normalizedValues = values.map(normalizeSearchText).filter(Boolean);
-  return groups.some((terms) =>
-    normalizedValues.some((value) => terms.every((term) => value.includes(term))),
+  return groups.some((groupQuery) =>
+    normalizedValues.some((value) => matchesSearchGroup(value, groupQuery)),
   );
 }
 

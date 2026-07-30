@@ -5,6 +5,7 @@ import {
   Cpu,
   LayoutDashboard,
   Map,
+  Presentation,
   ShieldCheck,
   Workflow,
 } from "lucide-react";
@@ -14,6 +15,7 @@ import { cn } from "../../utils/cn";
 
 const navigationItems = [
   { label: "Overview", path: "/overview", icon: LayoutDashboard },
+  { label: "Monthly KPR", path: "/kpr", icon: Presentation },
   { label: "PDMs", path: "/pdms", icon: Boxes },
   { label: "Equipment", path: "/equipment", icon: Cpu },
   { label: "Issues", path: "/issues", icon: CircleAlert },

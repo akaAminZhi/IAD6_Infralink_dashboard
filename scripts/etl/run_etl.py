@@ -20,6 +20,7 @@ try:
     from . import build_eps_test_execution
     from . import build_history_comparison
     from . import build_issue_attachment_manifest
+    from . import build_kpr_summary
     from . import build_neta_report_manifest
     from . import build_pdm_dataset
     from . import build_power_plan
@@ -43,6 +44,7 @@ except ImportError:
     import build_eps_test_execution
     import build_history_comparison
     import build_issue_attachment_manifest
+    import build_kpr_summary
     import build_neta_report_manifest
     import build_pdm_dataset
     import build_power_plan
@@ -86,6 +88,7 @@ OUTPUT_FILES = {
     "neta_report_manifest": DATA_DIR / "neta_report_manifest.json",
     "cxalloy_report_status": DATA_DIR / "cxalloy_report_status.json",
     "power_plan": DATA_DIR / "power_plan.json",
+    "kpr_summary": DATA_DIR / "kpr_summary.json",
     "etl_run_metadata": ETL_METADATA_OUTPUT_PATH,
 }
 
@@ -124,6 +127,7 @@ def build_pipeline_steps(input_files: dict[str, str]) -> list[tuple[str, Callabl
         ),
         ("build_history_comparison.py", lambda: build_history_comparison.run_build(input_files)),
         ("build_eps_test_execution.py", lambda: build_eps_test_execution.run_build(input_files)),
+        ("build_kpr_summary.py", lambda: build_kpr_summary.run_build(input_files)),
         ("build_neta_report_manifest.py", build_neta_report_manifest.main),
         ("build_cxalloy_report_status.py", build_cxalloy_report_status.main),
         ("build_issue_attachment_manifest.py", build_issue_attachment_manifest.main),

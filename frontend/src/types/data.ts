@@ -484,6 +484,150 @@ export interface EpsTestItemRecord {
   [key: string]: unknown;
 }
 
+export interface KprTrendPoint {
+  date: string;
+  neta_complete?: number | null;
+  eps_passed?: number | null;
+  issue_backlog?: number | null;
+}
+
+export interface KprPipelineStage {
+  key: string;
+  label: string;
+  color: string;
+  count: number;
+}
+
+export interface KprLifecycleStage {
+  key: string;
+  label: string;
+  color: string;
+  order: number;
+  current_count: number;
+  baseline_count: number;
+  month_change: number;
+}
+
+export interface KprLifecycleTransition {
+  from_key: string;
+  from_label: string;
+  to_key: string;
+  to_label: string;
+  count: number;
+  direction: "advanced" | "regressed" | "unmapped";
+}
+
+export interface KprEpsFailureType {
+  tracker_type: string;
+  current_failed: number;
+  fixed_after_failure: number;
+  failure_history_total: number;
+}
+
+export interface KprSummary {
+  schema_version: number;
+  generated_at: string;
+  period: {
+    month: string;
+    label: string;
+    start_date: string;
+    end_date: string;
+    target_end_date?: string | null;
+    latest_data_date?: string | null;
+    selection_mode?: "current_month_to_date" | "previous_complete_month";
+    system_baseline_date?: string | null;
+    case_baseline_date?: string | null;
+    eps_baseline_date?: string | null;
+    is_month_to_date: boolean;
+  };
+  current_snapshot: {
+    as_of_date: string;
+    case_as_of_date?: string | null;
+    eps_as_of_date?: string | null;
+    is_later_than_report: boolean;
+    neta_complete_count: number;
+    eps_passed_count: number;
+    eps_current_failed: number;
+    open_issue_count: number;
+  };
+  executive_summary: {
+    total_pdms: number;
+    testing_started_pdms: number;
+    fully_ready_pdms: number;
+    neta_completed_month: number;
+    neta_no_longer_complete_month?: number;
+    neta_net_change_month?: number;
+    neta_complete_current: number;
+    neta_complete_baseline: number;
+    eps_passed_month: number;
+    eps_passed_current: number;
+    eps_passed_baseline: number;
+    eps_failed_month: number;
+    eps_fixed_month: number;
+    new_issues_month: number;
+    resolved_issues_month: number;
+    current_open_issues: number;
+  };
+  monthly_trends: KprTrendPoint[];
+  monthly_progress: {
+    neta: {
+      current_complete: number;
+      baseline_complete: number;
+      completed_month: number;
+      no_longer_complete_month?: number;
+      net_change_month?: number;
+      no_longer_complete_equipment_ids?: string[];
+      total_equipment: number;
+      completion_rate: number;
+    };
+    eps: {
+      daily_passed_current: number;
+      daily_passed_baseline: number;
+      daily_passed_month: number;
+      tracker_total_test_items: number;
+      tracker_passed_or_fixed: number;
+      tracker_current_failed: number;
+      tracker_fixed_after_failure: number;
+      tracker_not_tested: number;
+      tracker_as_of_date?: string | null;
+    };
+    issues: {
+      month_start_open: number;
+      new_issues: number;
+      resolved_issues: number;
+      current_open: number;
+    };
+  };
+  eps_failure_types: KprEpsFailureType[];
+  pdm_pipeline: {
+    total_pdms: number;
+    stages: KprPipelineStage[];
+  };
+  equipment_lifecycle: {
+    config_version: number;
+    total_equipment: number;
+    baseline_equipment: number;
+    stages: KprLifecycleStage[];
+    advanced_count: number;
+    regressed_count: number;
+    unchanged_count: number;
+    new_equipment_count: number;
+    transitions: KprLifecycleTransition[];
+    unmapped_statuses: Array<{ status: string; count: number }>;
+  };
+  issue_performance: {
+    month_start_open: number;
+    new_issues: number;
+    resolved_issues: number;
+    current_open: number;
+    overdue_open: number;
+    urgent_high_open: number;
+    open_over_30_days: number;
+    average_open_age_days?: number | null;
+    balance_adjustment: number;
+  };
+}
+
 export interface DashboardData {
   pdms: PdmRecord[];
   equipment: Equipment[];
@@ -504,4 +648,5 @@ export interface DashboardData {
   netaReportManifest: NetaReportManifest | null;
   cxalloyReportStatus: CxalloyReportStatusManifest | null;
   powerPlanManifest: PowerPlanManifest | null;
+  kprSummary: KprSummary | null;
 }

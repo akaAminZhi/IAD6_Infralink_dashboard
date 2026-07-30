@@ -12,7 +12,14 @@ export interface ChartDatum {
   pdm_name?: string | null;
 }
 
-const CLOSED_STATUSES = new Set(["closed", "complete", "cancelled", "canceled", "void"]);
+const CLOSED_STATUSES = new Set([
+  "closed",
+  "complete",
+  "cancelled",
+  "canceled",
+  "void",
+  "resolved",
+]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);

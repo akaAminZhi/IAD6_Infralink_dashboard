@@ -60,8 +60,73 @@ interface TrendResult {
   motionClass: string;
 }
 
+interface EquipmentStatusDistributionItem {
+  barClass: string;
+  count: number;
+  dotClass: string;
+  label: string;
+}
+
+const equipmentStatusStyles: Record<string, Pick<EquipmentStatusDistributionItem, "barClass" | "dotClass">> = {
+  IFC: { barClass: "bg-slate-500", dotClass: "bg-slate-500" },
+  "Ship to Site": { barClass: "bg-blue-500", dotClass: "bg-blue-500" },
+  "Pre-Installation Complete": {
+    barClass: "bg-emerald-500",
+    dotClass: "bg-emerald-500",
+  },
+  "Installation Complete": { barClass: "bg-teal-500", dotClass: "bg-teal-500" },
+  "Field QC Complete": { barClass: "bg-cyan-600", dotClass: "bg-cyan-600" },
+  "Green Tag": { barClass: "bg-green-600", dotClass: "bg-green-600" },
+  "Cond Green Tag": { barClass: "bg-lime-600", dotClass: "bg-lime-600" },
+  "Cond Yellow Tag": { barClass: "bg-amber-500", dotClass: "bg-amber-500" },
+  "Cond Red Tag": { barClass: "bg-red-500", dotClass: "bg-red-500" },
+  "Red Tag": { barClass: "bg-red-700", dotClass: "bg-red-700" },
+  Unknown: { barClass: "bg-slate-300", dotClass: "bg-slate-300" },
+};
+
+const fallbackEquipmentStatusStyles = [
+  { barClass: "bg-indigo-500", dotClass: "bg-indigo-500" },
+  { barClass: "bg-sky-500", dotClass: "bg-sky-500" },
+  { barClass: "bg-orange-500", dotClass: "bg-orange-500" },
+];
+
 function normalizeText(value: unknown): string {
   return String(value ?? "").trim().toUpperCase().replace(/\s+/g, " ");
+}
+
+function getEquipmentStatusDistribution(pdms: PdmRecord[]): EquipmentStatusDistributionItem[] {
+  const statusByEquipment = new Map<string, string>();
+
+  pdms.forEach((pdm) => {
+    (pdm.equipment ?? []).forEach((equipment) => {
+      const equipmentKey = normalizeText(
+        equipment.equipment_id ?? equipment.source_equipment_label,
+      );
+      if (!equipmentKey) {
+        return;
+      }
+
+      const status = String(equipment.status ?? "").trim() || "Unknown";
+      const currentStatus = statusByEquipment.get(equipmentKey);
+      if (!currentStatus || currentStatus === "Unknown") {
+        statusByEquipment.set(equipmentKey, status);
+      }
+    });
+  });
+
+  const counts = new Map<string, number>();
+  statusByEquipment.forEach((status) => {
+    counts.set(status, (counts.get(status) ?? 0) + 1);
+  });
+
+  return Array.from(counts.entries())
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .map(([label, count], index) => ({
+      label,
+      count,
+      ...(equipmentStatusStyles[label] ??
+        fallbackEquipmentStatusStyles[index % fallbackEquipmentStatusStyles.length]),
+    }));
 }
 
 function normalizeCaseId(value: unknown): string {
@@ -276,6 +341,11 @@ function ReadinessOverview({
   const needingAttention = watch + attention + critical;
   const waitingNeta = data.epsTestSummary?.waiting_infralink_neta_count ?? 0;
   const openIssues = countUniqueCases(getOverviewCases(data), isOpenCase);
+  const equipmentStatusDistribution = getEquipmentStatusDistribution(data.pdms);
+  const totalPdmEquipment = equipmentStatusDistribution.reduce(
+    (total, item) => total + item.count,
+    0,
+  );
   const generatedAt =
     data.etlRunMetadata?.generated_at ??
     data.summary?.generated_at ??
@@ -399,6 +469,60 @@ function ReadinessOverview({
                 <span className="text-muted-foreground">{item.label}</span>
                 <span className="font-semibold text-slate-900">{formatNumber(item.count)}</span>
               </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="border-t bg-slate-50/40 px-5 py-4">
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <div>
+              <span className="text-xs font-semibold uppercase text-muted-foreground">
+                Equipment status distribution
+              </span>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Unique equipment linked to PDMs
+              </p>
+            </div>
+            <span className="text-xs text-muted-foreground">
+              {formatNumber(totalPdmEquipment)} equipment
+            </span>
+          </div>
+          <div className="flex h-3 w-full overflow-hidden rounded-full bg-slate-100">
+            {equipmentStatusDistribution.map((item) =>
+              item.count > 0 ? (
+                <button
+                  aria-label={`Filter equipment status ${item.label}: ${formatNumber(item.count)}`}
+                  className={`${item.barClass} transition-[filter] hover:brightness-110 focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white`}
+                  key={item.label}
+                  onClick={() =>
+                    onNavigate(`/equipment?status=${encodeURIComponent(item.label)}`)
+                  }
+                  style={{
+                    width: `${(item.count / Math.max(totalPdmEquipment, 1)) * 100}%`,
+                  }}
+                  title={`${item.label}: ${formatNumber(item.count)}`}
+                  type="button"
+                />
+              ) : null,
+            )}
+          </div>
+          <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2">
+            {equipmentStatusDistribution.map((item) => (
+              <button
+                className="flex items-center gap-2 text-xs transition-colors hover:text-slate-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                key={item.label}
+                onClick={() =>
+                  onNavigate(`/equipment?status=${encodeURIComponent(item.label)}`)
+                }
+                type="button"
+              >
+                <span className={`h-2 w-2 rounded-full ${item.dotClass}`} aria-hidden="true" />
+                <span className="text-muted-foreground">{item.label}</span>
+                <span className="font-semibold text-slate-900">{formatNumber(item.count)}</span>
+                <span className="text-muted-foreground">
+                  {formatPercent(item.count / Math.max(totalPdmEquipment, 1))}
+                </span>
+              </button>
             ))}
           </div>
         </div>
@@ -878,6 +1002,7 @@ export function OverviewPage({ data }: OverviewPageProps) {
       <ManagementExceptions data={data} onNavigate={navigate} />
       <EpsExecutionSummary data={data} onOpen={() => navigate("/eps-test-execution")} />
       <PdmDetailDrawer
+        epsModuleExecution={data.epsModuleExecution}
         epsPdmExecution={data.epsPdmExecution}
         epsTestItems={data.epsTestItems}
         pdm={selectedPdm}

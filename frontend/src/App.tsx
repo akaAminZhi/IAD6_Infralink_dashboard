@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 
 import { ErrorState } from "./components/common/ErrorState";
@@ -15,6 +15,10 @@ import { IssuesPage } from "./pages/IssuesPage";
 import { OverviewPage } from "./pages/OverviewPage";
 import { PdmPage } from "./pages/PdmPage";
 import { PowerPlanPage } from "./pages/PowerPlanPage";
+
+const KprPage = lazy(() =>
+  import("./pages/KprPage").then((module) => ({ default: module.KprPage })),
+);
 
 function App() {
   const dashboardData = useDashboardData();
@@ -63,6 +67,14 @@ function App() {
             <Routes>
               <Route element={<Navigate replace to="/overview" />} path="/" />
               <Route element={<OverviewPage data={dashboardData} />} path="/overview" />
+              <Route
+                element={
+                  <Suspense fallback={<LoadingState />}>
+                    <KprPage data={dashboardData} />
+                  </Suspense>
+                }
+                path="/kpr"
+              />
               <Route element={<PdmPage data={dashboardData} />} path="/pdms" />
               <Route element={<EquipmentPage data={dashboardData} />} path="/equipment" />
               <Route element={<IssuesPage data={dashboardData} />} path="/issues" />

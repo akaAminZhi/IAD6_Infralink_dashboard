@@ -290,6 +290,7 @@ export function PdmPage({ data }: PdmPageProps) {
       />
 
       <PdmDetailDrawer
+        epsModuleExecution={data.epsModuleExecution}
         epsPdmExecution={data.epsPdmExecution}
         epsTestItems={data.epsTestItems}
         pdm={selectedPdm}

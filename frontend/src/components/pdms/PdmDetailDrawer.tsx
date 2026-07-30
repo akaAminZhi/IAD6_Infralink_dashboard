@@ -1,10 +1,10 @@
-import { X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { Activity, ShieldCheck, X } from "lucide-react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 
-import { cn } from "../../utils/cn";
 import { formatNumber } from "../../utils/formatters";
 import type {
   CaseIssue,
+  EpsModuleExecutionRecord,
   EpsPdmExecutionRecord,
   EpsTestItemRecord,
   PdmEquipmentRecord,
@@ -37,6 +37,7 @@ import { PdmReadinessBadge } from "./PdmReadinessBadge";
 
 interface PdmDetailDrawerProps {
   pdm: PdmRecord | null;
+  epsModuleExecution: EpsModuleExecutionRecord[];
   epsPdmExecution: EpsPdmExecutionRecord[];
   epsTestItems: EpsTestItemRecord[];
   onClose: () => void;
@@ -55,11 +56,90 @@ function normalizePdmKey(value: unknown): string {
   return String(value ?? "").trim().toUpperCase().replace(/\s+/g, " ");
 }
 
-function SummaryMetric({ label, value, className }: { label: string; value: string; className?: string }) {
+type SummaryStatusTone = "default" | "info" | "success" | "warning" | "danger" | "teal";
+
+const summaryStatusToneClasses: Record<SummaryStatusTone, string> = {
+  default: "bg-slate-400",
+  info: "bg-blue-500",
+  success: "bg-emerald-500",
+  warning: "bg-amber-500",
+  danger: "bg-red-500",
+  teal: "bg-teal-500",
+};
+
+function SummaryStatus({
+  label,
+  value,
+  tone = "default",
+  highlight = false,
+}: {
+  label: string;
+  value: number;
+  tone?: SummaryStatusTone;
+  highlight?: boolean;
+}) {
   return (
-    <div className={cn("rounded-md border bg-background p-3", className)}>
-      <div className="text-xs font-medium uppercase text-muted-foreground">{label}</div>
-      <div className="mt-1 text-lg font-semibold">{value}</div>
+    <div
+      className={`flex items-center gap-2 whitespace-nowrap text-sm ${
+        highlight ? "font-medium text-slate-900" : "text-muted-foreground"
+      }`}
+    >
+      <span
+        aria-hidden="true"
+        className={`h-2 w-2 shrink-0 rounded-full ${
+          highlight ? summaryStatusToneClasses[tone] : summaryStatusToneClasses.default
+        }`}
+      />
+      <span>{label}</span>
+      <strong className={highlight ? "text-slate-950" : "text-slate-700"}>
+        {formatNumber(value)}
+      </strong>
+    </div>
+  );
+}
+
+function SummaryProgress({
+  barClassName,
+  completed,
+  icon,
+  label,
+  total,
+}: {
+  barClassName: string;
+  completed: number;
+  icon: ReactNode;
+  label: string;
+  total: number;
+}) {
+  const safeTotal = Math.max(total, 0);
+  const safeCompleted = Math.min(Math.max(completed, 0), safeTotal);
+  const percentage = safeTotal > 0 ? (safeCompleted / safeTotal) * 100 : 0;
+
+  return (
+    <div className="min-w-0">
+      <div className="flex items-center gap-2 text-xs font-semibold uppercase text-muted-foreground">
+        {icon}
+        <span>{label}</span>
+      </div>
+      <div className="mt-2 flex items-baseline gap-2">
+        <strong className="text-2xl font-semibold text-slate-950">
+          {formatNumber(safeCompleted)} / {formatNumber(safeTotal)}
+        </strong>
+        <span className="text-sm text-muted-foreground">equipment</span>
+      </div>
+      <div
+        aria-label={`${label}: ${formatNumber(safeCompleted)} of ${formatNumber(safeTotal)}`}
+        className="mt-2 h-2 overflow-hidden rounded-full bg-slate-200"
+        role="progressbar"
+        aria-valuemax={safeTotal}
+        aria-valuemin={0}
+        aria-valuenow={safeCompleted}
+      >
+        <div
+          className={`h-full rounded-full transition-[width] duration-300 ${barClassName}`}
+          style={{ width: `${percentage}%` }}
+        />
+      </div>
     </div>
   );
 }
@@ -139,6 +219,7 @@ function getPdmIssues(pdm: PdmRecord): EnrichedIssue[] {
 
 export function PdmDetailDrawer({
   pdm,
+  epsModuleExecution,
   epsPdmExecution,
   epsTestItems,
   onClose,
@@ -158,11 +239,24 @@ export function PdmDetailDrawer({
   const epsExecution = epsPdmExecution.find(
     (record) => normalizePdmKey(record.pdm_name) === normalizePdmKey(pdm.pdm_name),
   );
+  const pdmEpsModuleExecution = epsModuleExecution.filter(
+    (record) => normalizePdmKey(record.pdm_name) === normalizePdmKey(pdm.pdm_name),
+  );
   const readinessLevel = getPdmReadinessLevel(pdm, epsExecution);
   const readinessScore = getPdmReadinessScore(pdm, epsExecution);
   const missingIssueImages = getCasesMissingIssueImageCount(pdm);
   const missingReports = getMissingNetaReportCount(pdm);
   const openCases = getPdmOpenCaseCount(pdm);
+  const equipmentCount = getPdmEquipmentCount(pdm);
+  const epsStarted = epsExecution?.started_module_equipment_count ?? 0;
+  const epsComplete = epsExecution?.complete_count ?? 0;
+  const epsWaitingNeta = epsExecution?.waiting_infralink_neta_count ?? 0;
+  const epsPartial = epsExecution?.partial_count ?? 0;
+  const epsFailed = epsExecution?.failed_count ?? 0;
+  const epsNotStarted = epsExecution?.not_started_count ?? 0;
+  const epsNoTracker = epsExecution?.no_tracker_record_count ?? 0;
+  const netaComplete = getNetaCompleteCount(pdm);
+  const netaIncomplete = getNetaIncompleteCount(pdm);
 
   return (
     <div className="fixed inset-0 z-40">
@@ -195,39 +289,88 @@ export function PdmDetailDrawer({
         <div className="flex-1 overflow-y-auto p-5">
           <div className="grid gap-4">
             <Card>
-              <CardContent className="space-y-4 p-4">
-                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                  <SummaryMetric label="PDM Name" value={valueOrDash(pdm.pdm_name)} />
-                  <SummaryMetric label="Equipment Count" value={formatNumber(getPdmEquipmentCount(pdm))} />
-                  <SummaryMetric label="Current Readiness" value={readinessLevel} />
+              <CardContent className="p-0">
+                <div className="grid gap-5 p-4 lg:grid-cols-[260px_1fr] lg:items-center">
+                  <SummaryProgress
+                    barClassName="bg-blue-600"
+                    completed={epsStarted}
+                    icon={<Activity className="h-4 w-4 text-blue-600" aria-hidden="true" />}
+                    label="EPS Execution Started"
+                    total={equipmentCount}
+                  />
+                  <div className="grid min-w-0 grid-cols-2 gap-x-6 gap-y-3 xl:grid-cols-3">
+                    <SummaryStatus
+                      highlight={epsComplete > 0}
+                      label="Complete"
+                      tone="success"
+                      value={epsComplete}
+                    />
+                    <SummaryStatus
+                      highlight={epsPartial > 0}
+                      label="In Progress"
+                      tone="info"
+                      value={epsPartial}
+                    />
+                    <SummaryStatus
+                      highlight={epsWaitingNeta > 0}
+                      label="Waiting NETA"
+                      tone="teal"
+                      value={epsWaitingNeta}
+                    />
+                    <SummaryStatus
+                      highlight={epsFailed > 0}
+                      label="Failed"
+                      tone="danger"
+                      value={epsFailed}
+                    />
+                    <SummaryStatus
+                      highlight={epsNotStarted > 0}
+                      label="Not Started"
+                      tone="warning"
+                      value={epsNotStarted}
+                    />
+                    <SummaryStatus
+                      highlight={epsNoTracker > 0}
+                      label="No Tracker Data"
+                      value={epsNoTracker}
+                    />
+                  </div>
                 </div>
 
-                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-                  <SummaryMetric
-                    className="border-emerald-200 bg-emerald-50/60"
-                    label="NETA Complete"
-                    value={formatNumber(getNetaCompleteCount(pdm))}
+                <div className="grid gap-5 border-t bg-slate-50/60 p-4 lg:grid-cols-[260px_1fr] lg:items-center">
+                  <SummaryProgress
+                    barClassName="bg-emerald-600"
+                    completed={netaComplete}
+                    icon={<ShieldCheck className="h-4 w-4 text-emerald-600" aria-hidden="true" />}
+                    label="Infralink NETA Complete"
+                    total={equipmentCount}
                   />
-                  <SummaryMetric
-                    className={getNetaIncompleteCount(pdm) > 0 ? "border-amber-200 bg-amber-50/70" : ""}
-                    label="NETA Incomplete"
-                    value={formatNumber(getNetaIncompleteCount(pdm))}
-                  />
-                  <SummaryMetric
-                    className={missingReports > 0 ? "border-red-200 bg-red-50/70" : ""}
-                    label="Missing NETA Reports"
-                    value={formatNumber(missingReports)}
-                  />
-                  <SummaryMetric
-                    className={openCases > 0 ? "border-amber-200 bg-amber-50/70" : ""}
-                    label="Open Cases"
-                    value={formatNumber(openCases)}
-                  />
-                  <SummaryMetric
-                    className={missingIssueImages > 0 ? "border-red-200 bg-red-50/70" : ""}
-                    label="Cases Missing Issue Image"
-                    value={formatNumber(missingIssueImages)}
-                  />
+                  <div className="grid min-w-0 grid-cols-2 gap-x-6 gap-y-3 xl:grid-cols-3">
+                    <SummaryStatus
+                      highlight={netaIncomplete > 0}
+                      label="NETA Incomplete"
+                      tone="warning"
+                      value={netaIncomplete}
+                    />
+                    <SummaryStatus
+                      highlight={missingReports > 0}
+                      label="Missing Reports"
+                      tone="danger"
+                      value={missingReports}
+                    />
+                    <SummaryStatus
+                      highlight={openCases > 0}
+                      label="Open Cases"
+                      tone="danger"
+                      value={openCases}
+                    />
+                    <SummaryStatus
+                      highlight={missingIssueImages > 0}
+                      label="Missing Images"
+                      tone="danger"
+                      value={missingIssueImages}
+                    />
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -237,10 +380,14 @@ export function PdmDetailDrawer({
                 <div>
                   <h3 className="text-lg font-semibold tracking-normal">Equipment Under This PDM</h3>
                   <p className="mt-1 text-sm text-muted-foreground">
-                    Expand an equipment row for EPS test items, asset information, NETA reports, and related cases.
+                    EPS execution shows field-test progress separately from Infralink NETA readiness.
                   </p>
                 </div>
-                <PdmEquipmentList equipment={equipment} epsTestItems={epsTestItems} />
+                <PdmEquipmentList
+                  equipment={equipment}
+                  epsModuleExecution={pdmEpsModuleExecution}
+                  epsTestItems={epsTestItems}
+                />
               </CardContent>
             </Card>
 

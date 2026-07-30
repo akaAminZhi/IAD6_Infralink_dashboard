@@ -14,6 +14,7 @@ import type {
   EpsTestSummary,
   HistoryComparison,
   IssueAttachmentManifest,
+  KprSummary,
   ModuleEquipmentLink,
   NetaReportManifest,
   PdmRecord,
@@ -51,6 +52,7 @@ const emptyDashboardData: DashboardData = {
   netaReportManifest: null,
   cxalloyReportStatus: null,
   powerPlanManifest: null,
+  kprSummary: null,
 };
 
 async function fetchOptionalJson<T>(path: string): Promise<T | null> {
@@ -133,6 +135,7 @@ export function useDashboardData(): DashboardDataState {
           netaReportManifest,
           cxalloyReportStatus,
           powerPlanManifest,
+          kprSummary,
         ] = await Promise.all([
           fetchJson<unknown>("/data/pdms.json"),
           fetchJson<DashboardSummary>("/data/summary.json"),
@@ -149,6 +152,7 @@ export function useDashboardData(): DashboardDataState {
           fetchOptionalJson<NetaReportManifest>("/data/neta_report_manifest.json"),
           fetchOptionalJson<CxalloyReportStatusManifest>("/data/cxalloy_report_status.json"),
           fetchOptionalJson<PowerPlanManifest>("/data/power_plan.json"),
+          fetchOptionalJson<KprSummary>("/data/kpr_summary.json"),
         ]);
 
         if (!active) {
@@ -175,6 +179,7 @@ export function useDashboardData(): DashboardDataState {
           netaReportManifest,
           cxalloyReportStatus,
           powerPlanManifest,
+          kprSummary,
         });
         setDetailDataLoaded(false);
         setDetailDataError(null);

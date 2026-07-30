@@ -206,8 +206,11 @@ function getNewNetaCompleteDisplayCount(
 export function EquipmentPage({ data }: EquipmentPageProps) {
   const [searchParams] = useSearchParams();
   const quickFilterParam = searchParams.get("quickFilter");
+  const statusParam = searchParams.get("status")?.trim() ?? "";
   const [filters, setFilters] = useState<EquipmentFiltersState>(() =>
-    getFiltersForQuickFilter(quickFilterParam),
+    statusParam
+      ? { ...getFiltersForQuickFilter(quickFilterParam), status: statusParam }
+      : getFiltersForQuickFilter(quickFilterParam),
   );
   const [selectedEquipment, setSelectedEquipment] = useState<FlattenedEquipmentRow | null>(null);
   const deferredFilters = useDeferredValue(filters);
@@ -254,8 +257,12 @@ export function EquipmentPage({ data }: EquipmentPageProps) {
   const activeQuickFilter = getActiveQuickFilter(filters);
 
   useEffect(() => {
-    setFilters(getFiltersForQuickFilter(quickFilterParam));
-  }, [quickFilterParam]);
+    setFilters(
+      statusParam
+        ? { ...getFiltersForQuickFilter(quickFilterParam), status: statusParam }
+        : getFiltersForQuickFilter(quickFilterParam),
+    );
+  }, [quickFilterParam, statusParam]);
 
   function handleQuickFilter(filter: EquipmentQuickFilter) {
     if (activeQuickFilter === filter) {

@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "description": "Ordered equipment lifecycle used by the Monthly KPR dashboard.",
+  "stages": [
+    {
+      "key": "ifc",
+      "label": "IFC",
+      "source": "status",
+      "statuses": ["IFC"],
+      "color": "#64748b"
+    },
+    {
+      "key": "pre_installation_complete",
+      "label": "Pre-Installation Complete",
+      "source": "status",
+      "statuses": ["Pre-Installation Complete"],
+      "color": "#2563eb"
+    },
+    {
+      "key": "conditional_red_tag",
+      "label": "Conditional Red Tag",
+      "source": "status",
+      "statuses": ["Cond Red Tag", "Conditional Red Tag", "Red Tag"],
+      "color": "#dc2626"
+    },
+    {
+      "key": "neta_complete",
+      "label": "NETA Complete",
+      "source": "neta_complete",
+      "statuses": [],
+      "color": "#0d9488"
+    },
+    {
+      "key": "conditional_yellow_tag",
+      "label": "Conditional Yellow Tag",
+      "source": "status",
+      "statuses": ["Cond Yellow Tag", "Conditional Yellow Tag"],
+      "color": "#d97706"
+    },
+    {
+      "key": "conditional_green_tag",
+      "label": "Conditional Green Tag",
+      "source": "status",
+      "statuses": ["Cond Green Tag", "Conditional Green Tag", "Green Tag"],
+      "color": "#16a34a"
+    },
+    {
+      "key": "ship_to_site",
+      "label": "Ship to Site",
+      "source": "status",
+      "statuses": ["Ship to Site"],
+      "color": "#059669"
+    }
+  ],
+  "unmapped_stage": {
+    "key": "unmapped",
+    "label": "Unmapped",
+    "color": "#94a3b8"
+  }
+}
