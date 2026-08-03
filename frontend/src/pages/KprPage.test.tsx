@@ -190,13 +190,139 @@ describe("KprPage", () => {
     expect(
       screen.getByText(/monthly performance remains locked to July 2026/i),
     ).toBeInTheDocument();
-    expect(screen.getByText("EPS Failure Type Breakdown")).toBeInTheDocument();
+    expect(screen.getByText("3rd Party Test Failure Breakdown")).toBeInTheDocument();
     expect(screen.getByText("CT")).toBeInTheDocument();
-    expect(screen.getByText("NETA Net Change")).toBeInTheDocument();
-    expect(screen.getByText("+29")).toBeInTheDocument();
+    expect(screen.getByText("NETA Equipment Change")).toBeInTheDocument();
+    expect(screen.getByText("Metric units")).toBeInTheDocument();
+    expect(screen.getAllByText("Test Item").length).toBeGreaterThan(0);
+    expect(screen.queryByText("PDM Delivery Pipeline")).not.toBeInTheDocument();
+    expect(screen.getAllByText("+29").length).toBeGreaterThan(0);
     expect(
       screen.getByText(/30 newly complete .* 1 no longer marked complete/i),
     ).toBeInTheDocument();
+  });
+
+  it("uses daily reports as the 3rd party execution source", () => {
+    render(<KprPage data={dashboardData(kprSummary())} />);
+
+    expect(screen.getByText("NETA Equipment Movement")).toBeInTheDocument();
+    expect(screen.getByText("Latest Aug 5")).toBeInTheDocument();
+    expect(screen.getByText("+10 since period end")).toBeInTheDocument();
+    expect(screen.getByText("3rd Party Test Activity")).toBeInTheDocument();
+    expect(screen.getByText("Daily Report Cumulative")).toBeInTheDocument();
+    expect(screen.getByText("750 at month start")).toBeInTheDocument();
+    expect(screen.getByText("Source: Daily Test Reports")).toBeInTheDocument();
+    expect(screen.queryByText("Tracker Status")).not.toBeInTheDocument();
+    expect(screen.queryByText("Passed / fixed")).not.toBeInTheDocument();
+    expect(screen.getAllByText("Period end Jul 31").length).toBe(2);
+  });
+
+  it("shows each 3rd party failure type as a share of failure history", () => {
+    const summary = kprSummary({
+      eps_failure_types: [
+        {
+          tracker_type: "CT",
+          current_failed: 8,
+          fixed_after_failure: 3,
+          failure_history_total: 11,
+        },
+        {
+          tracker_type: "METER",
+          current_failed: 3,
+          fixed_after_failure: 0,
+          failure_history_total: 3,
+        },
+      ],
+    });
+
+    render(<KprPage data={dashboardData(summary)} />);
+
+    expect(screen.getByText("Current Failed")).toBeInTheDocument();
+    expect(screen.getByText("Fixed After Failure")).toBeInTheDocument();
+    expect(screen.getByText("Failure History")).toBeInTheDocument();
+    expect(
+      screen.getByRole("img", {
+        name: "11 current failed and 3 fixed after failure",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("img", {
+        name: "CT: 11 failure-history items, 78.6 percent of total",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("img", {
+        name: "METER: 3 failure-history items, 21.4 percent of total",
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it("presents lifecycle counts as stage inventory and separates mapping gaps", () => {
+    const baseSummary = kprSummary();
+    const summary = kprSummary({
+      equipment_lifecycle: {
+        ...baseSummary.equipment_lifecycle,
+        advanced_count: 210,
+        stages: [
+          {
+            key: "ifc",
+            label: "IFC",
+            color: "#64748b",
+            order: 0,
+            baseline_count: 659,
+            current_count: 582,
+            month_change: -77,
+          },
+          {
+            key: "pre_installation_complete",
+            label: "Pre-Installation Complete",
+            color: "#2563eb",
+            order: 1,
+            baseline_count: 329,
+            current_count: 307,
+            month_change: -22,
+          },
+          {
+            key: "ship_to_site",
+            label: "Ship to Site",
+            color: "#059669",
+            order: 6,
+            baseline_count: 12,
+            current_count: 147,
+            month_change: 135,
+          },
+          {
+            key: "unmapped",
+            label: "Unmapped",
+            color: "#94a3b8",
+            order: 7,
+            baseline_count: 78,
+            current_count: 78,
+            month_change: 0,
+          },
+        ],
+        transitions: [
+          {
+            from_key: "pre_installation_complete",
+            from_label: "Pre-Installation Complete",
+            to_key: "ship_to_site",
+            to_label: "Ship to Site",
+            count: 44,
+            direction: "advanced",
+          },
+        ],
+        unmapped_statuses: [{ status: "Blank", count: 78 }],
+      },
+    });
+
+    render(<KprPage data={dashboardData(summary)} />);
+
+    expect(screen.getByText("Equipment Lifecycle")).toBeInTheDocument();
+    expect(screen.getByText("210 forward")).toBeInTheDocument();
+    expect(screen.getByLabelText("77 fewer than month start")).toBeInTheDocument();
+    expect(screen.getByLabelText("135 more than month start")).toBeInTheDocument();
+    expect(screen.getByText("Movement details").closest("details")).not.toHaveAttribute("open");
+    expect(screen.getByText("Blank: 78")).toBeInTheDocument();
   });
 
   it("does not duplicate Current Snapshot during month-to-date reporting", () => {

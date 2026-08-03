@@ -71,6 +71,14 @@ def parse_date_value(value: Any) -> date | None:
         return None
 
 
+def eps_summary_as_of_date(eps_summary: dict[str, Any], fallback: date) -> date:
+    return (
+        parse_date_value(eps_summary.get("source_date_label"))
+        or parse_date_value(eps_summary.get("snapshot_date"))
+        or fallback
+    )
+
+
 def discover_exports(
     folder: Path,
     pattern: str,
@@ -632,6 +640,7 @@ def build_kpr_summary(input_files: dict[str, str] | None = None) -> dict[str, An
     pdms = load_records_json(DATA_DIR / "pdms.json")
     eps_pdms = load_records_json(DATA_DIR / "eps_pdm_execution.json")
     eps_summary = load_json_object(EPS_SUMMARY_PATH)
+    tracker_as_of_date = eps_summary_as_of_date(eps_summary, latest_data_date)
     eps_test_items = load_records_json(EPS_TEST_ITEMS_PATH)
     equipment_catalog = linked_equipment_catalog(module_links)
     allowed_equipment_keys = set(equipment_catalog)
@@ -838,7 +847,7 @@ def build_kpr_summary(input_files: dict[str, str] | None = None) -> dict[str, An
                 "tracker_not_tested": number(
                     eps_summary.get("not_tested_test_item_count")
                 ),
-                "tracker_as_of_date": latest_data_date.isoformat(),
+                "tracker_as_of_date": tracker_as_of_date.isoformat(),
             },
             "issues": {
                 "month_start_open": issues["month_start_open"],

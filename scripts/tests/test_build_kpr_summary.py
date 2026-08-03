@@ -4,6 +4,7 @@ from datetime import date
 
 from scripts.etl.build_kpr_summary import (
     classify_lifecycle_stage,
+    eps_summary_as_of_date,
     eps_failure_type_breakdown,
     issue_performance,
     lifecycle_summary,
@@ -174,6 +175,26 @@ def test_reporting_period_uses_previous_complete_month_during_first_week() -> No
         "target_end": date(2026, 8, 8),
         "selection_mode": "current_month_to_date",
     }
+
+
+def test_eps_summary_as_of_date_prefers_source_date_then_snapshot() -> None:
+    fallback = date(2026, 8, 3)
+
+    assert (
+        eps_summary_as_of_date(
+            {
+                "source_date_label": "2026-07-31",
+                "snapshot_date": "2026-08-03",
+            },
+            fallback,
+        )
+        == date(2026, 7, 31)
+    )
+    assert (
+        eps_summary_as_of_date({"snapshot_date": "2026-08-02"}, fallback)
+        == date(2026, 8, 2)
+    )
+    assert eps_summary_as_of_date({}, fallback) == fallback
 
 
 def test_eps_failure_type_breakdown_separates_current_and_fixed_history() -> None:
