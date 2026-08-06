@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import hashlib
+import json
 import os
 from collections import defaultdict
 from datetime import datetime
@@ -77,6 +78,17 @@ def read_csv_rows(path: Path) -> list[dict[str, str]]:
         return list(csv.DictReader(file))
 
 
+def read_status_payload(path: Path | None) -> dict[str, Any]:
+    if path is None or not path.exists():
+        return {}
+    try:
+        with path.open("r", encoding="utf-8-sig") as file:
+            payload = json.load(file)
+    except (json.JSONDecodeError, OSError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
 def latest_attempts_by_target(rows: Iterable[dict[str, str]]) -> dict[str, dict[str, str]]:
     latest: dict[str, dict[str, str]] = {}
     for row in rows:
@@ -102,10 +114,44 @@ def completed_upload_keys(rows: Iterable[dict[str, str]]) -> set[tuple[str, str]
     return keys
 
 
+def completed_status_keys(payload: dict[str, Any]) -> set[tuple[str, str]]:
+    keys: set[tuple[str, str]] = set()
+    for record in payload.get("records") or []:
+        if not isinstance(record, dict):
+            continue
+        status = clean(record.get("upload_status")).casefold()
+        target = target_equipment(
+            record.get("target_equipment") or record.get("equipment_id")
+        )
+        digest = clean(record.get("current_sha256"))
+        if status == "uploaded" and target and digest:
+            keys.add((target.casefold(), digest))
+    return keys
+
+
+def prior_attempts_by_target(payload: dict[str, Any]) -> dict[str, dict[str, str]]:
+    attempts: dict[str, dict[str, str]] = {}
+    for record in payload.get("records") or []:
+        if not isinstance(record, dict):
+            continue
+        target = target_equipment(
+            record.get("target_equipment") or record.get("equipment_id")
+        )
+        if not target:
+            continue
+        attempts[target.casefold()] = {
+            "status": clean(record.get("last_attempt_status")),
+            "error": clean(record.get("last_attempt_error")),
+            "uploaded_at": clean(record.get("last_attempt_at")),
+        }
+    return attempts
+
+
 def build_cxalloy_report_status(
     rename_manifest: Path,
     upload_manifest: Path,
     tracker_root: Path,
+    prior_status_manifest: Path | None = None,
 ) -> dict[str, Any]:
     grouped_rows: dict[str, list[dict[str, str]]] = defaultdict(list)
     for row in read_csv_rows(rename_manifest):
@@ -117,8 +163,12 @@ def build_cxalloy_report_status(
             grouped_rows[device_name].append(row)
 
     upload_rows = read_csv_rows(upload_manifest)
-    completed_keys = completed_upload_keys(upload_rows)
+    prior_payload = read_status_payload(prior_status_manifest)
+    completed_keys = completed_upload_keys(upload_rows) | completed_status_keys(
+        prior_payload
+    )
     latest_attempts = latest_attempts_by_target(upload_rows)
+    prior_attempts = prior_attempts_by_target(prior_payload)
     records: list[dict[str, Any]] = []
 
     for device_name in sorted(grouped_rows, key=str.casefold):
@@ -143,7 +193,14 @@ def build_cxalloy_report_status(
             and not missing_report_names
             and (target.casefold(), current_hash) in completed_keys
         )
-        latest_attempt = latest_attempts.get(target.casefold(), {})
+        local_attempt = latest_attempts.get(target.casefold(), {})
+        prior_attempt = prior_attempts.get(target.casefold(), {})
+        latest_attempt = (
+            local_attempt
+            if clean(local_attempt.get("uploaded_at"))
+            >= clean(prior_attempt.get("uploaded_at"))
+            else prior_attempt
+        )
 
         records.append(
             {
@@ -176,6 +233,11 @@ def build_cxalloy_report_status(
         "source_files": {
             "rename_manifest": file_metadata(rename_manifest) if rename_manifest.exists() else None,
             "upload_manifest": file_metadata(upload_manifest) if upload_manifest.exists() else None,
+            "prior_status_manifest": (
+                file_metadata(prior_status_manifest)
+                if prior_status_manifest is not None and prior_status_manifest.exists()
+                else None
+            ),
         },
         "summary": {
             "equipment_with_gc_reports": len(records),
@@ -194,7 +256,12 @@ def main() -> None:
     rename_manifest = gc_directory / "rename_manifest.csv"
     upload_manifest = gc_directory / "cxalloy_upload_manifest.csv"
 
-    payload = build_cxalloy_report_status(rename_manifest, upload_manifest, tracker_root)
+    payload = build_cxalloy_report_status(
+        rename_manifest,
+        upload_manifest,
+        tracker_root,
+        prior_status_manifest=OUTPUT_PATH,
+    )
     write_json_payload(OUTPUT_PATH, payload)
     summary = payload["summary"]
     print(f"Wrote CxAlloy report status to {OUTPUT_PATH}")

@@ -506,6 +506,7 @@ export interface KprLifecycleStage {
   current_count: number;
   baseline_count: number;
   month_change: number;
+  equipment_ids?: string[];
 }
 
 export interface KprLifecycleTransition {
@@ -546,9 +547,12 @@ export interface KprSummary {
     eps_as_of_date?: string | null;
     is_later_than_report: boolean;
     neta_complete_count: number;
+    neta_complete_equipment_ids?: string[];
     eps_passed_count: number;
+    eps_passed_equipment_ids?: string[];
     eps_current_failed: number;
     open_issue_count: number;
+    open_issue_case_ids?: string[];
   };
   executive_summary: {
     total_pdms: number;
@@ -574,16 +578,20 @@ export interface KprSummary {
       current_complete: number;
       baseline_complete: number;
       completed_month: number;
+      completed_month_equipment_ids?: string[];
       no_longer_complete_month?: number;
       net_change_month?: number;
       no_longer_complete_equipment_ids?: string[];
       total_equipment: number;
       completion_rate: number;
+      period_end_complete_equipment_ids?: string[];
     };
     eps: {
       daily_passed_current: number;
       daily_passed_baseline: number;
       daily_passed_month: number;
+      daily_passed_month_equipment_ids?: string[];
+      daily_passed_period_end_equipment_ids?: string[];
       tracker_total_test_items: number;
       tracker_passed_or_fixed: number;
       tracker_current_failed: number;
@@ -617,12 +625,19 @@ export interface KprSummary {
   };
   issue_performance: {
     month_start_open: number;
+    month_start_open_case_ids?: string[];
     new_issues: number;
+    new_issue_case_ids?: string[];
     resolved_issues: number;
+    resolved_issue_case_ids?: string[];
     current_open: number;
+    current_open_case_ids?: string[];
     overdue_open: number;
+    overdue_open_case_ids?: string[];
     urgent_high_open: number;
+    urgent_high_open_case_ids?: string[];
     open_over_30_days: number;
+    open_over_30_days_case_ids?: string[];
     average_open_age_days?: number | null;
     balance_adjustment: number;
   };

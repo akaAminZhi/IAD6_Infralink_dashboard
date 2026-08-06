@@ -202,6 +202,7 @@ def neta_month_movement(
     no_longer_complete_ids = baseline_ids - current_ids
     return {
         "newly_completed_count": len(newly_completed_ids),
+        "newly_completed_equipment_ids": sorted(newly_completed_ids),
         "no_longer_complete_count": len(no_longer_complete_ids),
         "net_change_count": len(current_ids) - len(baseline_ids),
         "no_longer_complete_equipment_ids": sorted(no_longer_complete_ids),
@@ -325,6 +326,11 @@ def lifecycle_summary(
                 "baseline_count": baseline_counts.get(stage["key"], 0),
                 "month_change": current_counts.get(stage["key"], 0)
                 - baseline_counts.get(stage["key"], 0),
+                "equipment_ids": sorted(
+                    str(current_equipment[equipment_key].get("equipment_id") or equipment_key)
+                    for equipment_key, current_stage in current_stage_by_key.items()
+                    if current_stage == stage["key"]
+                ),
             }
             for stage in stage_definitions
         ],
@@ -371,20 +377,25 @@ def issue_performance(
         for case_id, current_case in current_cases.items()
         if is_closed_case(current_case) and not is_closed_case(baseline_cases.get(case_id))
     }
-    current_open = [record for record in current_cases.values() if is_open_case(record)]
-    baseline_open_count = sum(is_open_case(record) for record in baseline_cases.values())
-    overdue_count = 0
-    urgent_high_count = 0
-    over_30_days_count = 0
+    current_open_ids = {
+        case_id for case_id, record in current_cases.items() if is_open_case(record)
+    }
+    baseline_open_ids = {
+        case_id for case_id, record in baseline_cases.items() if is_open_case(record)
+    }
+    overdue_ids: set[str] = set()
+    urgent_high_ids: set[str] = set()
+    over_30_days_ids: set[str] = set()
     open_ages: list[int] = []
 
-    for record in current_open:
+    for case_id in current_open_ids:
+        record = current_cases[case_id]
         due_date = parse_date_value(record.get("due_date"))
         if due_date is not None and due_date < current_date:
-            overdue_count += 1
+            overdue_ids.add(case_id)
         priority = normalize_key(record.get("priority"))
         if "URGENT" in priority or "HIGH" in priority:
-            urgent_high_count += 1
+            urgent_high_ids.add(case_id)
         created_date = parse_date_value(record.get("created_at")) or parse_date_value(
             record.get("reported_on")
         )
@@ -392,21 +403,31 @@ def issue_performance(
             age_days = max(0, (current_date - created_date).days)
             open_ages.append(age_days)
             if age_days > 30:
-                over_30_days_count += 1
+                over_30_days_ids.add(case_id)
+
+    def display_case_ids(case_ids: set[str], records: dict[str, dict[str, Any]]) -> list[str]:
+        return sorted(str(records[case_id].get("case_id") or case_id) for case_id in case_ids)
 
     return {
-        "month_start_open": baseline_open_count,
+        "month_start_open": len(baseline_open_ids),
+        "month_start_open_case_ids": display_case_ids(baseline_open_ids, baseline_cases),
         "new_issues": len(new_ids),
+        "new_issue_case_ids": display_case_ids(new_ids, current_cases),
         "resolved_issues": len(resolved_ids),
-        "current_open": len(current_open),
-        "overdue_open": overdue_count,
-        "urgent_high_open": urgent_high_count,
-        "open_over_30_days": over_30_days_count,
+        "resolved_issue_case_ids": display_case_ids(resolved_ids, current_cases),
+        "current_open": len(current_open_ids),
+        "current_open_case_ids": display_case_ids(current_open_ids, current_cases),
+        "overdue_open": len(overdue_ids),
+        "overdue_open_case_ids": display_case_ids(overdue_ids, current_cases),
+        "urgent_high_open": len(urgent_high_ids),
+        "urgent_high_open_case_ids": display_case_ids(urgent_high_ids, current_cases),
+        "open_over_30_days": len(over_30_days_ids),
+        "open_over_30_days_case_ids": display_case_ids(over_30_days_ids, current_cases),
         "average_open_age_days": (
             round(sum(open_ages) / len(open_ages), 1) if open_ages else None
         ),
-        "balance_adjustment": len(current_open)
-        - (baseline_open_count + len(new_ids) - len(resolved_ids)),
+        "balance_adjustment": len(current_open_ids)
+        - (len(baseline_open_ids) + len(new_ids) - len(resolved_ids)),
     }
 
 
@@ -739,15 +760,20 @@ def build_kpr_summary(input_files: dict[str, str] | None = None) -> dict[str, An
     latest_cases = index_cases(
         case_records(Path(selected_inputs["cases"]).resolve())
     )
-    latest_neta_complete_count = sum(
-        is_neta_complete(record) for record in latest_equipment.values()
+    latest_neta_complete_ids = {
+        equipment_key
+        for equipment_key, record in latest_equipment.items()
+        if is_neta_complete(record)
+    }
+    latest_open_issue_ids = {
+        case_id for case_id, record in latest_cases.items() if is_open_case(record)
+    }
+    latest_eps_passed_ids = (
+        set(latest_eps[1].get("tested_equipment") or []) if latest_eps else set()
     )
-    latest_open_issue_count = sum(
-        is_open_case(record) for record in latest_cases.values()
-    )
-    latest_eps_passed_count = (
-        len(latest_eps[1].get("tested_equipment") or []) if latest_eps else 0
-    )
+    latest_neta_complete_count = len(latest_neta_complete_ids)
+    latest_open_issue_count = len(latest_open_issue_ids)
+    latest_eps_passed_count = len(latest_eps_passed_ids)
     report_inputs = {
         **selected_inputs,
         "system_elements": str(current_system_path),
@@ -782,11 +808,17 @@ def build_kpr_summary(input_files: dict[str, str] | None = None) -> dict[str, An
             "eps_as_of_date": latest_eps[0].isoformat() if latest_eps else None,
             "is_later_than_report": latest_data_date > period_end,
             "neta_complete_count": latest_neta_complete_count,
+            "neta_complete_equipment_ids": sorted(latest_neta_complete_ids),
             "eps_passed_count": latest_eps_passed_count,
+            "eps_passed_equipment_ids": sorted(latest_eps_passed_ids),
             "eps_current_failed": number(
                 eps_summary.get("failed_test_item_count")
             ),
             "open_issue_count": latest_open_issue_count,
+            "open_issue_case_ids": sorted(
+                str(latest_cases[case_id].get("case_id") or case_id)
+                for case_id in latest_open_issue_ids
+            ),
         },
         "executive_summary": {
             **pdm_metrics,
@@ -818,6 +850,9 @@ def build_kpr_summary(input_files: dict[str, str] | None = None) -> dict[str, An
                 "current_complete": len(current_neta_ids),
                 "baseline_complete": len(baseline_neta_ids),
                 "completed_month": neta_movement["newly_completed_count"],
+                "completed_month_equipment_ids": neta_movement[
+                    "newly_completed_equipment_ids"
+                ],
                 "no_longer_complete_month": neta_movement[
                     "no_longer_complete_count"
                 ],
@@ -827,11 +862,16 @@ def build_kpr_summary(input_files: dict[str, str] | None = None) -> dict[str, An
                 ],
                 "total_equipment": lifecycle["total_equipment"],
                 "completion_rate": neta_completion_rate,
+                "period_end_complete_equipment_ids": sorted(current_neta_ids),
             },
             "eps": {
                 "daily_passed_current": len(current_passed),
                 "daily_passed_baseline": len(baseline_passed),
                 "daily_passed_month": len(current_passed - baseline_passed),
+                "daily_passed_month_equipment_ids": sorted(
+                    current_passed - baseline_passed
+                ),
+                "daily_passed_period_end_equipment_ids": sorted(current_passed),
                 "tracker_total_test_items": number(
                     eps_summary.get("test_item_count")
                 ),

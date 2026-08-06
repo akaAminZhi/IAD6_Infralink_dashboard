@@ -6,6 +6,7 @@ import { cn } from "../../utils/cn";
 import { formatNumber } from "../../utils/formatters";
 import {
   isIssueCreatedYesterday,
+  isOpenIssue,
   type EnrichedIssue,
   type IssueSummaryMetrics,
 } from "../../utils/issueUtils";
@@ -61,7 +62,7 @@ function getStatusColor(label: string, index: number): string {
 function buildStatusBreakdown(issues: EnrichedIssue[]): ChartDatum[] {
   const counts = new Map<string, number>();
   for (const issue of issues) {
-    const label = normalizeLabel(issue.status);
+    const label = isOpenIssue(issue) ? "Open" : normalizeLabel(issue.status);
     counts.set(label, (counts.get(label) ?? 0) + 1);
   }
 

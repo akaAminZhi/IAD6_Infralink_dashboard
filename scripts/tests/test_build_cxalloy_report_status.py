@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import hashlib
+import json
 from pathlib import Path
 
 from scripts.etl.build_cxalloy_report_status import build_cxalloy_report_status
@@ -126,3 +127,62 @@ def test_missing_manifests_produce_empty_status(tmp_path: Path) -> None:
 
     assert payload["records"] == []
     assert payload["summary"]["pending_equipment"] == 0
+
+
+def test_prior_status_preserves_uploaded_hash_across_machines(tmp_path: Path) -> None:
+    gc_dir = tmp_path / "NETA_eport_To_GC" / "IAD06-PDU6-01A-1"
+    report = gc_dir / "report.pdf"
+    gc_dir.mkdir(parents=True)
+    report.write_bytes(b"same report on both machines")
+    rename_manifest = tmp_path / "NETA_eport_To_GC" / "rename_manifest.csv"
+    upload_manifest = tmp_path / "NETA_eport_To_GC" / "missing_upload_manifest.csv"
+    prior_status = tmp_path / "cxalloy_report_status.json"
+    write_csv(
+        rename_manifest,
+        ["device_name", "output_path", "status"],
+        [
+            {
+                "device_name": "IAD06-PDU6-01A-1",
+                "output_path": str(report.relative_to(tmp_path)),
+                "status": "copied",
+            }
+        ],
+    )
+    current_hash = uploader_group_hash([report])
+    prior_status.write_text(
+        json.dumps(
+            {
+                "records": [
+                    {
+                        "equipment_id": "IAD06-PDU6-01A-1",
+                        "target_equipment": "PDU6-01A-1",
+                        "upload_status": "uploaded",
+                        "current_sha256": current_hash,
+                        "last_attempt_status": "uploaded",
+                        "last_attempt_at": "2026-08-06T09:00:00-04:00",
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    payload = build_cxalloy_report_status(
+        rename_manifest,
+        upload_manifest,
+        tmp_path,
+        prior_status_manifest=prior_status,
+    )
+
+    assert payload["summary"]["uploaded_equipment"] == 1
+    assert payload["records"][0]["upload_status"] == "uploaded"
+    assert payload["records"][0]["last_attempt_status"] == "uploaded"
+
+    report.write_bytes(b"updated report must be uploaded again")
+    changed = build_cxalloy_report_status(
+        rename_manifest,
+        upload_manifest,
+        tmp_path,
+        prior_status_manifest=prior_status,
+    )
+    assert changed["records"][0]["upload_status"] == "pending"

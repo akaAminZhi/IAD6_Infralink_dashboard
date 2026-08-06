@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 
 import { NetaReportManifestProvider } from "../contexts/NetaReportManifestContext";
 import { makeDashboardData } from "../test/fixtures";
+import type { KprSummary } from "../types/data";
 import { EquipmentPage } from "./EquipmentPage";
 
 describe("EquipmentPage", () => {
@@ -65,5 +66,36 @@ describe("EquipmentPage", () => {
     expect(screen.getByText("IEM")).toBeInTheDocument();
     expect(screen.getByText("PDU54SHAM")).toBeInTheDocument();
     expect(screen.getByText("J02PDU000-00032")).toBeInTheDocument();
+  });
+
+  it("applies an exact KPR lifecycle-stage equipment cohort", () => {
+    const data = makeDashboardData({
+      pdms: [
+        {
+          pdm_name: "PDM-A",
+          equipment: [{ equipment_id: "IAD06-EQ-IN", source_equipment_label: "EQ-IN" }],
+        },
+        {
+          pdm_name: "PDM-B",
+          equipment: [{ equipment_id: "IAD06-EQ-OUT", source_equipment_label: "EQ-OUT" }],
+        },
+      ],
+      kprSummary: {
+        equipment_lifecycle: {
+          stages: [{ key: "ifc", equipment_ids: ["IAD06-EQ-IN"] }],
+        },
+      } as unknown as KprSummary,
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/equipment?lifecycleStage=ifc"]}>
+        <NetaReportManifestProvider manifest={null}>
+          <EquipmentPage data={data} />
+        </NetaReportManifestProvider>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText("IAD06-EQ-IN")).toBeInTheDocument();
+    expect(screen.queryByText("IAD06-EQ-OUT")).not.toBeInTheDocument();
   });
 });

@@ -56,25 +56,34 @@ const defaultFilters: IssueFiltersState = {
 
 function getFiltersFromSearchParams(searchParams: URLSearchParams): IssueFiltersState {
   const sevenDayParam = searchParams.get("sevenDay");
+  const dueStateParam = searchParams.get("dueState")?.trim() ?? "";
+  const dueState = ["Overdue", "Due Soon", "No Due Date", "Normal", "Closed"].includes(
+    dueStateParam,
+  )
+    ? (dueStateParam as IssueFiltersState["dueState"])
+    : "";
+  const filters: IssueFiltersState = {
+    ...defaultFilters,
+    dueState,
+    missingImageOnly: searchParams.get("missingImageOnly") === "1",
+    openOnly: searchParams.get("openOnly") === "1",
+  };
 
   if (sevenDayParam === "new") {
     return {
-      ...defaultFilters,
+      ...filters,
       createdSinceBaselineOnly: true,
     };
   }
 
   if (sevenDayParam === "resolved") {
     return {
-      ...defaultFilters,
+      ...filters,
       resolvedSinceBaselineOnly: true,
     };
   }
 
-  return {
-    ...defaultFilters,
-    openOnly: searchParams.get("openOnly") === "1",
-  };
+  return filters;
 }
 
 function normalizeFilterValue(value: unknown): string {
@@ -127,8 +136,14 @@ function filterIssues(
     if (filters.issueType && getInferredIssueType(issue) !== filters.issueType) {
       return false;
     }
-    if (filters.status && normalizeFilterValue(issue.status) !== filters.status) {
-      return false;
+    if (filters.status) {
+      if (filters.status === "Open") {
+        if (!isOpenIssue(issue)) {
+          return false;
+        }
+      } else if (normalizeFilterValue(issue.status) !== filters.status) {
+        return false;
+      }
     }
     if (filters.priority && normalizeFilterValue(issue.priority) !== filters.priority) {
       return false;
@@ -174,6 +189,34 @@ function filterIssues(
   });
 }
 
+function getIssueStatusFilterOptions(issues: EnrichedIssue[]): string[] {
+  const statuses = new Set<string>();
+  for (const issue of issues) {
+    statuses.add(isOpenIssue(issue) ? "Open" : normalizeFilterValue(issue.status));
+  }
+  return Array.from(statuses).sort((a, b) => a.localeCompare(b));
+}
+
+function getKprCaseFilterIds(data: DashboardData, filter: string): Set<string> | null {
+  if (!filter) {
+    return null;
+  }
+
+  const performance = data.kprSummary?.issue_performance;
+  const valuesByFilter: Record<string, string[] | undefined> = {
+    currentOpen: performance?.current_open_case_ids,
+    monthStartOpen: performance?.month_start_open_case_ids,
+    newIssues: performance?.new_issue_case_ids,
+    openOver30Days: performance?.open_over_30_days_case_ids,
+    overdueOpen: performance?.overdue_open_case_ids,
+    resolvedIssues: performance?.resolved_issue_case_ids,
+    urgentHighOpen: performance?.urgent_high_open_case_ids,
+    latestOpen: data.kprSummary?.current_snapshot?.open_issue_case_ids,
+  };
+
+  return new Set((valuesByFilter[filter] ?? []).map(normalizeCaseId).filter(Boolean));
+}
+
 function dueSortValue(issue: EnrichedIssue): number {
   const order = {
     Overdue: 5,
@@ -200,6 +243,7 @@ function sortIssues(issues: EnrichedIssue[]): EnrichedIssue[] {
 export function IssuesPage({ data }: IssuesPageProps) {
   const [searchParams] = useSearchParams();
   const searchParamsKey = searchParams.toString();
+  const kprFilterParam = searchParams.get("kprFilter")?.trim() ?? "";
   const [filters, setFilters] = useState<IssueFiltersState>(() =>
     getFiltersFromSearchParams(searchParams),
   );
@@ -231,9 +275,13 @@ export function IssuesPage({ data }: IssuesPageProps) {
     [data.historyComparison],
   );
   const summaryMetrics = useMemo(() => getIssueSummaryMetrics(enrichedIssues), [enrichedIssues]);
+  const kprCaseFilterIds = useMemo(
+    () => getKprCaseFilterIds(data, kprFilterParam),
+    [data, kprFilterParam],
+  );
   const filterOptions = useMemo(
     () => ({
-      statuses: getUniqueFilterOptions(enrichedIssues, "status"),
+      statuses: getIssueStatusFilterOptions(enrichedIssues),
       priorities: getUniqueFilterOptions(enrichedIssues, "priority"),
       assignees: getAssigneeFilterOptions(enrichedIssues),
       dueStates: getUniqueFilterOptions(enrichedIssues, "due_state"),
@@ -249,9 +297,19 @@ export function IssuesPage({ data }: IssuesPageProps) {
           filters,
           newCaseIdsSinceBaseline,
           resolvedCaseIdsSinceBaseline,
+        ).filter(
+          (issue) =>
+            kprCaseFilterIds === null ||
+            kprCaseFilterIds.has(normalizeCaseId(issue.case_id)),
         ),
       ),
-    [enrichedIssues, filters, newCaseIdsSinceBaseline, resolvedCaseIdsSinceBaseline],
+    [
+      enrichedIssues,
+      filters,
+      kprCaseFilterIds,
+      newCaseIdsSinceBaseline,
+      resolvedCaseIdsSinceBaseline,
+    ],
   );
   const visibleIssues = useMemo(
     () => filteredIssues.filter((issue) => !excludedIssueIds.has(issue.row_id)),
@@ -308,14 +366,16 @@ export function IssuesPage({ data }: IssuesPageProps) {
   function handleSelectStatusFilter(status: string) {
     setSelectedIssue(null);
     setFilters((currentFilters) =>
-      currentFilters.status === status &&
+      ((status === "Open" && currentFilters.openOnly && !currentFilters.status) ||
+        currentFilters.status === status) &&
       !currentFilters.createdYesterdayOnly &&
       !currentFilters.createdSinceBaselineOnly &&
       !currentFilters.resolvedSinceBaselineOnly
         ? defaultFilters
         : {
             ...defaultFilters,
-            status,
+            openOnly: status === "Open",
+            status: status === "Open" ? "" : status,
           },
     );
   }
@@ -343,7 +403,7 @@ export function IssuesPage({ data }: IssuesPageProps) {
       <IssueSummaryCards
         activeSevenDayFilter={activeSevenDayFilter}
         activeYesterdayFilter={activeYesterdayFilter}
-        activeStatusFilter={filters.status}
+        activeStatusFilter={filters.openOnly ? "Open" : filters.status}
         historyComparison={data.historyComparison}
         issues={enrichedIssues}
         metrics={summaryMetrics}

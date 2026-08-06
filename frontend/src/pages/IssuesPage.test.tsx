@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import { IssueAttachmentManifestProvider } from "../contexts/IssueAttachmentManifestContext";
 import { NetaReportManifestProvider } from "../contexts/NetaReportManifestContext";
 import { makeDashboardData } from "../test/fixtures";
+import type { KprSummary } from "../types/data";
 import { IssuesPage } from "./IssuesPage";
 
 describe("IssuesPage", () => {
@@ -72,5 +73,89 @@ describe("IssuesPage", () => {
 
     await user.click(screen.getByRole("button", { name: "Restore 1" }));
     expect(screen.getByText("CASE-CT")).toBeInTheDocument();
+  });
+
+  it("applies combined open and overdue filters from an Overview URL", () => {
+    const data = makeDashboardData({
+      cases: [
+        {
+          case_id: "CASE-OVERDUE",
+          equipment_id: "EQ-1",
+          status: "Open",
+          due_date: "2020-01-01",
+        },
+        {
+          case_id: "CASE-NO-DUE",
+          equipment_id: "EQ-2",
+          status: "Open",
+          due_date: null,
+        },
+      ],
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/issues?openOnly=1&dueState=Overdue"]}>
+        <IssueAttachmentManifestProvider manifest={null}>
+          <NetaReportManifestProvider manifest={null}>
+            <IssuesPage data={data} />
+          </NetaReportManifestProvider>
+        </IssueAttachmentManifestProvider>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText("CASE-OVERDUE")).toBeInTheDocument();
+    expect(screen.queryByText("CASE-NO-DUE")).not.toBeInTheDocument();
+  });
+
+  it("groups Open and Acknowledged as one open-issue filter", async () => {
+    const user = userEvent.setup();
+    const data = makeDashboardData({
+      cases: [
+        { case_id: "CASE-OPEN", equipment_id: "EQ-1", status: "Open" },
+        { case_id: "CASE-ACK", equipment_id: "EQ-2", status: "Acknowledged" },
+        { case_id: "CASE-RESOLVED", equipment_id: "EQ-3", status: "Resolved" },
+      ],
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/issues"]}>
+        <IssueAttachmentManifestProvider manifest={null}>
+          <NetaReportManifestProvider manifest={null}>
+            <IssuesPage data={data} />
+          </NetaReportManifestProvider>
+        </IssueAttachmentManifestProvider>
+      </MemoryRouter>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Open 2 - 67%" }));
+
+    expect(screen.getByText("CASE-OPEN")).toBeInTheDocument();
+    expect(screen.getByText("CASE-ACK")).toBeInTheDocument();
+    expect(screen.queryByText("CASE-RESOLVED")).not.toBeInTheDocument();
+  });
+
+  it("applies an exact KPR issue cohort", () => {
+    const data = makeDashboardData({
+      cases: [
+        { case_id: "CASE-IN", equipment_id: "EQ-1", status: "Open" },
+        { case_id: "CASE-OUT", equipment_id: "EQ-2", status: "Open" },
+      ],
+      kprSummary: {
+        issue_performance: { current_open_case_ids: ["CASE-IN"] },
+      } as unknown as KprSummary,
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/issues?kprFilter=currentOpen"]}>
+        <IssueAttachmentManifestProvider manifest={null}>
+          <NetaReportManifestProvider manifest={null}>
+            <IssuesPage data={data} />
+          </NetaReportManifestProvider>
+        </IssueAttachmentManifestProvider>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText("CASE-IN")).toBeInTheDocument();
+    expect(screen.queryByText("CASE-OUT")).not.toBeInTheDocument();
   });
 });

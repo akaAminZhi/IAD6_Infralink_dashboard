@@ -65,6 +65,25 @@ describe("OverviewPage", () => {
     );
   });
 
+  it("navigates management exceptions with an applied EPS status filter", async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={["/overview"]}>
+        <Routes>
+          <Route path="/overview" element={<OverviewPage data={overviewData()} />} />
+          <Route path="/eps-test-execution" element={<LocationProbe />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: /Waiting Infralink NETA completion/i }),
+    );
+    expect(screen.getByTestId("location")).toHaveTextContent(
+      "/eps-test-execution?status=Complete%2C%20Waiting%20Infralink%20NETA%20Completion",
+    );
+  });
+
   it("opens a PDM action detail over Overview without changing routes", async () => {
     const user = userEvent.setup();
     render(

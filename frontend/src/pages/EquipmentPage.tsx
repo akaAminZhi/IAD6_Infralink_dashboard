@@ -185,6 +185,41 @@ function getNewNetaCompleteIds(data: DashboardData): Set<string> {
   );
 }
 
+function getKprEquipmentFilterIds(
+  data: DashboardData,
+  kprFilter: string,
+  lifecycleStage: string,
+): Set<string> | null {
+  if (!kprFilter && !lifecycleStage) {
+    return null;
+  }
+
+  let values: string[] = [];
+  if (kprFilter === "netaCompletedMonth") {
+    values = data.kprSummary?.monthly_progress.neta.completed_month_equipment_ids ?? [];
+  } else if (kprFilter === "netaCompletePeriodEnd") {
+    values = data.kprSummary?.monthly_progress.neta.period_end_complete_equipment_ids ?? [];
+  } else if (kprFilter === "netaCompleteLatest") {
+    values = data.kprSummary?.current_snapshot?.neta_complete_equipment_ids ?? [];
+  } else if (lifecycleStage) {
+    values =
+      data.kprSummary?.equipment_lifecycle.stages.find(
+        (stage) => stage.key === lifecycleStage,
+      )?.equipment_ids ?? [];
+  }
+
+  return new Set(values.map(normalizeEquipmentKey).filter(Boolean));
+}
+
+function equipmentRowMatchesIds(
+  row: FlattenedEquipmentRow,
+  equipmentIds: Set<string>,
+): boolean {
+  return [row.display_equipment_id, row.equipment_id, row.source_equipment_label].some((value) =>
+    equipmentIds.has(normalizeEquipmentKey(value)),
+  );
+}
+
 function getNewNetaCompleteDisplayCount(
   equipmentRows: FlattenedEquipmentRow[],
   newNetaCompleteIds: Set<string>,
@@ -207,6 +242,8 @@ export function EquipmentPage({ data }: EquipmentPageProps) {
   const [searchParams] = useSearchParams();
   const quickFilterParam = searchParams.get("quickFilter");
   const statusParam = searchParams.get("status")?.trim() ?? "";
+  const kprFilterParam = searchParams.get("kprFilter")?.trim() ?? "";
+  const lifecycleStageParam = searchParams.get("lifecycleStage")?.trim() ?? "";
   const [filters, setFilters] = useState<EquipmentFiltersState>(() =>
     statusParam
       ? { ...getFiltersForQuickFilter(quickFilterParam), status: statusParam }
@@ -228,6 +265,10 @@ export function EquipmentPage({ data }: EquipmentPageProps) {
   );
   const summaryMetrics = useMemo(() => getEquipmentSummaryMetrics(equipmentRows), [equipmentRows]);
   const newNetaCompleteIds = useMemo(() => getNewNetaCompleteIds(data), [data]);
+  const kprEquipmentFilterIds = useMemo(
+    () => getKprEquipmentFilterIds(data, kprFilterParam, lifecycleStageParam),
+    [data, kprFilterParam, lifecycleStageParam],
+  );
   const newNetaCompleteCount = useMemo(
     () => getNewNetaCompleteDisplayCount(equipmentRows, newNetaCompleteIds),
     [equipmentRows, newNetaCompleteIds],
@@ -240,10 +281,14 @@ export function EquipmentPage({ data }: EquipmentPageProps) {
     }),
     [equipmentRows],
   );
-  const filteredRows = useMemo(
-    () => sortEquipmentRows(filterEquipmentRows(equipmentRows, deferredFilters, newNetaCompleteIds)),
-    [deferredFilters, equipmentRows, newNetaCompleteIds],
-  );
+  const filteredRows = useMemo(() => {
+    const rows = filterEquipmentRows(equipmentRows, deferredFilters, newNetaCompleteIds);
+    return sortEquipmentRows(
+      kprEquipmentFilterIds === null
+        ? rows
+        : rows.filter((row) => equipmentRowMatchesIds(row, kprEquipmentFilterIds)),
+    );
+  }, [deferredFilters, equipmentRows, kprEquipmentFilterIds, newNetaCompleteIds]);
   const selectedGroup = useMemo(() => {
     if (!selectedEquipment) {
       return [];

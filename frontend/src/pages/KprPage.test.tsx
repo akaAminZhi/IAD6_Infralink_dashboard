@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 
 import type { DashboardData, KprSummary } from "../types/data";
@@ -181,9 +182,22 @@ function dashboardData(summary: KprSummary): DashboardData {
   };
 }
 
+function renderKprPage(summary: KprSummary) {
+  return render(
+    <MemoryRouter>
+      <KprPage data={dashboardData(summary)} />
+    </MemoryRouter>,
+  );
+}
+
+function CurrentLocation() {
+  const location = useLocation();
+  return <div>{`${location.pathname}${location.search}`}</div>;
+}
+
 describe("KprPage", () => {
   it("shows the previous complete month and a separate current snapshot", () => {
-    render(<KprPage data={dashboardData(kprSummary())} />);
+    renderKprPage(kprSummary());
 
     expect(screen.getByText("Last complete month")).toBeInTheDocument();
     expect(screen.getByText("Current Snapshot")).toBeInTheDocument();
@@ -197,13 +211,12 @@ describe("KprPage", () => {
     expect(screen.getAllByText("Test Item").length).toBeGreaterThan(0);
     expect(screen.queryByText("PDM Delivery Pipeline")).not.toBeInTheDocument();
     expect(screen.getAllByText("+29").length).toBeGreaterThan(0);
-    expect(
-      screen.getByText(/30 newly complete .* 1 no longer marked complete/i),
-    ).toBeInTheDocument();
+    expect(screen.getByText("30 newly complete")).toBeInTheDocument();
+    expect(screen.getByText(/1 no longer marked complete/i)).toBeInTheDocument();
   });
 
   it("uses daily reports as the 3rd party execution source", () => {
-    render(<KprPage data={dashboardData(kprSummary())} />);
+    renderKprPage(kprSummary());
 
     expect(screen.getByText("NETA Equipment Movement")).toBeInTheDocument();
     expect(screen.getByText("Latest Aug 5")).toBeInTheDocument();
@@ -235,7 +248,7 @@ describe("KprPage", () => {
       ],
     });
 
-    render(<KprPage data={dashboardData(summary)} />);
+    renderKprPage(summary);
 
     expect(screen.getByText("Current Failed")).toBeInTheDocument();
     expect(screen.getByText("Fixed After Failure")).toBeInTheDocument();
@@ -315,7 +328,7 @@ describe("KprPage", () => {
       },
     });
 
-    render(<KprPage data={dashboardData(summary)} />);
+    renderKprPage(summary);
 
     expect(screen.getByText("Equipment Lifecycle")).toBeInTheDocument();
     expect(screen.getByText("210 forward")).toBeInTheDocument();
@@ -337,7 +350,7 @@ describe("KprPage", () => {
         is_later_than_report: false,
       },
     });
-    render(<KprPage data={dashboardData(summary)} />);
+    renderKprPage(summary);
 
     expect(screen.getByText("Month to date")).toBeInTheDocument();
     expect(screen.queryByText("Current Snapshot")).not.toBeInTheDocument();
@@ -345,7 +358,7 @@ describe("KprPage", () => {
 
   it("toggles Presentation Mode without losing report content", async () => {
     const user = userEvent.setup();
-    render(<KprPage data={dashboardData(kprSummary())} />);
+    renderKprPage(kprSummary());
 
     await user.click(
       screen.getByRole("button", { name: "Presentation mode" }),
@@ -357,11 +370,31 @@ describe("KprPage", () => {
   });
 
   it("shows an actionable empty state when KPR data is missing", () => {
-    render(<KprPage data={dashboardData(null as unknown as KprSummary)} />);
+    renderKprPage(null as unknown as KprSummary);
 
     expect(
       screen.getByText("Monthly KPR data is not available."),
     ).toBeInTheDocument();
     expect(screen.getByText(/run python scripts\/etl\/run_etl.py/i)).toBeInTheDocument();
+  });
+
+  it("opens a filtered detail route from a metric", async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={["/kpr"]}>
+        <Routes>
+          <Route element={<KprPage data={dashboardData(kprSummary())} />} path="/kpr" />
+          <Route element={<CurrentLocation />} path="/eps-test-execution" />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: "Show current failed test items" }),
+    );
+
+    expect(
+      screen.getByText("/eps-test-execution?testItemFilter=Failed"),
+    ).toBeInTheDocument();
   });
 });

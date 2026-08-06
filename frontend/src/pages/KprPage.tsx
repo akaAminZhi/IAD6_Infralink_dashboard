@@ -15,7 +15,8 @@ import {
   ShieldCheck,
   TrendingUp,
 } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   CartesianGrid,
   Line,
@@ -42,6 +43,8 @@ import { formatDateTime, formatNumber } from "../utils/formatters";
 interface KprPageProps {
   data: DashboardData;
 }
+
+type NavigateFromKpr = (path: string) => void;
 
 type MetricTone = "blue" | "green" | "red" | "teal" | "slate";
 type MetricScope = "pdm" | "equipment" | "test_item" | "issue";
@@ -139,6 +142,36 @@ function SectionHeading({
   );
 }
 
+function DrilldownSurface({
+  children,
+  className,
+  label,
+  onOpen,
+}: {
+  children: ReactNode;
+  className?: string;
+  label: string;
+  onOpen?: () => void;
+}) {
+  if (!onOpen) {
+    return <div className={className}>{children}</div>;
+  }
+
+  return (
+    <button
+      aria-label={label}
+      className={cn(
+        "group w-full text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+        className,
+      )}
+      onClick={onOpen}
+      type="button"
+    >
+      {children}
+    </button>
+  );
+}
+
 function MetricUnitLegend() {
   const units: Array<{ scope: MetricScope; description: string }> = [
     { scope: "pdm", description: "delivery group" },
@@ -160,7 +193,13 @@ function MetricUnitLegend() {
   );
 }
 
-function ExecutiveSummary({ summary }: { summary: KprSummary }) {
+function ExecutiveSummary({
+  onNavigate,
+  summary,
+}: {
+  onNavigate: NavigateFromKpr;
+  summary: KprSummary;
+}) {
   const netaNetChange =
     summary.executive_summary.neta_net_change_month ??
     summary.executive_summary.neta_complete_current -
@@ -181,6 +220,7 @@ function ExecutiveSummary({ summary }: { summary: KprSummary }) {
       detail: "Current portfolio",
       icon: CirclePlay,
       tone: "blue" as const,
+      path: "/pdms?quickFilter=testingStarted",
     },
     {
       label: "Fully Ready PDMs",
@@ -189,6 +229,7 @@ function ExecutiveSummary({ summary }: { summary: KprSummary }) {
       detail: "No readiness blockers",
       icon: ShieldCheck,
       tone: "green" as const,
+      path: "/pdms?quickFilter=fullyReady",
     },
     {
       label: "NETA Equipment Change",
@@ -201,6 +242,7 @@ function ExecutiveSummary({ summary }: { summary: KprSummary }) {
       )} new / ${formatNumber(netaNoLongerComplete)} no longer marked`,
       icon: ClipboardCheck,
       tone: "teal" as const,
+      path: null,
     },
     {
       label: "3rd Party Tests Passed",
@@ -211,6 +253,7 @@ function ExecutiveSummary({ summary }: { summary: KprSummary }) {
       )} daily-report cumulative at ${shortDate(summary.period.end_date)}`,
       icon: Activity,
       tone: "blue" as const,
+      path: "/eps-test-execution?kprFilter=passedMonth",
     },
     {
       label: "New Issues",
@@ -219,6 +262,7 @@ function ExecutiveSummary({ summary }: { summary: KprSummary }) {
       detail: `${formatNumber(summary.executive_summary.current_open_issues)} current open`,
       icon: AlertTriangle,
       tone: "red" as const,
+      path: "/issues?kprFilter=newIssues",
     },
     {
       label: "Resolved Issues",
@@ -227,6 +271,7 @@ function ExecutiveSummary({ summary }: { summary: KprSummary }) {
       detail: "Closed during period",
       icon: CheckCheck,
       tone: "green" as const,
+      path: "/issues?kprFilter=resolvedIssues",
     },
   ];
 
@@ -245,13 +290,16 @@ function ExecutiveSummary({ summary }: { summary: KprSummary }) {
             const Icon = metric.icon;
             const tone = metricToneClasses[metric.tone];
             return (
-              <div
+              <DrilldownSurface
                 className={cn(
                   "min-h-28 px-5 py-4",
+                  metric.path && "hover:bg-slate-50",
                   index < metrics.length - 1 && "border-b xl:border-b-0 xl:border-r",
                   index % 2 === 0 && "sm:border-r xl:border-r",
                 )}
                 key={metric.label}
+                label={`Open ${metric.label}`}
+                onOpen={metric.path ? () => onNavigate(metric.path) : undefined}
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex flex-wrap items-center gap-1.5">
@@ -262,11 +310,16 @@ function ExecutiveSummary({ summary }: { summary: KprSummary }) {
                   </div>
                   <Icon className={`h-4 w-4 ${tone.icon}`} aria-hidden="true" />
                 </div>
-                <div className={`mt-2 text-2xl font-semibold ${tone.value}`}>
-                  {metric.value}
+                <div className="mt-2 flex items-center justify-between gap-3">
+                  <div className={`text-2xl font-semibold ${tone.value}`}>
+                    {metric.value}
+                  </div>
+                  {metric.path ? (
+                    <ArrowRight className="h-4 w-4 text-slate-400 transition-transform group-hover:translate-x-0.5 group-hover:text-primary" aria-hidden="true" />
+                  ) : null}
                 </div>
                 <div className="mt-1 text-xs text-muted-foreground">{metric.detail}</div>
-              </div>
+              </DrilldownSurface>
             );
           })}
         </div>
@@ -324,6 +377,7 @@ function TrendPanel({
   icon,
   metric,
   name,
+  onOpen,
   scope,
   title,
   trends,
@@ -335,6 +389,7 @@ function TrendPanel({
   icon: ReactNode;
   metric: string;
   name: string;
+  onOpen?: () => void;
   scope: MetricScope;
   title: string;
   trends: KprTrendPoint[];
@@ -342,15 +397,24 @@ function TrendPanel({
   return (
     <section className="min-w-0 p-5 xl:border-r xl:last:border-r-0">
       <div className="flex items-start justify-between gap-4">
-        <div>
+        <DrilldownSurface
+          className={cn("min-w-0", onOpen && "rounded-md hover:bg-slate-50")}
+          label={`Open ${title}`}
+          onOpen={onOpen}
+        >
           <div className="flex items-center gap-2 text-sm font-semibold text-slate-950">
             {icon}
             {title}
             <MetricScopeBadge scope={scope} />
           </div>
-          <div className="mt-2 text-3xl font-semibold text-slate-950">{metric}</div>
+          <div className="mt-2 flex items-center gap-3">
+            <div className="text-3xl font-semibold text-slate-950">{metric}</div>
+            {onOpen ? (
+              <ArrowRight className="h-4 w-4 text-slate-400 transition-transform group-hover:translate-x-0.5 group-hover:text-primary" aria-hidden="true" />
+            ) : null}
+          </div>
           <div className="mt-1 text-xs text-muted-foreground">{detail}</div>
-        </div>
+        </DrilldownSurface>
         <span
           className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full"
           style={{ backgroundColor: accentColor }}
@@ -395,7 +459,13 @@ function TrendPanel({
   );
 }
 
-function FailureTypeBreakdown({ summary }: { summary: KprSummary }) {
+function FailureTypeBreakdown({
+  onNavigate,
+  summary,
+}: {
+  onNavigate: NavigateFromKpr;
+  summary: KprSummary;
+}) {
   const failureTypes = summary.eps_failure_types;
   const failureHistoryTotal = failureTypes.reduce(
     (total, item) => total + item.failure_history_total,
@@ -428,7 +498,11 @@ function FailureTypeBreakdown({ summary }: { summary: KprSummary }) {
       {failureTypes.length > 0 ? (
         <>
           <div className="mt-4 grid overflow-hidden rounded-md border sm:grid-cols-3">
-            <div className="border-b border-red-200 bg-red-50/60 px-4 py-3 sm:border-b-0 sm:border-r">
+            <DrilldownSurface
+              className="border-b border-red-200 bg-red-50/60 px-4 py-3 hover:bg-red-50 sm:border-b-0 sm:border-r"
+              label="Show current failed test items"
+              onOpen={() => onNavigate("/eps-test-execution?testItemFilter=Failed")}
+            >
               <div className="text-3xl font-semibold text-red-800">
                 {formatNumber(currentFailed)}
               </div>
@@ -438,8 +512,12 @@ function FailureTypeBreakdown({ summary }: { summary: KprSummary }) {
               <div className="mt-1 text-xs text-red-700/80">
                 {`${currentFailedShare.toFixed(1)}% of failure history`}
               </div>
-            </div>
-            <div className="border-b border-teal-200 bg-teal-50/60 px-4 py-3 sm:border-b-0 sm:border-r">
+            </DrilldownSurface>
+            <DrilldownSurface
+              className="border-b border-teal-200 bg-teal-50/60 px-4 py-3 hover:bg-teal-50 sm:border-b-0 sm:border-r"
+              label="Show test items fixed after failure"
+              onOpen={() => onNavigate("/eps-test-execution?testItemFilter=Fixed")}
+            >
               <div className="text-3xl font-semibold text-teal-800">
                 {formatNumber(fixedAfterFailure)}
               </div>
@@ -449,7 +527,7 @@ function FailureTypeBreakdown({ summary }: { summary: KprSummary }) {
               <div className="mt-1 text-xs text-teal-700/80">
                 {`${fixedAfterFailureShare.toFixed(1)}% of failure history`}
               </div>
-            </div>
+            </DrilldownSurface>
             <div className="bg-slate-50 px-4 py-3">
               <div className="text-3xl font-semibold text-slate-950">
                 {formatNumber(failureHistoryTotal)}
@@ -508,9 +586,17 @@ function FailureTypeBreakdown({ summary }: { summary: KprSummary }) {
               const itemFixedShare =
                 (item.fixed_after_failure / itemStatusTotal) * 100;
               return (
-                <div
-                  className="grid grid-cols-[1fr_auto_auto] items-center gap-3 border-b py-3 last:border-b-0 sm:grid-cols-[minmax(190px,260px)_80px_80px_1fr_70px]"
+                <button
+                  className="group grid w-full grid-cols-[1fr_auto_auto] items-center gap-3 border-b py-3 text-left transition-colors last:border-b-0 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring sm:grid-cols-[minmax(190px,260px)_80px_80px_1fr_70px]"
                   key={item.tracker_type}
+                  onClick={() =>
+                    onNavigate(
+                      `/eps-test-execution?testItemFilter=Failure%20History&trackerType=${encodeURIComponent(
+                        item.tracker_type,
+                      )}`,
+                    )
+                  }
+                  type="button"
                 >
                   <div className="min-w-0 text-xs font-semibold text-slate-900">
                     {item.tracker_type}
@@ -557,7 +643,7 @@ function FailureTypeBreakdown({ summary }: { summary: KprSummary }) {
                   <div className="text-right text-sm font-semibold tabular-nums text-slate-700">
                     {`${historyShare.toFixed(1)}%`}
                   </div>
-                </div>
+                </button>
               );
             })}
           </div>
@@ -571,7 +657,13 @@ function FailureTypeBreakdown({ summary }: { summary: KprSummary }) {
   );
 }
 
-function MonthlyProgress({ summary }: { summary: KprSummary }) {
+function MonthlyProgress({
+  onNavigate,
+  summary,
+}: {
+  onNavigate: NavigateFromKpr;
+  summary: KprSummary;
+}) {
   const trends = summary.monthly_trends;
   const progress = summary.monthly_progress;
   const netaNetChange =
@@ -618,14 +710,18 @@ function MonthlyProgress({ summary }: { summary: KprSummary }) {
                 </div>
                 <div className="text-[11px] text-muted-foreground">Month start</div>
               </div>
-              <div className="px-3">
+              <DrilldownSurface
+                className="px-3 hover:bg-teal-50"
+                label="Show NETA complete equipment at period end"
+                onOpen={() => onNavigate("/equipment?kprFilter=netaCompletePeriodEnd")}
+              >
                 <div className="text-lg font-semibold text-teal-800">
                   {formatNumber(progress.neta.current_complete)}
                 </div>
                 <div className="text-[11px] text-muted-foreground">
                   {`Period end ${shortDate(summary.period.end_date)}`}
                 </div>
-              </div>
+              </DrilldownSurface>
               {hasLaterSnapshot ? (
                 <div className="pl-3">
                   <div className="text-lg font-semibold text-emerald-700">
@@ -653,10 +749,15 @@ function MonthlyProgress({ summary }: { summary: KprSummary }) {
                 </strong>
               ) : null}
             </div>
-            <div className="mt-2 text-right text-[11px] text-muted-foreground">
-              {`${formatNumber(progress.neta.completed_month)} newly complete | ${formatNumber(
-                netaNoLongerComplete,
-              )} no longer marked complete`}
+            <div className="mt-2 flex items-center justify-end gap-1 text-[11px] text-muted-foreground">
+              <button
+                className="font-medium text-teal-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                onClick={() => onNavigate("/equipment?kprFilter=netaCompletedMonth")}
+                type="button"
+              >
+                {`${formatNumber(progress.neta.completed_month)} newly complete`}
+              </button>
+              <span>{`| ${formatNumber(netaNoLongerComplete)} no longer marked complete`}</span>
             </div>
           </TrendPanel>
 
@@ -670,8 +771,13 @@ function MonthlyProgress({ summary }: { summary: KprSummary }) {
             scope="test_item"
             title="3rd Party Test Activity"
             trends={trends}
+            onOpen={() => onNavigate("/eps-test-execution?kprFilter=passedMonth")}
           >
-            <div className="flex items-center justify-between gap-4 rounded-md border border-blue-200 bg-blue-50/50 px-3 py-2">
+            <DrilldownSurface
+              className="flex items-center justify-between gap-4 rounded-md border border-blue-200 bg-blue-50/50 px-3 py-2 hover:bg-blue-50"
+              label="Show cumulative passed test items at period end"
+              onOpen={() => onNavigate("/eps-test-execution?kprFilter=passedPeriodEnd")}
+            >
               <div>
                 <div className="text-[11px] font-semibold uppercase text-blue-800">
                   Daily Report Cumulative
@@ -688,7 +794,7 @@ function MonthlyProgress({ summary }: { summary: KprSummary }) {
                   {`Period end ${shortDate(summary.period.end_date)}`}
                 </div>
               </div>
-            </div>
+            </DrilldownSurface>
             <div className="mt-3 text-[11px] text-muted-foreground">
               Source: Daily Test Reports
             </div>
@@ -706,38 +812,53 @@ function MonthlyProgress({ summary }: { summary: KprSummary }) {
             scope="issue"
             title="Issue Backlog"
             trends={trends}
+            onOpen={() => onNavigate("/issues?kprFilter=currentOpen")}
           >
             <div className="grid grid-cols-3 divide-x">
-              <div className="pr-3">
+              <DrilldownSurface
+                className="pr-3 hover:bg-slate-50"
+                label="Show issues open at month start"
+                onOpen={() => onNavigate("/issues?kprFilter=monthStartOpen")}
+              >
                 <div className="text-lg font-semibold text-slate-800">
                   {formatNumber(progress.issues.month_start_open)}
                 </div>
                 <div className="text-[11px] text-muted-foreground">Month start</div>
-              </div>
-              <div className="px-3">
+              </DrilldownSurface>
+              <DrilldownSurface
+                className="px-3 hover:bg-red-50"
+                label="Show new issues"
+                onOpen={() => onNavigate("/issues?kprFilter=newIssues")}
+              >
                 <div className="text-lg font-semibold text-red-800">
                   {formatNumber(progress.issues.new_issues)}
                 </div>
                 <div className="text-[11px] text-muted-foreground">New issues</div>
-              </div>
-              <div className="pl-3">
+              </DrilldownSurface>
+              <DrilldownSurface
+                className="pl-3 hover:bg-emerald-50"
+                label="Show resolved issues"
+                onOpen={() => onNavigate("/issues?kprFilter=resolvedIssues")}
+              >
                 <div className="text-lg font-semibold text-emerald-700">
                   {formatNumber(progress.issues.resolved_issues)}
                 </div>
                 <div className="text-[11px] text-muted-foreground">Resolved</div>
-              </div>
+              </DrilldownSurface>
             </div>
           </TrendPanel>
         </div>
-        <FailureTypeBreakdown summary={summary} />
+        <FailureTypeBreakdown onNavigate={onNavigate} summary={summary} />
       </CardContent>
     </Card>
   );
 }
 
 function LifecycleStage({
+  onOpen,
   stage,
 }: {
+  onOpen: () => void;
   stage: KprLifecycleStage;
 }) {
   const change = stage.month_change;
@@ -749,12 +870,15 @@ function LifecycleStage({
         : "No change from month start";
 
   return (
-    <div
-      className="relative min-w-0 rounded-md border px-4 py-3"
+    <button
+      aria-label={`Show equipment in ${stage.label}`}
+      className="group relative min-w-0 rounded-md border px-4 py-3 text-left transition hover:-translate-y-0.5 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      onClick={onOpen}
       style={{
         backgroundColor: `${stage.color}0D`,
         borderColor: `${stage.color}55`,
       }}
+      type="button"
     >
       <div className="flex min-h-10 items-start gap-2">
         <span
@@ -797,11 +921,17 @@ function LifecycleStage({
           </div>
         </div>
       </div>
-    </div>
+    </button>
   );
 }
 
-function EquipmentLifecycle({ summary }: { summary: KprSummary }) {
+function EquipmentLifecycle({
+  onNavigate,
+  summary,
+}: {
+  onNavigate: NavigateFromKpr;
+  summary: KprSummary;
+}) {
   const lifecycle = summary.equipment_lifecycle;
   const visibleTransitions = lifecycle.transitions.slice(0, 10);
   const workflowStages = lifecycle.stages.filter((stage) => stage.key !== "unmapped");
@@ -853,7 +983,13 @@ function EquipmentLifecycle({ summary }: { summary: KprSummary }) {
           </div>
           <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-7">
             {workflowStages.map((stage) => (
-              <LifecycleStage key={stage.key} stage={stage} />
+              <LifecycleStage
+                key={stage.key}
+                onOpen={() =>
+                  onNavigate(`/equipment?lifecycleStage=${encodeURIComponent(stage.key)}`)
+                }
+                stage={stage}
+              />
             ))}
           </div>
         </div>
@@ -940,11 +1076,13 @@ function EquipmentLifecycle({ summary }: { summary: KprSummary }) {
 
 function BacklogTerm({
   label,
+  onOpen,
   operator,
   tone,
   value,
 }: {
   label: string;
+  onOpen?: () => void;
   operator?: string;
   tone: MetricTone;
   value: number;
@@ -956,22 +1094,47 @@ function BacklogTerm({
           {operator}
         </div>
       ) : null}
-      <div className="min-w-0 px-3 py-3 text-center">
+      <DrilldownSurface
+        className={cn("min-w-0 px-3 py-3 text-center", onOpen && "hover:bg-white")}
+        label={`Show ${label} issues`}
+        onOpen={onOpen}
+      >
         <div className={`text-2xl font-semibold ${metricToneClasses[tone].value}`}>
           {formatNumber(value)}
         </div>
         <div className="mt-1 text-xs font-medium uppercase text-muted-foreground">{label}</div>
-      </div>
+      </DrilldownSurface>
     </>
   );
 }
 
-function IssuePerformance({ summary }: { summary: KprSummary }) {
+function IssuePerformance({
+  onNavigate,
+  summary,
+}: {
+  onNavigate: NavigateFromKpr;
+  summary: KprSummary;
+}) {
   const issues = summary.issue_performance;
   const exceptionMetrics = [
-    { label: "Overdue Open", value: issues.overdue_open, tone: "red" as const },
-    { label: "Urgent / High", value: issues.urgent_high_open, tone: "red" as const },
-    { label: "Open Over 30 Days", value: issues.open_over_30_days, tone: "red" as const },
+    {
+      label: "Overdue Open",
+      value: issues.overdue_open,
+      tone: "red" as const,
+      path: "/issues?kprFilter=overdueOpen",
+    },
+    {
+      label: "Urgent / High",
+      value: issues.urgent_high_open,
+      tone: "red" as const,
+      path: "/issues?kprFilter=urgentHighOpen",
+    },
+    {
+      label: "Open Over 30 Days",
+      value: issues.open_over_30_days,
+      tone: "red" as const,
+      path: "/issues?kprFilter=openOver30Days",
+    },
     {
       label: "Average Open Age",
       value:
@@ -980,6 +1143,7 @@ function IssuePerformance({ summary }: { summary: KprSummary }) {
           ? "-"
           : `${issues.average_open_age_days.toFixed(1)}d`,
       tone: "slate" as const,
+      path: null,
     },
   ];
 
@@ -997,16 +1161,29 @@ function IssuePerformance({ summary }: { summary: KprSummary }) {
         <div className="grid gap-5 xl:grid-cols-[1.5fr_1fr] xl:items-center">
           <div className="rounded-md border bg-slate-50/60">
             <div className="grid sm:grid-cols-[1fr_auto_1fr_auto_1fr_auto_1fr] sm:items-center">
-              <BacklogTerm label="Month Start" tone="slate" value={issues.month_start_open} />
-              <BacklogTerm label="New" operator="+" tone="red" value={issues.new_issues} />
+              <BacklogTerm
+                label="Month Start"
+                onOpen={() => onNavigate("/issues?kprFilter=monthStartOpen")}
+                tone="slate"
+                value={issues.month_start_open}
+              />
+              <BacklogTerm
+                label="New"
+                onOpen={() => onNavigate("/issues?kprFilter=newIssues")}
+                operator="+"
+                tone="red"
+                value={issues.new_issues}
+              />
               <BacklogTerm
                 label="Resolved"
+                onOpen={() => onNavigate("/issues?kprFilter=resolvedIssues")}
                 operator="-"
                 tone="green"
                 value={issues.resolved_issues}
               />
               <BacklogTerm
                 label="Current Open"
+                onOpen={() => onNavigate("/issues?kprFilter=currentOpen")}
                 operator="="
                 tone="red"
                 value={issues.current_open}
@@ -1021,12 +1198,17 @@ function IssuePerformance({ summary }: { summary: KprSummary }) {
 
           <div className="grid grid-cols-2 gap-x-5 gap-y-4">
             {exceptionMetrics.map((metric) => (
-              <div className="border-l pl-4" key={metric.label}>
+              <DrilldownSurface
+                className={cn("border-l pl-4", metric.path && "hover:bg-slate-50")}
+                key={metric.label}
+                label={`Show ${metric.label} issues`}
+                onOpen={metric.path ? () => onNavigate(metric.path) : undefined}
+              >
                 <div className="text-xs font-medium text-muted-foreground">{metric.label}</div>
                 <div className={`mt-1 text-xl font-semibold ${metricToneClasses[metric.tone].value}`}>
                   {typeof metric.value === "number" ? formatNumber(metric.value) : metric.value}
                 </div>
-              </div>
+              </DrilldownSurface>
             ))}
           </div>
         </div>
@@ -1035,7 +1217,13 @@ function IssuePerformance({ summary }: { summary: KprSummary }) {
   );
 }
 
-function CurrentSnapshot({ summary }: { summary: KprSummary }) {
+function CurrentSnapshot({
+  onNavigate,
+  summary,
+}: {
+  onNavigate: NavigateFromKpr;
+  summary: KprSummary;
+}) {
   const snapshot = summary.current_snapshot;
   const metrics = [
     {
@@ -1043,24 +1231,28 @@ function CurrentSnapshot({ summary }: { summary: KprSummary }) {
       value: snapshot.neta_complete_count,
       icon: ClipboardCheck,
       color: "text-teal-700",
+      path: "/equipment?kprFilter=netaCompleteLatest",
     },
     {
       label: "Daily Report Passed Items",
       value: snapshot.eps_passed_count,
       icon: Activity,
       color: "text-blue-700",
+      path: "/eps-test-execution?kprFilter=passedLatest",
     },
     {
       label: "Failed Test Items",
       value: snapshot.eps_current_failed,
       icon: AlertTriangle,
       color: "text-red-700",
+      path: "/eps-test-execution?testItemFilter=Failed",
     },
     {
       label: "Open Issues",
       value: snapshot.open_issue_count,
       icon: Flag,
       color: "text-red-700",
+      path: "/issues?kprFilter=latestOpen",
     },
   ];
 
@@ -1078,7 +1270,12 @@ function CurrentSnapshot({ summary }: { summary: KprSummary }) {
         {metrics.map((metric) => {
           const Icon = metric.icon;
           return (
-            <div className="flex items-center gap-2.5" key={metric.label}>
+            <DrilldownSurface
+              className="!w-auto flex items-center gap-2.5 rounded-md px-1.5 py-1 hover:bg-white"
+              key={metric.label}
+              label={`Open ${metric.label}`}
+              onOpen={() => onNavigate(metric.path)}
+            >
               <Icon className={`h-4 w-4 ${metric.color}`} aria-hidden="true" />
               <div>
                 <div className="text-lg font-semibold leading-none text-slate-950">
@@ -1088,7 +1285,7 @@ function CurrentSnapshot({ summary }: { summary: KprSummary }) {
                   {metric.label}
                 </div>
               </div>
-            </div>
+            </DrilldownSurface>
           );
         })}
       </div>
@@ -1098,7 +1295,30 @@ function CurrentSnapshot({ summary }: { summary: KprSummary }) {
 
 export function KprPage({ data }: KprPageProps) {
   const [isPresenting, setIsPresenting] = useState(false);
+  const navigate = useNavigate();
   const summary = data.kprSummary;
+
+  useEffect(() => {
+    const storedScrollY = window.sessionStorage.getItem("iad6:kpr-scroll-y");
+    if (!storedScrollY) {
+      return;
+    }
+
+    window.sessionStorage.removeItem("iad6:kpr-scroll-y");
+    const scrollY = Number(storedScrollY);
+    if (!Number.isFinite(scrollY)) {
+      return;
+    }
+
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => window.scrollTo({ top: scrollY }));
+    });
+  }, []);
+
+  const navigateFromKpr: NavigateFromKpr = (path) => {
+    window.sessionStorage.setItem("iad6:kpr-scroll-y", String(window.scrollY));
+    navigate(path, { state: { fromKpr: true } });
+  };
 
   if (!summary) {
     return (
@@ -1161,13 +1381,13 @@ export function KprPage({ data }: KprPageProps) {
       </header>
 
       {summary.current_snapshot.is_later_than_report ? (
-        <CurrentSnapshot summary={summary} />
+        <CurrentSnapshot onNavigate={navigateFromKpr} summary={summary} />
       ) : null}
       <MetricUnitLegend />
-      <ExecutiveSummary summary={summary} />
-      <MonthlyProgress summary={summary} />
-      <EquipmentLifecycle summary={summary} />
-      <IssuePerformance summary={summary} />
+      <ExecutiveSummary onNavigate={navigateFromKpr} summary={summary} />
+      <MonthlyProgress onNavigate={navigateFromKpr} summary={summary} />
+      <EquipmentLifecycle onNavigate={navigateFromKpr} summary={summary} />
+      <IssuePerformance onNavigate={navigateFromKpr} summary={summary} />
     </div>
   );
 }

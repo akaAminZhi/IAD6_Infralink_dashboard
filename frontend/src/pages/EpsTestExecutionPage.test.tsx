@@ -1,8 +1,10 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 
 import { makeDashboardData } from "../test/fixtures";
+import type { KprSummary } from "../types/data";
 import { EpsTestExecutionPage } from "./EpsTestExecutionPage";
 
 vi.mock("@nivo/pie", () => ({
@@ -66,7 +68,11 @@ describe("EpsTestExecutionPage", () => {
       ],
     });
 
-    render(<EpsTestExecutionPage data={data} />);
+    render(
+      <MemoryRouter>
+        <EpsTestExecutionPage data={data} />
+      </MemoryRouter>,
+    );
 
     expect(screen.getByText("PASS-ITEM")).toBeInTheDocument();
     expect(screen.getByText("FAIL-ITEM")).toBeInTheDocument();
@@ -80,5 +86,105 @@ describe("EpsTestExecutionPage", () => {
     expect(screen.queryByText("PASS-ITEM")).not.toBeInTheDocument();
     expect(screen.getByText("FAIL-ITEM")).toBeInTheDocument();
     expect(screen.getByText("Current Failed filter")).toBeInTheDocument();
+  });
+
+  it("applies an EPS status filter supplied by an Overview URL", () => {
+    const data = makeDashboardData({
+      epsTestSummary: {
+        status_counts: {
+          Complete: 1,
+          "Complete, Waiting Infralink NETA Completion": 1,
+        },
+        complete_count: 1,
+        waiting_infralink_neta_count: 1,
+      },
+      epsPdmExecution: [
+        { pdm_name: "PDM-COMPLETE", eps_execution_status: "Complete" },
+        {
+          pdm_name: "PDM-WAITING",
+          eps_execution_status: "Complete, Waiting Infralink NETA Completion",
+        },
+      ],
+      epsModuleExecution: [
+        {
+          pdm_name: "PDM-COMPLETE",
+          module_equipment: "COMPLETE-EQ",
+          eps_test_status: "Complete",
+        },
+        {
+          pdm_name: "PDM-WAITING",
+          module_equipment: "WAITING-EQ",
+          eps_test_status: "Complete, Waiting Infralink NETA Completion",
+        },
+      ],
+    });
+
+    render(
+      <MemoryRouter
+        initialEntries={[
+          "/eps-test-execution?status=Complete%2C%20Waiting%20Infralink%20NETA%20Completion",
+        ]}
+      >
+        <EpsTestExecutionPage data={data} />
+      </MemoryRouter>,
+    );
+
+    expect(
+      screen.getByRole("button", {
+        name: /Complete, Waiting Infralink NETA Completion/i,
+      }),
+    ).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText("PDM-WAITING")).toBeInTheDocument();
+    expect(screen.queryByText("PDM-COMPLETE")).not.toBeInTheDocument();
+  });
+
+  it("matches a KPR passed cohort by exact test item instead of the whole module", () => {
+    const data = makeDashboardData({
+      kprSummary: {
+        monthly_progress: {
+          eps: {
+            daily_passed_month_equipment_ids: ["ITEM-1"],
+          },
+        },
+      } as unknown as KprSummary,
+      epsTestSummary: {
+        test_item_count: 2,
+        passed_test_item_count: 2,
+        status_counts: { Complete: 1 },
+      },
+      epsPdmExecution: [{ pdm_name: "PDM-A", eps_execution_status: "Complete" }],
+      epsModuleExecution: [
+        {
+          pdm_name: "PDM-A",
+          module_equipment: "MODULE-A",
+          eps_test_status: "Complete",
+        },
+      ],
+      epsTestItems: [
+        {
+          pdm_name: "PDM-A",
+          module_equipment: "MODULE-A",
+          equipment_name: "ITEM-1",
+          equipment_key: "ITEM-1",
+          item_status: "Passed",
+        },
+        {
+          pdm_name: "PDM-A",
+          module_equipment: "MODULE-A",
+          equipment_name: "ITEM-2",
+          equipment_key: "ITEM-2",
+          item_status: "Passed",
+        },
+      ],
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/eps-test-execution?kprFilter=passedMonth"]}>
+        <EpsTestExecutionPage data={data} />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText("ITEM-1")).toBeInTheDocument();
+    expect(screen.queryByText("ITEM-2")).not.toBeInTheDocument();
   });
 });

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Activity,
   ArrowDownRight,
@@ -36,6 +36,13 @@ import { formatNumber, formatPercent } from "../utils/summaryUtils";
 interface OverviewPageProps {
   data: DashboardData;
 }
+
+const OVERVIEW_SCROLL_STORAGE_KEY = "iad6:overview-scroll-y";
+const EPS_WAITING_INFRALINK_NETA_STATUS =
+  "Complete, Waiting Infralink NETA Completion";
+const EPS_WAITING_INFRALINK_NETA_PATH = `/eps-test-execution?status=${encodeURIComponent(
+  EPS_WAITING_INFRALINK_NETA_STATUS,
+)}`;
 
 interface PdmActionRow {
   pdm: PdmRecord;
@@ -382,7 +389,7 @@ function ReadinessOverview({
       detail: "Field tests complete",
       icon: FileClock,
       iconClassName: "text-teal-700",
-      path: "/eps-test-execution",
+      path: EPS_WAITING_INFRALINK_NETA_PATH,
     },
     {
       label: "Open Issues",
@@ -692,7 +699,7 @@ function WeeklyMovement({
       icon: Activity,
       iconClassName: "text-blue-700",
       trend: buildTrend(epsPassed, previousEpsPassed, true),
-      path: "/eps-test-execution",
+      path: "/eps-test-execution?activityFilter=sevenDayPassed",
     },
     {
       label: "New Issues",
@@ -800,7 +807,7 @@ function ManagementExceptions({
       count: data.epsTestSummary?.waiting_infralink_neta_count ?? 0,
       icon: FileClock,
       iconClassName: "text-teal-700",
-      path: "/eps-test-execution",
+      path: EPS_WAITING_INFRALINK_NETA_PATH,
       action: "Review EPS",
     },
     {
@@ -818,7 +825,7 @@ function ManagementExceptions({
       count: data.epsTestSummary?.failed_test_item_count ?? 0,
       icon: CircleAlert,
       iconClassName: "text-red-700",
-      path: "/eps-test-execution",
+      path: "/eps-test-execution?testItemFilter=Failed",
       action: "Review failures",
     },
     {
@@ -827,7 +834,7 @@ function ManagementExceptions({
       count: overdueIssues,
       icon: CircleAlert,
       iconClassName: "text-red-700",
-      path: "/issues?openOnly=1",
+      path: "/issues?openOnly=1&dueState=Overdue",
       action: "Review issues",
     },
     {
@@ -984,6 +991,35 @@ export function OverviewPage({ data }: OverviewPageProps) {
   const navigate = useNavigate();
   const [selectedPdm, setSelectedPdm] = useState<PdmRecord | null>(null);
   const actionRows = useMemo(() => getPdmActionRows(data), [data]);
+  const navigateFromOverview = useCallback(
+    (path: string) => {
+      sessionStorage.setItem(OVERVIEW_SCROLL_STORAGE_KEY, String(window.scrollY));
+      navigate(path, { state: { fromOverview: true } });
+    },
+    [navigate],
+  );
+
+  useEffect(() => {
+    const savedPosition = Number(sessionStorage.getItem(OVERVIEW_SCROLL_STORAGE_KEY));
+    if (!Number.isFinite(savedPosition) || savedPosition <= 0) {
+      return;
+    }
+
+    let secondFrame = 0;
+    const firstFrame = window.requestAnimationFrame(() => {
+      window.scrollTo({ behavior: "auto", top: savedPosition });
+      secondFrame = window.requestAnimationFrame(() => {
+        window.scrollTo({ behavior: "auto", top: savedPosition });
+      });
+    });
+
+    return () => {
+      window.cancelAnimationFrame(firstFrame);
+      if (secondFrame) {
+        window.cancelAnimationFrame(secondFrame);
+      }
+    };
+  }, []);
 
   if (data.pdms.length === 0) {
     return (
@@ -996,11 +1032,11 @@ export function OverviewPage({ data }: OverviewPageProps) {
 
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-5">
-      <ReadinessOverview data={data} onNavigate={navigate} />
+      <ReadinessOverview data={data} onNavigate={navigateFromOverview} />
       <PdmActionQueue rows={actionRows} onSelectPdm={setSelectedPdm} />
-      <WeeklyMovement data={data} onNavigate={navigate} />
-      <ManagementExceptions data={data} onNavigate={navigate} />
-      <EpsExecutionSummary data={data} onOpen={() => navigate("/eps-test-execution")} />
+      <WeeklyMovement data={data} onNavigate={navigateFromOverview} />
+      <ManagementExceptions data={data} onNavigate={navigateFromOverview} />
+      <EpsExecutionSummary data={data} onOpen={() => navigateFromOverview("/eps-test-execution")} />
       <PdmDetailDrawer
         epsModuleExecution={data.epsModuleExecution}
         epsPdmExecution={data.epsPdmExecution}

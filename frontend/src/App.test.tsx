@@ -117,4 +117,56 @@ describe("App routing and loading behavior", () => {
     await user.click(screen.getByRole("button", { name: "Retry" }));
     expect(reload).toHaveBeenCalledTimes(1);
   });
+
+  it("offers a direct return to Overview for Overview-driven navigation", async () => {
+    const user = userEvent.setup();
+    useDashboardDataMock.mockReturnValue(dashboardState());
+    render(
+      <MemoryRouter
+        initialEntries={[
+          {
+            pathname: "/eps-test-execution",
+            state: { fromOverview: true },
+          },
+        ]}
+      >
+        <App />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText("EPS Route")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Back to Overview" }));
+    expect(screen.getByText("Overview Route")).toBeInTheDocument();
+  });
+
+  it("does not show the Overview return button for direct navigation", () => {
+    useDashboardDataMock.mockReturnValue(dashboardState());
+    renderRoute("/eps-test-execution");
+
+    expect(screen.getByText("EPS Route")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Back to Overview" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("offers a direct return to KPR for KPR-driven navigation", async () => {
+    const user = userEvent.setup();
+    useDashboardDataMock.mockReturnValue(dashboardState());
+    render(
+      <MemoryRouter
+        initialEntries={[
+          {
+            pathname: "/eps-test-execution",
+            search: "?testItemFilter=Failed",
+            state: { fromKpr: true },
+          },
+        ]}
+      >
+        <App />
+      </MemoryRouter>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Back to KPR" }));
+    expect(screen.getByText("KPR Route")).toBeInTheDocument();
+  });
 });

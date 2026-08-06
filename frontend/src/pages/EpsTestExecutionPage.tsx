@@ -1,5 +1,6 @@
 import { ResponsivePie } from "@nivo/pie";
 import { Fragment, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   Activity,
   AlertTriangle,
@@ -71,6 +72,51 @@ const defaultFilters: EpsFiltersState = {
   search: "",
   status: "",
 };
+
+const testItemFilters: EpsTestItemFilter[] = [
+  "Passed",
+  "Fixed",
+  "Failed",
+  "Failure History",
+  "Not Tested",
+  "Not In Tracker",
+];
+const activityFilters: EpsActivityFilter[] = [
+  "yesterdayPassed",
+  "yesterdayFailed",
+  "sevenDayPassed",
+  "sevenDayFailed",
+  "sevenDayRepaired",
+  "advancedDailyPassed",
+  "advancedDailyFailed",
+  "advancedCumulativePassed",
+  "advancedCumulativeFailed",
+];
+
+function filtersFromSearchParams(searchParams: URLSearchParams): EpsFiltersState {
+  return {
+    search: searchParams.get("search")?.trim() ?? "",
+    status: searchParams.get("status")?.trim() ?? "",
+  };
+}
+
+function testItemFilterFromSearchParams(searchParams: URLSearchParams): EpsTestItemFilter {
+  const value = searchParams.get("testItemFilter")?.trim() ?? "";
+  return testItemFilters.includes(value as EpsTestItemFilter)
+    ? (value as EpsTestItemFilter)
+    : "";
+}
+
+function activityFilterFromSearchParams(searchParams: URLSearchParams): EpsActivityFilter {
+  const value = searchParams.get("activityFilter")?.trim() ?? "";
+  return activityFilters.includes(value as EpsActivityFilter)
+    ? (value as EpsActivityFilter)
+    : "";
+}
+
+function trackerTypeFromSearchParams(searchParams: URLSearchParams): string {
+  return searchParams.get("trackerType")?.trim() ?? "";
+}
 
 const PAGE_SIZE_OPTIONS = [25, 50, 100];
 
@@ -515,6 +561,19 @@ function matchesActivityEquipmentFilter(
   ].flatMap(equipmentReferenceVariants);
 
   return itemReferences.some((reference) => activityEquipmentKeys.has(reference));
+}
+
+function matchesExactActivityTestItemFilter(
+  item: EpsTestItemRecord,
+  exactItemKeys: Set<string> | null,
+): boolean {
+  if (!exactItemKeys) {
+    return true;
+  }
+
+  return [item.equipment_key, item.equipment_name]
+    .flatMap(equipmentReferenceVariants)
+    .some((reference) => exactItemKeys.has(reference));
 }
 
 function matchesAllTestItemFilters(
@@ -2110,20 +2169,65 @@ function TestItemTable({
 }
 
 export function EpsTestExecutionPage({ data }: EpsTestExecutionPageProps) {
-  const [filters, setFilters] = useState<EpsFiltersState>(defaultFilters);
-  const [testItemFilter, setTestItemFilter] = useState<EpsTestItemFilter>("");
-  const [trackerTypeFilter, setTrackerTypeFilter] = useState("");
-  const [activityFilter, setActivityFilter] = useState<EpsActivityFilter>("");
+  const [searchParams] = useSearchParams();
+  const searchParamsKey = searchParams.toString();
+  const [filters, setFilters] = useState<EpsFiltersState>(() =>
+    filtersFromSearchParams(searchParams),
+  );
+  const [testItemFilter, setTestItemFilter] = useState<EpsTestItemFilter>(() =>
+    testItemFilterFromSearchParams(searchParams),
+  );
+  const [trackerTypeFilter, setTrackerTypeFilter] = useState(() =>
+    trackerTypeFromSearchParams(searchParams),
+  );
+  const [activityFilter, setActivityFilter] = useState<EpsActivityFilter>(() =>
+    activityFilterFromSearchParams(searchParams),
+  );
   const [customActivityEquipmentValues, setCustomActivityEquipmentValues] = useState<string[]>([]);
   const summary = data.epsTestSummary;
+  const kprFilterParam = searchParams.get("kprFilter")?.trim() ?? "";
+  const kprActivityEquipmentValues = useMemo(() => {
+    if (kprFilterParam === "passedMonth") {
+      return data.kprSummary?.monthly_progress.eps.daily_passed_month_equipment_ids ?? [];
+    }
+    if (kprFilterParam === "passedPeriodEnd") {
+      return data.kprSummary?.monthly_progress.eps.daily_passed_period_end_equipment_ids ?? [];
+    }
+    if (kprFilterParam === "passedLatest") {
+      return data.kprSummary?.current_snapshot?.eps_passed_equipment_ids ?? [];
+    }
+    return null;
+  }, [data.kprSummary, kprFilterParam]);
+  const effectiveActivityFilter: EpsActivityFilter =
+    kprFilterParam === "passedMonth" ||
+    kprFilterParam === "passedPeriodEnd" ||
+    kprFilterParam === "passedLatest"
+      ? "advancedCumulativePassed"
+      : activityFilter;
   const activityEquipmentKeys = useMemo(
     () =>
       buildEquipmentReferenceSet(
-        getActivityEquipmentValues(summary, activityFilter, customActivityEquipmentValues),
+        kprActivityEquipmentValues ??
+          getActivityEquipmentValues(summary, activityFilter, customActivityEquipmentValues),
       ),
-    [activityFilter, customActivityEquipmentValues, summary],
+    [activityFilter, customActivityEquipmentValues, kprActivityEquipmentValues, summary],
+  );
+  const kprExactTestItemKeys = useMemo(
+    () =>
+      kprActivityEquipmentValues === null
+        ? null
+        : buildEquipmentReferenceSet(kprActivityEquipmentValues) ?? new Set<string>(),
+    [kprActivityEquipmentValues],
   );
   const statusOptions = useMemo(() => getStatusOptions(summary), [summary]);
+
+  useEffect(() => {
+    setFilters(filtersFromSearchParams(searchParams));
+    setTestItemFilter(testItemFilterFromSearchParams(searchParams));
+    setTrackerTypeFilter(trackerTypeFromSearchParams(searchParams));
+    setActivityFilter(activityFilterFromSearchParams(searchParams));
+    setCustomActivityEquipmentValues([]);
+  }, [searchParamsKey]);
   const filteredModuleRecords = useMemo(
     () => filterModuleRecords(data.epsModuleExecution, filters),
     [data.epsModuleExecution, filters],
@@ -2153,9 +2257,9 @@ export function EpsTestExecutionPage({ data }: EpsTestExecutionPageProps) {
             item,
             testItemFilter,
             trackerTypeFilter,
-            activityFilter,
+            effectiveActivityFilter,
             activityEquipmentKeys,
-          ),
+          ) && matchesExactActivityTestItemFilter(item, kprExactTestItemKeys),
         )
         .map((item) => pdmNameKey(item.pdm_name)),
     );
@@ -2166,9 +2270,10 @@ export function EpsTestExecutionPage({ data }: EpsTestExecutionPageProps) {
     });
   }, [
     activityEquipmentKeys,
-    activityFilter,
+    effectiveActivityFilter,
     data.epsTestItems,
     filteredModuleRecords,
+    kprExactTestItemKeys,
     pdmRows,
     testItemFilter,
     trackerTypeFilter,
@@ -2181,9 +2286,9 @@ export function EpsTestExecutionPage({ data }: EpsTestExecutionPageProps) {
             item,
             testItemFilter,
             trackerTypeFilter,
-            activityFilter,
+            effectiveActivityFilter,
             activityEquipmentKeys,
-          ),
+          ) && matchesExactActivityTestItemFilter(item, kprExactTestItemKeys),
         )
         .sort((a, b) => {
           return (
@@ -2196,7 +2301,14 @@ export function EpsTestExecutionPage({ data }: EpsTestExecutionPageProps) {
             asNumber(a.tracker_row) - asNumber(b.tracker_row)
           );
         }),
-    [activityEquipmentKeys, activityFilter, data.epsTestItems, testItemFilter, trackerTypeFilter],
+    [
+      activityEquipmentKeys,
+      data.epsTestItems,
+      effectiveActivityFilter,
+      kprExactTestItemKeys,
+      testItemFilter,
+      trackerTypeFilter,
+    ],
   );
   const selectTrackerType = (trackerType: string) => {
     setTrackerTypeFilter((currentTrackerType) =>

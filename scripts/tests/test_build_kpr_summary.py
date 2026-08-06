@@ -115,6 +115,10 @@ def test_lifecycle_summary_reports_forward_regressed_and_unmapped_records() -> N
     assert summary["regressed_count"] == 1
     assert summary["unchanged_count"] == 1
     assert summary["unmapped_statuses"] == [{"status": "Blank", "count": 1}]
+    stages = {stage["key"]: stage for stage in summary["stages"]}
+    assert stages["ship"]["equipment_ids"] == ["EQ-1"]
+    assert stages["red"]["equipment_ids"] == ["EQ-2"]
+    assert stages["unmapped"]["equipment_ids"] == ["EQ-3"]
 
 
 def test_monthly_trend_keeps_pre_month_baseline_point() -> None:
@@ -155,6 +159,7 @@ def test_neta_month_movement_separates_gross_completions_from_net_change() -> No
 
     assert movement == {
         "newly_completed_count": 2,
+        "newly_completed_equipment_ids": ["EQ-3", "EQ-4"],
         "no_longer_complete_count": 1,
         "net_change_count": 1,
         "no_longer_complete_equipment_ids": ["EQ-1"],
@@ -258,3 +263,10 @@ def test_issue_performance_counts_resolved_and_open_aging() -> None:
     assert result["overdue_open"] == 1
     assert result["urgent_high_open"] == 2
     assert result["open_over_30_days"] == 1
+    assert result["month_start_open_case_ids"] == ["CASE-1", "CASE-2"]
+    assert result["new_issue_case_ids"] == ["CASE-3"]
+    assert result["resolved_issue_case_ids"] == ["CASE-1"]
+    assert result["current_open_case_ids"] == ["CASE-2", "CASE-3"]
+    assert result["overdue_open_case_ids"] == ["CASE-2"]
+    assert result["urgent_high_open_case_ids"] == ["CASE-2", "CASE-3"]
+    assert result["open_over_30_days_case_ids"] == ["CASE-2"]
