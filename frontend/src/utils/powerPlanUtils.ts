@@ -51,6 +51,20 @@ export const POWER_PLAN_STATUS_COLORS: Record<
   noData: { fill: "#e2e8f0", stroke: "#64748b", text: "#334155" },
 };
 
+export function getPowerPlanAreaFamily(pdmName: string | null): string {
+  const match = String(pdmName ?? "").match(/^IAD06-PDM-(E\d+-\d{3})(?:-|$)/i);
+  return match?.[1]?.toUpperCase() ?? "Other";
+}
+
+export function getPowerPlanAreaName(pdmName: string | null): string {
+  const normalized = String(pdmName ?? "").trim();
+  const indexedArea = normalized.match(/^IAD06-PDM-(E\d+-\d{3})-(\d{2})(?:-|$)/i);
+  if (indexedArea) {
+    return `${indexedArea[1].toUpperCase()}-${indexedArea[2]}`;
+  }
+  return getPowerPlanAreaFamily(normalized);
+}
+
 const EPS_STATUS_WAITING_INFRALINK_NETA =
   "Complete, Waiting Infralink NETA Completion";
 

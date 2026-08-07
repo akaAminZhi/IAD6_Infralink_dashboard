@@ -8,21 +8,26 @@ import {
 } from "react";
 import {
   ArrowLeft,
+  CheckSquare2,
   CheckCircle2,
   CircleAlert,
   CircleDashed,
   ClipboardCheck,
   Clock3,
+  Download,
+  Loader2,
   Maximize2,
   Minus,
   Plus,
   Search,
+  Trash2,
   X,
 } from "lucide-react";
 
 import { EmptyState } from "../components/common/EmptyState";
 import { StatusBadge } from "../components/common/StatusBadge";
 import { IssueDetailDrawer } from "../components/issues/IssueDetailDrawer";
+import { Button } from "../components/ui/button";
 import type {
   CaseIssue,
   DashboardData,
@@ -37,12 +42,15 @@ import {
 } from "../utils/issueUtils";
 import {
   enrichPdmSchematicEquipment,
+  getPowerPlanAreaFamily as getPdmAreaFamily,
+  getPowerPlanAreaName as getPdmAreaName,
   isPowerPlanWaivedItem,
   POWER_PLAN_STATUS_COLORS,
   POWER_PLAN_STATUS_LABELS,
   type EnrichedPowerPlanEquipment,
   type PowerPlanEquipmentStatus,
 } from "../utils/powerPlanUtils";
+import { downloadPowerPlanSelectionXlsx } from "../utils/exportPowerPlanSelection";
 import { getSearchMatchScore, matchesSearchQuery } from "../utils/searchUtils";
 
 interface PowerPlanPageProps {
@@ -177,21 +185,6 @@ function getSchematicEquipmentKind(label: string): SchematicEquipmentKind {
 
 function snapCoordinate(value: number, interval: number): number {
   return Math.round(value / interval) * interval;
-}
-
-function getPdmAreaFamily(pdmName: string | null): string {
-  const match = String(pdmName ?? "").match(/^IAD06-PDM-(E\d+-\d{3})(?:-|$)/i);
-  return match?.[1]?.toUpperCase() ?? "Other";
-}
-
-function getPdmAreaName(pdmName: string | null): string {
-  const normalized = String(pdmName ?? "").trim();
-  const indexedArea = normalized.match(/^IAD06-PDM-(E\d+-\d{3})-(\d{2})(?:-|$)/i);
-  if (indexedArea) {
-    return `${indexedArea[1].toUpperCase()}-${indexedArea[2]}`;
-  }
-  const family = getPdmAreaFamily(normalized);
-  return family;
 }
 
 function naturalCompare(left: string, right: string): number {
@@ -568,11 +561,13 @@ function EquipmentGlyph({
 function SchematicEquipment({
   placement,
   active,
+  exportSelected,
   selected,
   onSelect,
 }: {
   placement: SchematicPlacement;
   active: boolean;
+  exportSelected: boolean;
   selected: boolean;
   onSelect: () => void;
 }) {
@@ -586,7 +581,7 @@ function SchematicEquipment({
 
   return (
     <g
-      aria-label={`${row.equipmentId}: ${POWER_PLAN_STATUS_LABELS[row.status]}; ${openIssueCount} open issues`}
+      aria-label={`${row.equipmentId}: ${POWER_PLAN_STATUS_LABELS[row.status]}; ${openIssueCount} open issues${exportSelected ? "; selected for export" : ""}`}
       className="cursor-pointer outline-none"
       data-annotation-id={row.annotation.annotation_id}
       data-equipment-marker="true"
@@ -606,6 +601,18 @@ function SchematicEquipment({
       <title>
         {row.equipmentId} / {POWER_PLAN_STATUS_LABELS[row.status]} / {row.openIssues.length} open issues
       </title>
+      {exportSelected && (
+        <rect
+          fill="none"
+          height={height + 14}
+          rx={11}
+          stroke="#2563eb"
+          strokeWidth={4}
+          width={width + 14}
+          x={-width / 2 - 7}
+          y={-height / 2 - 7}
+        />
+      )}
       {selected && (
         <rect
           fill="none"
@@ -646,6 +653,19 @@ function SchematicEquipment({
         strokeLinecap="round"
         strokeWidth={1.5}
       />
+      {exportSelected && (
+        <g transform={`translate(${-width / 2 + 3} ${-height / 2 + 3})`}>
+          <circle fill="#2563eb" r={compact ? 7 : 9} stroke="white" strokeWidth={2} />
+          <path
+            d={compact ? "m-3 0 2 2 4-5" : "m-4 0 3 3 5-6"}
+            fill="none"
+            stroke="white"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+          />
+        </g>
+      )}
       <EquipmentGlyph
         color={colors.text}
         compact={compact}
@@ -740,10 +760,14 @@ function EquipmentDetail({
   row,
   onBack,
   onSelectIssue,
+  onToggleExport,
+  selectedForExport,
 }: {
   row: EnrichedPowerPlanEquipment;
   onBack: () => void;
   onSelectIssue: (issue: CaseIssue) => void;
+  onToggleExport: (row: EnrichedPowerPlanEquipment) => void;
+  selectedForExport: boolean;
 }) {
   const netaComplete = row.equipment?.neta_complete === true;
   const sortedItems = useMemo(
@@ -789,9 +813,20 @@ function EquipmentDetail({
             <h2 className="break-words text-base font-semibold">{row.equipmentId}</h2>
             <p className="mt-1 text-xs text-muted-foreground">{row.pdmName ?? "No PDM association"}</p>
           </div>
-          <StatusBadge tone={statusTone[row.status]}>
-            {POWER_PLAN_STATUS_LABELS[row.status]}
-          </StatusBadge>
+          <div className="flex shrink-0 flex-col items-end gap-2">
+            <StatusBadge tone={statusTone[row.status]}>
+              {POWER_PLAN_STATUS_LABELS[row.status]}
+            </StatusBadge>
+            <Button
+              className="h-8 gap-1.5 px-2.5 text-xs"
+              onClick={() => onToggleExport(row)}
+              type="button"
+              variant={selectedForExport ? "default" : "outline"}
+            >
+              <CheckSquare2 className="h-3.5 w-3.5" aria-hidden="true" />
+              {selectedForExport ? "Selected" : "Add to export"}
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -972,9 +1007,15 @@ function EquipmentDetail({
 function EquipmentQueue({
   rows,
   onSelect,
+  onToggleExport,
+  selectedExportIds,
+  selectionMode,
 }: {
   rows: EnrichedPowerPlanEquipment[];
   onSelect: (row: EnrichedPowerPlanEquipment) => void;
+  onToggleExport: (row: EnrichedPowerPlanEquipment) => void;
+  selectedExportIds: Set<string>;
+  selectionMode: boolean;
 }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -990,11 +1031,18 @@ function EquipmentQueue({
         ) : (
           rows.map((row) => {
             const Icon = statusIcon[row.status];
+            const isExportSelected = selectedExportIds.has(row.annotation.annotation_id);
             return (
               <button
-                className="flex w-full items-start gap-3 rounded-md border-b px-3 py-3 text-left transition-colors hover:bg-muted"
+                aria-pressed={selectionMode ? isExportSelected : undefined}
+                className={cn(
+                  "flex w-full items-start gap-3 rounded-md border-b px-3 py-3 text-left transition-colors hover:bg-muted",
+                  isExportSelected && "bg-blue-50 ring-1 ring-inset ring-blue-300",
+                )}
                 key={row.annotation.annotation_id}
-                onClick={() => onSelect(row)}
+                onClick={() =>
+                  selectionMode ? onToggleExport(row) : onSelect(row)
+                }
                 type="button"
               >
                 <span
@@ -1014,6 +1062,9 @@ function EquipmentQueue({
                     {row.waivedCount > 0 ? ` · ${row.waivedCount} not required` : ""} · {row.openIssues.length} open issues
                   </span>
                 </span>
+                {isExportSelected ? (
+                  <CheckSquare2 className="mt-1 h-4 w-4 shrink-0 text-blue-700" aria-label="Selected for export" />
+                ) : null}
               </button>
             );
           })
@@ -1028,11 +1079,17 @@ function PdmOverview({
   rows,
   onBack,
   onSelectEquipment,
+  onToggleExport,
+  selectedExportIds,
+  selectionMode,
 }: {
   pdmName: string;
   rows: EnrichedPowerPlanEquipment[];
   onBack: () => void;
   onSelectEquipment: (row: EnrichedPowerPlanEquipment) => void;
+  onToggleExport: (row: EnrichedPowerPlanEquipment) => void;
+  selectedExportIds: Set<string>;
+  selectionMode: boolean;
 }) {
   const statusCounts = rows.reduce<Record<PowerPlanEquipmentStatus, number>>(
     (result, row) => {
@@ -1130,11 +1187,18 @@ function PdmOverview({
         <div className="min-h-0 flex-1 overflow-y-auto [overflow-anchor:none] [scrollbar-gutter:stable]">
           {rows.map((row) => {
             const Icon = statusIcon[row.status];
+            const isExportSelected = selectedExportIds.has(row.annotation.annotation_id);
             return (
               <button
-                className="flex w-full items-start gap-3 border-b px-4 py-3 text-left transition-colors hover:bg-muted"
+                aria-pressed={selectionMode ? isExportSelected : undefined}
+                className={cn(
+                  "flex w-full items-start gap-3 border-b px-4 py-3 text-left transition-colors hover:bg-muted",
+                  isExportSelected && "bg-blue-50 ring-1 ring-inset ring-blue-300",
+                )}
                 key={row.annotation.annotation_id}
-                onClick={() => onSelectEquipment(row)}
+                onClick={() =>
+                  selectionMode ? onToggleExport(row) : onSelectEquipment(row)
+                }
                 type="button"
               >
                 <span
@@ -1155,6 +1219,9 @@ function PdmOverview({
                     {row.notTestedCount > 0 ? ` · ${row.notTestedCount} remaining` : ""}
                   </span>
                 </span>
+                {isExportSelected ? (
+                  <CheckSquare2 className="mt-1 h-4 w-4 shrink-0 text-blue-700" aria-label="Selected for export" />
+                ) : null}
               </button>
             );
           })}
@@ -1183,6 +1250,12 @@ export function PowerPlanPage({ data }: PowerPlanPageProps) {
   const [selectedAnnotationId, setSelectedAnnotationId] = useState<string | null>(null);
   const [selectedPdmName, setSelectedPdmName] = useState<string | null>(null);
   const [selectedIssue, setSelectedIssue] = useState<EnrichedIssue | null>(null);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedExportIds, setSelectedExportIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
   const panRef = useRef<PanState | null>(null);
   const pendingSearchSelectionRef = useRef<string | null>(null);
@@ -1284,6 +1357,21 @@ export function PowerPlanPage({ data }: PowerPlanPageProps) {
     () => new Set(filteredRows.map((row) => row.annotation.annotation_id)),
     [filteredRows],
   );
+  const selectedExportRows = useMemo(
+    () =>
+      allRows.filter((row) =>
+        selectedExportIds.has(row.annotation.annotation_id),
+      ),
+    [allRows, selectedExportIds],
+  );
+  const selectedCountsByFamily = useMemo(() => {
+    const counts = new Map<string, number>();
+    selectedExportRows.forEach((row) => {
+      const family = getPdmAreaFamily(row.pdmName);
+      counts.set(family, (counts.get(family) ?? 0) + 1);
+    });
+    return counts;
+  }, [selectedExportRows]);
 
   useEffect(() => {
     setViewport({ x: 0, y: 0, width: layout.width, height: layout.height });
@@ -1310,6 +1398,16 @@ export function PowerPlanPage({ data }: PowerPlanPageProps) {
     );
     pendingSearchSelectionRef.current = null;
   }, [allRows, areaFamily, layout.height, layout.width]);
+
+  useEffect(() => {
+    const availableIds = new Set(
+      allRows.map((row) => row.annotation.annotation_id),
+    );
+    setSelectedExportIds((current) => {
+      const next = new Set([...current].filter((id) => availableIds.has(id)));
+      return next.size === current.size ? current : next;
+    });
+  }, [allRows]);
 
   useEffect(() => {
     const svg = svgRef.current;
@@ -1346,6 +1444,57 @@ export function PowerPlanPage({ data }: PowerPlanPageProps) {
     },
     { action: 0, testing: 0, waitingNeta: 0, ready: 0, noData: 0 },
   );
+
+  function toggleExportSelection(row: EnrichedPowerPlanEquipment) {
+    setExportError(null);
+    setSelectedExportIds((current) => {
+      const next = new Set(current);
+      const id = row.annotation.annotation_id;
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }
+
+  function addVisibleEquipmentToExport() {
+    setExportError(null);
+    setSelectedExportIds((current) => {
+      const next = new Set(current);
+      filteredRows.forEach((row) => next.add(row.annotation.annotation_id));
+      return next;
+    });
+  }
+
+  function clearExportSelection() {
+    setSelectedExportIds(new Set());
+    setExportError(null);
+  }
+
+  function toggleSelectionMode() {
+    if (selectionMode) {
+      clearExportSelection();
+    }
+    setSelectionMode((current) => !current);
+  }
+
+  async function exportSelectedEquipment() {
+    if (selectedExportRows.length === 0 || isExporting) return;
+    setIsExporting(true);
+    setExportError(null);
+    try {
+      await downloadPowerPlanSelectionXlsx(selectedExportRows);
+    } catch (error) {
+      setExportError(
+        error instanceof Error ? error.message : "Unable to export the selected equipment.",
+      );
+    } finally {
+      setIsExporting(false);
+    }
+  }
+
   function selectRow(row: EnrichedPowerPlanEquipment) {
     setSelectedPdmName(row.pdmName?.trim() || "Unassigned PDM");
     setSelectedAnnotationId(row.annotation.annotation_id);
@@ -1462,7 +1611,17 @@ export function PowerPlanPage({ data }: PowerPlanPageProps) {
       const row = rows.find(
         (candidate) => candidate.annotation.annotation_id === pan.equipmentAnnotationId,
       );
-      if (row) selectRow(row);
+      if (row) {
+        if (selectionMode) {
+          suppressCanvasClickRef.current = true;
+          window.setTimeout(() => {
+            suppressCanvasClickRef.current = false;
+          }, 0);
+          toggleExportSelection(row);
+        } else {
+          selectRow(row);
+        }
+      }
       return;
     }
     if (!pan.moved && pan.pdmName) {
@@ -1496,6 +1655,16 @@ export function PowerPlanPage({ data }: PowerPlanPageProps) {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <Button
+              aria-pressed={selectionMode}
+              className="h-9 gap-2 px-3"
+              onClick={toggleSelectionMode}
+              type="button"
+              variant={selectionMode ? "default" : "outline"}
+            >
+              <CheckSquare2 className="h-4 w-4" aria-hidden="true" />
+              {selectionMode ? "Selecting equipment" : "Select for export"}
+            </Button>
             {areaFamilies.length > 1 && (
               <select
                 aria-label="Area family"
@@ -1505,7 +1674,7 @@ export function PowerPlanPage({ data }: PowerPlanPageProps) {
               >
                 {areaFamilies.map((family) => (
                   <option key={family} value={family}>
-                    {family}
+                    {`${family}${selectedCountsByFamily.has(family) ? ` (${selectedCountsByFamily.get(family)} selected)` : ""}`}
                   </option>
                 ))}
               </select>
@@ -1624,6 +1793,56 @@ export function PowerPlanPage({ data }: PowerPlanPageProps) {
             </div>
           </div>
         </div>
+
+        {(selectionMode || selectedExportRows.length > 0) && (
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-blue-200 bg-blue-50/70 px-4 py-2.5">
+            <div>
+              <div className="text-sm font-semibold text-blue-950">
+                {`${selectedExportRows.length} equipment selected across ${selectedCountsByFamily.size} area${selectedCountsByFamily.size === 1 ? "" : "s"}`}
+              </div>
+              <div className="mt-0.5 text-xs text-blue-800/80">
+                Selections remain when you switch area families.
+              </div>
+              {exportError ? (
+                <div className="mt-1 text-xs font-medium text-red-700">{exportError}</div>
+              ) : null}
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                className="h-8 px-3 text-xs"
+                onClick={addVisibleEquipmentToExport}
+                type="button"
+                variant="outline"
+              >
+                Add {filteredRows.length} visible
+              </Button>
+              <Button
+                aria-label="Clear export selection"
+                className="h-8 w-8 px-0"
+                disabled={selectedExportRows.length === 0}
+                onClick={clearExportSelection}
+                title="Clear export selection"
+                type="button"
+                variant="outline"
+              >
+                <Trash2 className="h-4 w-4" aria-hidden="true" />
+              </Button>
+              <Button
+                className="h-8 gap-2 px-3 text-xs"
+                disabled={selectedExportRows.length === 0 || isExporting}
+                onClick={() => void exportSelectedEquipment()}
+                type="button"
+              >
+                {isExporting ? (
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                ) : (
+                  <Download className="h-4 w-4" aria-hidden="true" />
+                )}
+                Export .xlsx
+              </Button>
+            </div>
+          </div>
+        )}
 
         <div className="grid grid-cols-2 divide-x divide-y sm:grid-cols-3 lg:grid-cols-6 lg:divide-y-0">
           <button
@@ -1877,9 +2096,18 @@ export function PowerPlanPage({ data }: PowerPlanPageProps) {
               {layout.placements.map((placement) => (
                 <SchematicEquipment
                   active={activeAnnotationIds.has(placement.row.annotation.annotation_id)}
+                  exportSelected={selectedExportIds.has(
+                    placement.row.annotation.annotation_id,
+                  )}
                   key={placement.row.annotation.annotation_id}
                   onSelect={() => {
-                    if (!suppressCanvasClickRef.current) selectRow(placement.row);
+                    if (!suppressCanvasClickRef.current) {
+                      if (selectionMode) {
+                        toggleExportSelection(placement.row);
+                      } else {
+                        selectRow(placement.row);
+                      }
+                    }
                   }}
                   placement={placement}
                   selected={selectedAnnotationId === placement.row.annotation.annotation_id}
@@ -1894,17 +2122,30 @@ export function PowerPlanPage({ data }: PowerPlanPageProps) {
             <EquipmentDetail
               onBack={() => setSelectedAnnotationId(null)}
               onSelectIssue={selectIssue}
+              onToggleExport={toggleExportSelection}
               row={selectedRow}
+              selectedForExport={selectedExportIds.has(
+                selectedRow.annotation.annotation_id,
+              )}
             />
           ) : selectedPdmName ? (
             <PdmOverview
               onBack={() => setSelectedPdmName(null)}
               onSelectEquipment={selectRow}
+              onToggleExport={toggleExportSelection}
               pdmName={selectedPdmName}
               rows={selectedPdmRows}
+              selectedExportIds={selectedExportIds}
+              selectionMode={selectionMode}
             />
           ) : (
-            <EquipmentQueue rows={filteredRows} onSelect={selectRow} />
+            <EquipmentQueue
+              onSelect={selectRow}
+              onToggleExport={toggleExportSelection}
+              rows={filteredRows}
+              selectedExportIds={selectedExportIds}
+              selectionMode={selectionMode}
+            />
           )}
         </aside>
       </div>
