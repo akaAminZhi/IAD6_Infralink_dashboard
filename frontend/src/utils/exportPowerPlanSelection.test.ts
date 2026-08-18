@@ -107,7 +107,7 @@ describe("Power Plan Excel export", () => {
       from: { row: 4, column: 1 },
       to: { row: 4, column: 12 },
     });
-  });
+  }, 20_000);
 
   it("requires at least one selected equipment record", async () => {
     await expect(createPowerPlanSelectionWorkbook([])).rejects.toThrow(

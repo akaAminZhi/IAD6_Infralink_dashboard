@@ -11,6 +11,7 @@ import { DataQualityPage } from "./DataQualityPage";
 import { EquipmentPage } from "./EquipmentPage";
 import { EpsTestExecutionPage } from "./EpsTestExecutionPage";
 import { IssuesPage } from "./IssuesPage";
+import { MvEquipmentPage } from "./MvEquipmentPage";
 import { OverviewPage } from "./OverviewPage";
 import { PdmPage } from "./PdmPage";
 import { PowerPlanPage } from "./PowerPlanPage";
@@ -39,6 +40,7 @@ describe("dashboard page empty states", () => {
       "No EPS test execution data found.",
     ],
     ["Power plan", <PowerPlanPage data={makeDashboardData()} />, "No PDM equipment data found."],
+    ["MV equipment", <MvEquipmentPage data={makeDashboardData()} />, "No MV equipment plan found."],
     [
       "Data quality",
       <DataQualityPage data={makeDashboardData()} />,

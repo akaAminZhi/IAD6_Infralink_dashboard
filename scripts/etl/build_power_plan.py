@@ -34,45 +34,64 @@ def slugify(value: str) -> str:
     return slug or "power-plan"
 
 
-def build_equipment_index(equipment_path: Path) -> dict[str, str]:
+def build_equipment_index(equipment_path: Path) -> dict[str, dict[str, Any]]:
     if not equipment_path.exists():
         return {}
 
-    index: dict[str, str] = {}
+    index: dict[str, dict[str, Any]] = {}
     for equipment in load_records_json(equipment_path):
         equipment_id = str(equipment.get("equipment_id") or "").strip()
         key = normalize_equipment_key(equipment_id)
         if key and key not in index:
-            index[key] = equipment_id
+            index[key] = equipment
     return index
 
 
 def annotation_record(
     annotation: fitz.Annot,
     annotation_id: str,
-    equipment_index: dict[str, str],
+    equipment_index: dict[str, dict[str, Any]],
+    transform: fitz.Matrix | None = None,
 ) -> dict[str, Any] | None:
     info = annotation.info
     label = str(info.get("content") or "").strip()
     subject = str(info.get("subject") or "").strip()
+    annotation_type = annotation.type[1]
+    normalized_annotation_type = annotation_type.lower().replace("-", "_")
     normalized_subject = subject.lower().replace("-", "_").replace(" ", "_")
     if normalized_subject in {"room_line", "room_boundary", "boundary"}:
         kind = "room_boundary"
     elif normalized_subject in {"room", "area", "region"}:
         kind = "region"
+    elif normalized_annotation_type in {"line", "polyline", "polygon"}:
+        kind = "connection"
+    elif "FD" in label.upper():
+        kind = "termination"
     else:
         kind = "equipment"
-    if not label and kind == "equipment":
+    if not label and kind in {"equipment", "termination", "connection"}:
         return None
 
-    rect = annotation.rect
+    matrix = transform or fitz.Identity
+    rect = annotation.rect * matrix
+    raw_vertices = annotation.vertices or []
+    vertices = []
+    for raw_vertex in raw_vertices:
+        point = fitz.Point(raw_vertex) * matrix
+        vertices.append({"x": round(point.x, 3), "y": round(point.y, 3)})
     equipment_key = normalize_equipment_key(label)
-    matched_equipment_id = equipment_index.get(equipment_key) if kind == "equipment" else None
+    system_element = equipment_index.get(equipment_key)
+    matched_equipment_id = (
+        str(system_element.get("equipment_id") or "").strip()
+        if system_element
+        else None
+    )
+    matchable = kind in {"equipment", "termination", "connection"}
 
-    return {
+    record = {
         "annotation_id": annotation_id,
         "kind": kind,
-        "annotation_type": annotation.type[1],
+        "annotation_type": annotation_type,
         "label": label,
         "subject": subject or None,
         "author": str(info.get("title") or "").strip() or None,
@@ -86,16 +105,30 @@ def annotation_record(
             "x": round((rect.x0 + rect.x1) / 2, 3),
             "y": round((rect.y0 + rect.y1) / 2, 3),
         },
-        "normalized_equipment_key": equipment_key if kind == "equipment" else None,
+        "normalized_equipment_key": equipment_key if matchable else None,
         "matched_equipment_id": matched_equipment_id,
         "match_status": (
             "matched"
             if matched_equipment_id
             else "unmatched"
-            if kind == "equipment"
+            if matchable
             else "not_applicable"
         ),
+        "system_element_status": (
+            str(system_element.get("status") or "").strip() or None
+            if system_element
+            else None
+        ),
+        "system_element_type": (
+            str(system_element.get("equipment_type") or "").strip() or None
+            if system_element
+            else None
+        ),
+        "status_match_source": "annotation_id" if system_element else None,
     }
+    if vertices:
+        record["vertices"] = vertices
+    return record
 
 
 def build_power_plan(
@@ -123,6 +156,7 @@ def build_power_plan(
                         annotation,
                         f"{slugify(pdf_path.stem)}-{page_index + 1}-{annotation_index}",
                         equipment_index,
+                        page.rotation_matrix,
                     )
                     if record:
                         annotations.append(record)
@@ -135,6 +169,7 @@ def build_power_plan(
                         "page_label": f"{pdf_path.stem} / Page {page_index + 1}",
                         "width": round(page.rect.width, 3),
                         "height": round(page.rect.height, 3),
+                        "rotation": page.rotation,
                         "annotations": annotations,
                     }
                 )
@@ -155,6 +190,12 @@ def build_power_plan(
         "equipment_annotation_count": len(equipment_annotations),
         "matched_equipment_annotation_count": sum(
             annotation["match_status"] == "matched" for annotation in equipment_annotations
+        ),
+        "matched_system_element_annotation_count": sum(
+            annotation["match_status"] == "matched"
+            for page in pages
+            for annotation in page["annotations"]
+            if annotation["kind"] in {"equipment", "termination", "connection"}
         ),
         "pages": pages,
     }

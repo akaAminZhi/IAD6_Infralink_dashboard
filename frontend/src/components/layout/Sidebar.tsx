@@ -1,5 +1,6 @@
 import {
   Boxes,
+  Cable,
   CircleAlert,
   ClipboardCheck,
   Cpu,
@@ -21,6 +22,7 @@ const navigationItems = [
   { label: "Issues", path: "/issues", icon: CircleAlert },
   { label: "EPS Test Execution", path: "/eps-test-execution", icon: ClipboardCheck },
   { label: "Power Plan", path: "/power-plan", icon: Map },
+  { label: "MV Equipment", path: "/mv-equipment", icon: Cable },
   { label: "Data Quality", path: "/data-quality", icon: ShieldCheck },
   { label: "Data Operations", path: "/data-operations", icon: Workflow },
 ];

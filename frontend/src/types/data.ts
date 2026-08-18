@@ -242,6 +242,11 @@ export interface PowerPlanRect {
   height: number;
 }
 
+export interface PowerPlanPoint {
+  x: number;
+  y: number;
+}
+
 export interface PowerPlanAnnotation {
   annotation_id: string;
   kind: "equipment" | "region" | string;
@@ -250,10 +255,14 @@ export interface PowerPlanAnnotation {
   subject?: string | null;
   author?: string | null;
   rect: PowerPlanRect;
-  center: { x: number; y: number };
+  center: PowerPlanPoint;
+  vertices?: PowerPlanPoint[];
   normalized_equipment_key?: string | null;
   matched_equipment_id?: string | null;
   match_status?: string | null;
+  system_element_status?: string | null;
+  system_element_type?: string | null;
+  status_match_source?: string | null;
 }
 
 export interface PowerPlanPageRecord {
@@ -263,6 +272,7 @@ export interface PowerPlanPageRecord {
   page_label: string;
   width: number;
   height: number;
+  rotation?: number;
   annotations: PowerPlanAnnotation[];
 }
 
@@ -273,6 +283,7 @@ export interface PowerPlanManifest {
   page_count?: number;
   equipment_annotation_count?: number;
   matched_equipment_annotation_count?: number;
+  matched_system_element_annotation_count?: number;
   pages?: PowerPlanPageRecord[];
 }
 

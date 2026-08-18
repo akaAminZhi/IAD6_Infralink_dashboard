@@ -34,6 +34,9 @@ vi.mock("./pages/EpsTestExecutionPage", () => ({
 vi.mock("./pages/PowerPlanPage", () => ({
   PowerPlanPage: () => <div>Power Plan Route</div>,
 }));
+vi.mock("./pages/MvEquipmentPage", () => ({
+  MvEquipmentPage: () => <div>MV Equipment Route</div>,
+}));
 vi.mock("./pages/DataQualityPage", () => ({
   DataQualityPage: () => <div>Data Quality Route</div>,
 }));

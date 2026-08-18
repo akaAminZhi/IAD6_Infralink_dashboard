@@ -13,6 +13,7 @@ import { DataOperationsPage } from "./pages/DataOperationsPage";
 import { EquipmentPage } from "./pages/EquipmentPage";
 import { EpsTestExecutionPage } from "./pages/EpsTestExecutionPage";
 import { IssuesPage } from "./pages/IssuesPage";
+import { MvEquipmentPage } from "./pages/MvEquipmentPage";
 import { OverviewPage } from "./pages/OverviewPage";
 import { PdmPage } from "./pages/PdmPage";
 import { PowerPlanPage } from "./pages/PowerPlanPage";
@@ -108,6 +109,7 @@ function App() {
                 <Route element={<IssuesPage data={dashboardData} />} path="/issues" />
                 <Route element={<EpsTestExecutionPage data={dashboardData} />} path="/eps-test-execution" />
                 <Route element={<PowerPlanPage data={dashboardData} />} path="/power-plan" />
+                <Route element={<MvEquipmentPage data={dashboardData} />} path="/mv-equipment" />
                 <Route element={<DataQualityPage data={dashboardData} />} path="/data-quality" />
                 <Route
                   element={<DataOperationsPage onDashboardReload={dashboardData.reload} />}
