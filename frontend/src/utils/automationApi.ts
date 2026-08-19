@@ -5,7 +5,10 @@ import type {
   DailyReport,
   DailyReportValidation,
   JobOptions,
+  MvDailyReport,
+  MvDailyReportValidation,
   SavedDailyReport,
+  SavedMvDailyReport,
 } from "../types/automation";
 
 const API_BASE =
@@ -135,3 +138,43 @@ export function saveDailyReport(
   });
 }
 
+export function getMvDailyReports() {
+  return request<MvDailyReport[]>("/mv-daily-reports");
+}
+
+export function getMvDailyReport(reportName: string) {
+  return request<MvDailyReport>(
+    `/mv-daily-reports/${encodeURIComponent(reportName)}`,
+  );
+}
+
+export function validateMvDailyReport(payload: {
+  tested_and_passed: string;
+  partially_tested: string;
+  failed: string;
+  retested_and_passed: string;
+}) {
+  return request<MvDailyReportValidation>("/mv-daily-reports/validate", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function saveMvDailyReport(
+  reportName: string,
+  payload: {
+    tested_and_passed: string;
+    partially_tested: string;
+    failed: string;
+    retested_and_passed: string;
+    overwrite: boolean;
+  },
+) {
+  return request<SavedMvDailyReport>(
+    `/mv-daily-reports/${encodeURIComponent(reportName)}`,
+    {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    },
+  );
+}

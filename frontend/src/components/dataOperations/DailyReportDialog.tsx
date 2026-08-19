@@ -3,30 +3,44 @@ import { useEffect, useMemo, useState } from "react";
 
 import type {
   DailyReport,
-  DailyReportSections,
+  MvDailyReport,
   SavedDailyReport,
+  SavedMvDailyReport,
 } from "../../types/automation";
 import {
   AutomationApiError,
   saveDailyReport,
+  saveMvDailyReport,
   validateDailyReport,
+  validateMvDailyReport,
 } from "../../utils/automationApi";
 import { cn } from "../../utils/cn";
 import { Button } from "../ui/button";
 
 interface DailyReportDialogProps {
   existingReportNames: string[];
-  initialReport: DailyReport | null;
+  initialReport: DailyReport | MvDailyReport | null;
   open: boolean;
+  reportKind?: "eps" | "mv";
   serviceBusy: boolean;
   onClose: () => void;
-  onSaved: (result: SavedDailyReport) => void;
+  onSaved: (result: SavedDailyReport | SavedMvDailyReport) => void;
 }
 
-const emptySections = {
+interface ReportEditorSections {
+  failed: string;
+  retested_and_passed: string;
+  tested: string;
+  tested_and_passed: string;
+  partially_tested: string;
+}
+
+const emptySections: ReportEditorSections = {
   failed: "",
   retested_and_passed: "",
   tested: "",
+  tested_and_passed: "",
+  partially_tested: "",
 };
 
 function yesterdayReportName(): string {
@@ -35,21 +49,42 @@ function yesterdayReportName(): string {
   return `${yesterday.getMonth() + 1}-${yesterday.getDate()}.md`;
 }
 
-function textFromSections(sections: DailyReportSections) {
-  return {
-    failed: sections.failed.join("\n"),
-    retested_and_passed: sections.retested_and_passed.join("\n"),
-    tested: sections.tested.join("\n"),
-  };
+function textFromReport(
+  report: DailyReport | MvDailyReport,
+  reportKind: "eps" | "mv",
+): ReportEditorSections {
+  if (reportKind === "mv" && "tested_and_passed" in report.sections) {
+    return {
+      ...emptySections,
+      tested_and_passed: report.sections.tested_and_passed.join("\n"),
+      partially_tested: report.sections.partially_tested.join("\n"),
+      failed: report.sections.failed.join("\n"),
+      retested_and_passed: report.sections.retested_and_passed.join("\n"),
+    };
+  }
+  if ("tested" in report.sections) {
+    return {
+      ...emptySections,
+      failed: report.sections.failed.join("\n"),
+      retested_and_passed: report.sections.retested_and_passed.join("\n"),
+      tested: report.sections.tested.join("\n"),
+    };
+  }
+  return emptySections;
 }
 
-function localItems(value: string): string[] {
+function localItems(value: string, compactIdsOnly = false): string[] {
   const seen = new Set<string>();
   const items: string[] = [];
   for (const line of value.split(/\r?\n/)) {
     const item = line.replace(/^\s*(?:(?:[-*+])|(?:\d+[.)]))\s+/, "").trim();
     const key = item.toUpperCase().replace(/\s+/g, " ");
-    if (item && !seen.has(key)) {
+    if (
+      item &&
+      (!compactIdsOnly ||
+        (!item.includes(" ") && item.includes("-") && /\d/.test(item))) &&
+      !seen.has(key)
+    ) {
       seen.add(key);
       items.push(item);
     }
@@ -61,6 +96,7 @@ export function DailyReportDialog({
   existingReportNames,
   initialReport,
   open,
+  reportKind = "eps",
   serviceBusy,
   onClose,
   onSaved,
@@ -76,19 +112,28 @@ export function DailyReportDialog({
       return;
     }
     setReportName(initialReport?.report_name ?? yesterdayReportName());
-    setSections(initialReport ? textFromSections(initialReport.sections) : emptySections);
+    setSections(initialReport ? textFromReport(initialReport, reportKind) : emptySections);
     setError(null);
     setSaving(false);
     setConfirmOverwrite(false);
-  }, [initialReport, open]);
+  }, [initialReport, open, reportKind]);
+
+  const activeSectionKeys: Array<keyof ReportEditorSections> = reportKind === "mv"
+    ? ["tested_and_passed", "partially_tested", "failed", "retested_and_passed"]
+    : ["failed", "retested_and_passed", "tested"];
 
   const localCounts = useMemo(
     () => ({
-      failed: localItems(sections.failed).length,
-      retested_and_passed: localItems(sections.retested_and_passed).length,
+      failed: localItems(sections.failed, reportKind === "mv").length,
+      retested_and_passed: localItems(
+        sections.retested_and_passed,
+        reportKind === "mv",
+      ).length,
       tested: localItems(sections.tested).length,
+      tested_and_passed: localItems(sections.tested_and_passed, true).length,
+      partially_tested: localItems(sections.partially_tested, true).length,
     }),
-    [sections],
+    [reportKind, sections],
   );
 
   const duplicateWarnings = useMemo(() => {
@@ -97,9 +142,11 @@ export function DailyReportDialog({
       failed: "Failed",
       retested_and_passed: "Retested And Passed",
       tested: "Tested",
+      tested_and_passed: "Tested And Passed",
+      partially_tested: "Partially Tested",
     };
-    (Object.keys(sections) as Array<keyof typeof sections>).forEach((section) => {
-      localItems(sections[section]).forEach((item) => {
+    activeSectionKeys.forEach((section) => {
+      localItems(sections[section], reportKind === "mv").forEach((item) => {
         const key = item.toUpperCase().replace(/\s+/g, " ");
         placements.set(key, [...(placements.get(key) ?? []), labels[section]]);
       });
@@ -107,7 +154,7 @@ export function DailyReportDialog({
     return Array.from(placements.entries())
       .filter(([, sectionNames]) => sectionNames.length > 1)
       .map(([item, sectionNames]) => `${item}: ${sectionNames.join(" / ")}`);
-  }, [sections]);
+  }, [activeSectionKeys, reportKind, sections]);
 
   if (!open) {
     return null;
@@ -124,14 +171,45 @@ export function DailyReportDialog({
     setSaving(true);
     setError(null);
     try {
-      await validateDailyReport(sections);
-      const result = await saveDailyReport(reportName, { ...sections, overwrite });
+      const result = reportKind === "mv"
+        ? await (async () => {
+            await validateMvDailyReport({
+              tested_and_passed: sections.tested_and_passed,
+              partially_tested: sections.partially_tested,
+              failed: sections.failed,
+              retested_and_passed: sections.retested_and_passed,
+            });
+            return saveMvDailyReport(reportName, {
+              tested_and_passed: sections.tested_and_passed,
+              partially_tested: sections.partially_tested,
+              failed: sections.failed,
+              retested_and_passed: sections.retested_and_passed,
+              overwrite,
+            });
+          })()
+        : await (async () => {
+            await validateDailyReport({
+              failed: sections.failed,
+              retested_and_passed: sections.retested_and_passed,
+              tested: sections.tested,
+            });
+            return saveDailyReport(reportName, {
+              failed: sections.failed,
+              retested_and_passed: sections.retested_and_passed,
+              tested: sections.tested,
+              overwrite,
+            });
+          })();
       onSaved(result);
     } catch (saveError) {
       const message =
-        saveError instanceof AutomationApiError || saveError instanceof Error
-          ? saveError.message
-          : "The daily report could not be saved.";
+        reportKind === "mv" &&
+        saveError instanceof AutomationApiError &&
+        saveError.status === 404
+          ? "The MV report API is unavailable. Restart the local task service, then save again."
+          : saveError instanceof AutomationApiError || saveError instanceof Error
+            ? saveError.message
+            : `The ${reportKind === "mv" ? "MV " : ""}daily report could not be saved.`;
       setError(message);
     } finally {
       setSaving(false);
@@ -147,7 +225,7 @@ export function DailyReportDialog({
     void executeSave(false);
   }
 
-  const sectionFields: Array<{
+  const epsSectionFields: Array<{
     key: keyof typeof sections;
     label: string;
     tone: string;
@@ -172,6 +250,33 @@ export function DailyReportDialog({
       placeholder: "PDU6-02D-1-PQM1-CT01",
     },
   ];
+  const mvSectionFields: typeof epsSectionFields = [
+    {
+      key: "tested_and_passed",
+      label: "Tested And Passed",
+      tone: "border-emerald-200 bg-emerald-50/50",
+      placeholder: "FD01-IAD06-TX6-01A",
+    },
+    {
+      key: "partially_tested",
+      label: "Partially Tested",
+      tone: "border-amber-200 bg-amber-50/50",
+      placeholder: "FD02-IAD06-TX6-01B",
+    },
+    {
+      key: "failed",
+      label: "Failed",
+      tone: "border-red-200 bg-red-50/50",
+      placeholder: "FD03-IAD06-TX6-01C",
+    },
+    {
+      key: "retested_and_passed",
+      label: "Retested And Passed",
+      tone: "border-teal-200 bg-teal-50/50",
+      placeholder: "FD04-IAD06-TX6-01D-A",
+    },
+  ];
+  const sectionFields = reportKind === "mv" ? mvSectionFields : epsSectionFields;
 
   return (
     <div
@@ -179,11 +284,13 @@ export function DailyReportDialog({
       className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4"
       role="dialog"
     >
-      <div className="flex max-h-[94vh] w-full max-w-[1500px] flex-col overflow-hidden rounded-lg border bg-background shadow-2xl">
+      <div className="flex max-h-[94vh] w-full max-w-[1600px] flex-col overflow-hidden rounded-lg border bg-background shadow-2xl">
         <div className="flex items-center justify-between border-b px-5 py-4">
           <div>
             <h2 className="text-lg font-semibold tracking-normal">
-              {initialReport ? "Edit Daily Test Report" : "New Daily Test Report"}
+              {initialReport
+                ? `Edit ${reportKind === "mv" ? "MV " : ""}Daily Test Report`
+                : `New ${reportKind === "mv" ? "MV " : ""}Daily Test Report`}
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">
               One test item per line. Markdown bullets are accepted.
@@ -210,7 +317,12 @@ export function DailyReportDialog({
             />
           </label>
 
-          <div className="mt-5 grid gap-4 lg:grid-cols-3">
+          <div
+            className={cn(
+              "mt-5 grid gap-4",
+              reportKind === "mv" ? "lg:grid-cols-4" : "lg:grid-cols-3",
+            )}
+          >
             {sectionFields.map((field) => (
               <label
                 className={cn("block rounded-md border p-3", field.tone)}
@@ -263,7 +375,9 @@ export function DailyReportDialog({
         <div className="flex flex-wrap items-center justify-between gap-3 border-t bg-muted/30 px-5 py-4">
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <FileCheck2 className="h-4 w-4" />
-            Saving also rebuilds daily_tested_equipment.md.
+            {reportKind === "mv"
+              ? "Saved separately from EPS reports; no EPS wash is started."
+              : "Saving also rebuilds daily_tested_equipment.md."}
           </div>
           <div className="flex gap-2">
             <Button onClick={onClose} type="button" variant="outline">
@@ -306,4 +420,3 @@ export function DailyReportDialog({
     </div>
   );
 }
-

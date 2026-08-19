@@ -49,11 +49,17 @@ python scripts/start_dashboard.py
 Open `http://127.0.0.1:5173/data-operations` to:
 
 - Enter or edit daily EPS test reports.
+- Enter or edit MV daily test reports with Tested And Passed, Partially Tested,
+  Failed, and Retested And Passed sections.
 - Refresh JC2 browser sessions and Excel exports.
 - Download NETA reports and issue attachments.
 - Organize renamed reports for GC.
 - Run the dashboard ETL as a resumable daily workflow.
 - Preview or explicitly confirm CxAlloy uploads as a separate operation.
+
+EPS reports are stored in the tracker `Daily_test_report/` directory and saving
+one rebuilds `daily_tested_equipment.md`. MV reports are stored separately in
+`MV_Daily_test_report/`; saving an MV report does not run the EPS wash script.
 
 The automation API listens only on `127.0.0.1:8765`. It uses the sibling
 `IAD6_EPS_Testing_Tracker` directory by default. Set `IAD6_EPS_TRACKER_ROOT`

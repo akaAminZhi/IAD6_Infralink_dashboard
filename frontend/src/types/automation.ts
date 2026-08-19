@@ -52,6 +52,7 @@ export interface AutomationHealth {
   eps_tracker_root: string;
   eps_tracker_exists: boolean;
   report_directory: string;
+  mv_report_directory: string;
   runtime_directory: string;
   sessions: {
     jc2: SessionStatus;
@@ -103,3 +104,31 @@ export interface SavedDailyReport {
   wash_run: AutomationRun;
 }
 
+export interface MvDailyReportSections {
+  tested_and_passed: string[];
+  partially_tested: string[];
+  failed: string[];
+  retested_and_passed: string[];
+}
+
+export interface MvDailyReport {
+  report_name: string;
+  modified_at: string;
+  sections: MvDailyReportSections;
+  counts: Record<keyof MvDailyReportSections, number>;
+}
+
+export interface MvDailyReportValidation {
+  sections: MvDailyReportSections;
+  counts: Record<keyof MvDailyReportSections, number>;
+  warnings: Array<{
+    item: string;
+    removed_from: string;
+    kept_in: string;
+  }>;
+}
+
+export interface SavedMvDailyReport {
+  report: MvDailyReport;
+  validation: MvDailyReportValidation;
+}

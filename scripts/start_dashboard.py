@@ -57,6 +57,9 @@ def main() -> int:
                 "127.0.0.1",
                 "--port",
                 "8765",
+                "--reload",
+                "--reload-dir",
+                str(PROJECT_ROOT / "scripts" / "automation"),
             ],
             cwd=PROJECT_ROOT,
         )
@@ -86,4 +89,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

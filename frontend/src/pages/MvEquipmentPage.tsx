@@ -1,6 +1,7 @@
 import {
   Boxes,
   Cable,
+  CheckCircle2,
   CircleDot,
   Maximize2,
   Minus,
@@ -191,7 +192,7 @@ interface MvStatusPalette {
   text: string;
 }
 
-type MvStatusHighlight = "shipToSite" | "installationComplete" | "neutral";
+type MvStatusHighlight = "tested" | "shipToSite" | "installationComplete" | "neutral";
 
 const NEUTRAL_PALETTE: MvStatusPalette = {
   fill: "#f8fafc",
@@ -206,16 +207,28 @@ const SHIP_TO_SITE_PALETTE: MvStatusPalette = {
 };
 
 const INSTALLATION_COMPLETE_PALETTE: MvStatusPalette = {
-  fill: "#d1fae5",
-  stroke: "#059669",
-  text: "#065f46",
+  fill: "#fef3c7",
+  stroke: "#d97706",
+  text: "#92400e",
+};
+
+const TESTED_PALETTE: MvStatusPalette = {
+  fill: "#dcfce7",
+  stroke: "#16a34a",
+  text: "#166534",
 };
 
 function normalizeStatus(status: string | null | undefined): string {
   return String(status ?? "").trim().toUpperCase().replace(/\s+/g, " ");
 }
 
-function getStatusHighlight(annotation: PowerPlanAnnotation): MvStatusHighlight {
+function isMvDailyTestPassed(annotation: PowerPlanAnnotation): boolean {
+  return ["tested_and_passed", "retested_and_passed"].includes(
+    String(annotation.mv_daily_test_status ?? ""),
+  );
+}
+
+function getSystemStatusHighlight(annotation: PowerPlanAnnotation): MvStatusHighlight {
   const status = normalizeStatus(annotation.system_element_status);
   if (status.includes("SHIP TO SITE")) return "shipToSite";
   if (
@@ -227,13 +240,52 @@ function getStatusHighlight(annotation: PowerPlanAnnotation): MvStatusHighlight 
   return "neutral";
 }
 
-function getAnnotationPalette(annotation: PowerPlanAnnotation): MvStatusPalette {
-  const highlight = getStatusHighlight(annotation);
+function getStatusHighlight(annotation: PowerPlanAnnotation): MvStatusHighlight {
+  return isMvDailyTestPassed(annotation) ? "tested" : getSystemStatusHighlight(annotation);
+}
+
+function paletteForHighlight(highlight: MvStatusHighlight): MvStatusPalette {
+  if (highlight === "tested") return TESTED_PALETTE;
   if (highlight === "shipToSite") return SHIP_TO_SITE_PALETTE;
-  if (highlight === "installationComplete") {
-    return INSTALLATION_COMPLETE_PALETTE;
-  }
+  if (highlight === "installationComplete") return INSTALLATION_COMPLETE_PALETTE;
   return NEUTRAL_PALETTE;
+}
+
+function getAnnotationPalette(annotation: PowerPlanAnnotation): MvStatusPalette {
+  return paletteForHighlight(getStatusHighlight(annotation));
+}
+
+function getSystemElementPalette(annotation: PowerPlanAnnotation): MvStatusPalette {
+  return paletteForHighlight(getSystemStatusHighlight(annotation));
+}
+
+function mvTestStatusLabel(status: string): string {
+  const labels: Record<string, string> = {
+    tested_and_passed: "Tested And Passed",
+    partially_tested: "Partially Tested",
+    failed: "Failed",
+    retested_and_passed: "Retested And Passed",
+  };
+  return labels[status] ?? status.replace(/_/g, " ");
+}
+
+function mvTestStatusTone(status: string): string {
+  if (["tested_and_passed", "retested_and_passed"].includes(status)) {
+    return "border-emerald-300 bg-emerald-50 text-emerald-800";
+  }
+  if (status === "failed") return "border-red-300 bg-red-50 text-red-800";
+  return "border-amber-300 bg-amber-50 text-amber-900";
+}
+
+function formatMvTestDate(value: string): string {
+  const parsed = new Date(`${value}T12:00:00`);
+  return Number.isNaN(parsed.valueOf())
+    ? value
+    : parsed.toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      });
 }
 
 function MvScrew({
@@ -527,7 +579,7 @@ export function MvEquipmentPage({ data }: MvEquipmentPageProps) {
     (annotation) => !isConnection(annotation) && !isTermination(annotation),
   );
   const selected = currentPage.annotations.find((annotation) => annotation.annotation_id === selectedId) ?? null;
-  const selectedPalette = selected ? getAnnotationPalette(selected) : NEUTRAL_PALETTE;
+  const selectedPalette = selected ? getSystemElementPalette(selected) : NEUTRAL_PALETTE;
   const highlightCounts = currentPage.annotations.reduce<Record<MvStatusHighlight, number>>(
     (counts, annotation) => {
       if (["equipment", "termination", "connection"].includes(annotation.kind)) {
@@ -535,7 +587,7 @@ export function MvEquipmentPage({ data }: MvEquipmentPageProps) {
       }
       return counts;
     },
-    { shipToSite: 0, installationComplete: 0, neutral: 0 },
+    { tested: 0, shipToSite: 0, installationComplete: 0, neutral: 0 },
   );
 
   function handlePointerDown(event: React.PointerEvent<SVGSVGElement>) {
@@ -617,12 +669,16 @@ export function MvEquipmentPage({ data }: MvEquipmentPageProps) {
             {`${connections.length} connection${connections.length === 1 ? "" : "s"}`}
           </span>
           <span className="h-5 w-px bg-slate-300" aria-hidden="true" />
+          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-800">
+            <span className="h-3.5 w-3.5 rounded-[3px] border-2 border-green-600 bg-green-100" />
+            {`MV Daily Tested ${highlightCounts.tested}`}
+          </span>
           <span className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-700">
             <span className="h-3.5 w-3.5 rounded-[3px] border-2 border-purple-700 bg-purple-100" />
             {`Ship to Site ${highlightCounts.shipToSite}`}
           </span>
           <span className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-700">
-            <span className="h-3.5 w-3.5 rounded-[3px] border-2 border-emerald-600 bg-emerald-100" />
+            <span className="h-3.5 w-3.5 rounded-[3px] border-2 border-amber-600 bg-amber-100" />
             {`Cable / Termination Installation Complete ${highlightCounts.installationComplete}`}
           </span>
           <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -826,6 +882,31 @@ export function MvEquipmentPage({ data }: MvEquipmentPageProps) {
                       </dd>
                     </div>
                   </dl>
+                  {(selected.mv_daily_test_history ?? []).length > 0 ? (
+                    <div className="mt-5 rounded-md border border-emerald-200 bg-emerald-50/50 p-3">
+                      <div className="flex items-center gap-2 text-xs font-semibold uppercase text-emerald-800">
+                        <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+                        MV Daily Test
+                      </div>
+                      <div className="mt-3 grid gap-2">
+                        {(selected.mv_daily_test_history ?? []).map((entry) => (
+                          <div
+                            className="flex flex-wrap items-center justify-between gap-2 rounded-md border bg-white px-2.5 py-2"
+                            key={`${entry.date}-${entry.status}-${entry.report_name ?? ""}`}
+                          >
+                            <span
+                              className={`inline-flex rounded-md border px-2 py-0.5 text-xs font-semibold ${mvTestStatusTone(entry.status)}`}
+                            >
+                              {mvTestStatusLabel(entry.status)}
+                            </span>
+                            <span className="text-sm font-semibold text-slate-700">
+                              {formatMvTestDate(entry.date)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
                   <div className="mt-5 rounded-md border border-dashed bg-slate-50 p-4">
                     <div className="text-xs font-semibold uppercase text-slate-500">Details reserved</div>
                     <p className="mt-2 text-sm leading-6 text-muted-foreground">

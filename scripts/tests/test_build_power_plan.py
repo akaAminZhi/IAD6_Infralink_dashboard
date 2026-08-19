@@ -52,8 +52,26 @@ def test_build_power_plan_extracts_and_matches_equipment_annotations(tmp_path: P
             },
         ],
     )
+    mv_report_dir = tmp_path / "MV_Daily_test_report"
+    mv_report_dir.mkdir()
+    (mv_report_dir / "2026-08-18.md").write_text(
+        """# Tested And Passed
+
+- PDU6-01A-2
+- FD01-IAD06-PDU6-01A-2
+
+# Partially Tested
+
+
+# Failed
+
+
+# Retested And Passed
+""",
+        encoding="utf-8",
+    )
     output_path = tmp_path / "power_plan.json"
-    result = build_power_plan(source_dir, equipment_path, output_path)
+    result = build_power_plan(source_dir, equipment_path, output_path, mv_report_dir)
 
     assert result["page_count"] == 1
     assert result["equipment_annotation_count"] == 1
@@ -65,6 +83,9 @@ def test_build_power_plan_extracts_and_matches_equipment_annotations(tmp_path: P
     assert record["system_element_status"] == "Ship to Site"
     assert record["system_element_type"] == "Power Distribution Unit"
     assert record["status_match_source"] == "annotation_id"
+    assert record["mv_daily_test_status"] == "tested_and_passed"
+    assert record["mv_daily_test_date"] == "2026-08-18"
+    assert record["mv_daily_tested_dates"] == ["2026-08-18"]
     assert "image_url" not in result["pages"][0]
     termination_record = next(
         item for item in result["pages"][0]["annotations"] if item["kind"] == "termination"
@@ -82,9 +103,18 @@ def test_build_power_plan_extracts_and_matches_equipment_annotations(tmp_path: P
     assert connection_record["match_status"] == "matched"
     assert connection_record["system_element_status"] == "Installation Complete"
     assert connection_record["system_element_type"] == "Feeder Cable - MV"
+    assert connection_record["mv_daily_test_history"] == [
+        {
+            "date": "2026-08-18",
+            "status": "tested_and_passed",
+            "report_name": "2026-08-18.md",
+        }
+    ]
     boundary = next(
         item for item in result["pages"][0]["annotations"] if item["kind"] == "room_boundary"
     )
     assert boundary["label"] == ""
     assert boundary["match_status"] == "not_applicable"
+    assert result["mv_daily_tested_annotation_count"] == 2
+    assert result["mv_daily_report_files"][0]["file_name"] == "2026-08-18.md"
     assert output_path.exists()

@@ -11,10 +11,14 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from scripts.automation.daily_reports import (
     ReportNameError,
+    list_mv_reports,
     list_reports,
     normalize_report_name,
+    read_mv_report,
     read_report,
+    validate_mv_sections,
     validate_sections,
+    write_mv_report,
     write_report,
 )
 from scripts.automation.runner import AutomationConfig, TaskManager
@@ -51,6 +55,16 @@ class DailyReportRequest(BaseModel):
     failed: str = ""
     retested_and_passed: str = ""
     tested: str = ""
+    overwrite: bool = False
+
+
+class MvDailyReportRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    tested_and_passed: str = ""
+    partially_tested: str = ""
+    failed: str = ""
+    retested_and_passed: str = ""
     overwrite: bool = False
 
 
@@ -103,6 +117,7 @@ def create_app(
             "eps_tracker_root": str(resolved_config.eps_root),
             "eps_tracker_exists": resolved_config.eps_root.is_dir(),
             "report_directory": str(resolved_config.report_dir),
+            "mv_report_directory": str(resolved_config.mv_report_dir),
             "runtime_directory": str(resolved_config.runtime_root),
             "sessions": {
                 "jc2": _file_status(resolved_config.jc2_auth_state),
@@ -239,6 +254,63 @@ def create_app(
                 "report": saved_report,
                 "validation": validation,
                 "wash_run": wash_run,
+            }
+        except ReportNameError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except FileExistsError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except (RuntimeError, ValueError) as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    @app.get("/api/automation/mv-daily-reports")
+    def mv_daily_reports() -> list[dict[str, Any]]:
+        return list_mv_reports(resolved_config.mv_report_dir)
+
+    @app.get("/api/automation/mv-daily-reports/{report_name}")
+    def mv_daily_report(report_name: str) -> dict[str, Any]:
+        try:
+            return read_mv_report(resolved_config.mv_report_dir, report_name)
+        except ReportNameError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.post("/api/automation/mv-daily-reports/validate")
+    def validate_mv_daily_report(request: MvDailyReportRequest) -> dict[str, Any]:
+        return validate_mv_sections(
+            request.tested_and_passed,
+            request.partially_tested,
+            request.failed,
+            request.retested_and_passed,
+        )
+
+    @app.put("/api/automation/mv-daily-reports/{report_name}", status_code=202)
+    def save_mv_daily_report(
+        report_name: str,
+        request: MvDailyReportRequest,
+    ) -> dict[str, Any]:
+        if task_manager.has_active_run():
+            raise HTTPException(
+                status_code=409,
+                detail="Wait for the active automation run before saving an MV daily report.",
+            )
+        try:
+            normalized_name = normalize_report_name(report_name)
+            validation = validate_mv_sections(
+                request.tested_and_passed,
+                request.partially_tested,
+                request.failed,
+                request.retested_and_passed,
+            )
+            path = write_mv_report(
+                resolved_config.mv_report_dir,
+                normalized_name,
+                validation["sections"],  # type: ignore[arg-type]
+                overwrite=request.overwrite,
+            )
+            return {
+                "report": read_mv_report(resolved_config.mv_report_dir, path.name),
+                "validation": validation,
             }
         except ReportNameError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc

@@ -2,10 +2,16 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { DailyReport, SavedDailyReport } from "../../types/automation";
+import type {
+  DailyReport,
+  SavedDailyReport,
+  SavedMvDailyReport,
+} from "../../types/automation";
 import {
   saveDailyReport,
+  saveMvDailyReport,
   validateDailyReport,
+  validateMvDailyReport,
 } from "../../utils/automationApi";
 import { DailyReportDialog } from "./DailyReportDialog";
 
@@ -22,7 +28,9 @@ vi.mock("../../utils/automationApi", () => {
   return {
     AutomationApiError: MockAutomationApiError,
     saveDailyReport: vi.fn(),
+    saveMvDailyReport: vi.fn(),
     validateDailyReport: vi.fn(),
+    validateMvDailyReport: vi.fn(),
   };
 });
 
@@ -58,6 +66,32 @@ const saved: SavedDailyReport = {
     options: {},
     steps: [],
   },
+};
+
+const mvValidation = {
+  sections: {
+    tested_and_passed: ["FD01-IAD06-TX6-01A"],
+    partially_tested: ["FD02-IAD06-TX6-01B"],
+    failed: [],
+    retested_and_passed: [],
+  },
+  counts: {
+    tested_and_passed: 1,
+    partially_tested: 1,
+    failed: 0,
+    retested_and_passed: 0,
+  },
+  warnings: [],
+};
+
+const savedMv: SavedMvDailyReport = {
+  report: {
+    report_name: "7-30.md",
+    modified_at: "2026-07-30T09:00:00",
+    sections: mvValidation.sections,
+    counts: mvValidation.counts,
+  },
+  validation: mvValidation,
 };
 
 afterEach(() => {
@@ -141,6 +175,78 @@ describe("DailyReportDialog", () => {
         expect.objectContaining({ overwrite: true }),
       ),
     );
+  });
+
+  it("saves MV reports with Partially Tested without starting the EPS wash", async () => {
+    const user = userEvent.setup();
+    const onSaved = vi.fn();
+    vi.mocked(validateMvDailyReport).mockResolvedValue(mvValidation);
+    vi.mocked(saveMvDailyReport).mockResolvedValue(savedMv);
+
+    render(
+      <DailyReportDialog
+        existingReportNames={[]}
+        initialReport={null}
+        onClose={vi.fn()}
+        onSaved={onSaved}
+        open
+        reportKind="mv"
+        serviceBusy={false}
+      />,
+    );
+
+    await user.clear(screen.getByLabelText("Report file name"));
+    await user.type(screen.getByLabelText("Report file name"), "7-30");
+    await user.type(
+      screen.getByPlaceholderText("FD01-IAD06-TX6-01A"),
+      "FD01-IAD06-TX6-01A",
+    );
+    await user.type(
+      screen.getByPlaceholderText("FD02-IAD06-TX6-01B"),
+      "FD02-IAD06-TX6-01B",
+    );
+    await user.click(screen.getByRole("button", { name: "Save Report" }));
+
+    await waitFor(() => expect(onSaved).toHaveBeenCalledWith(savedMv));
+    expect(validateMvDailyReport).toHaveBeenCalledWith({
+      tested_and_passed: "FD01-IAD06-TX6-01A",
+      partially_tested: "FD02-IAD06-TX6-01B",
+      failed: "",
+      retested_and_passed: "",
+    });
+    expect(saveMvDailyReport).toHaveBeenCalledWith(
+      "7-30",
+      expect.objectContaining({ partially_tested: "FD02-IAD06-TX6-01B", overwrite: false }),
+    );
+    expect(saveDailyReport).not.toHaveBeenCalled();
+  });
+
+  it("explains that a 404 MV save requires an automation service restart", async () => {
+    const user = userEvent.setup();
+    vi.mocked(validateMvDailyReport).mockResolvedValue(mvValidation);
+    vi.mocked(saveMvDailyReport).mockRejectedValue(
+      new (await import("../../utils/automationApi")).AutomationApiError("Not Found", 404),
+    );
+
+    render(
+      <DailyReportDialog
+        existingReportNames={[]}
+        initialReport={null}
+        onClose={vi.fn()}
+        onSaved={vi.fn()}
+        open
+        reportKind="mv"
+        serviceBusy={false}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Save Report" }));
+
+    expect(
+      await screen.findByText(
+        "The MV report API is unavailable. Restart the local task service, then save again.",
+      ),
+    ).toBeInTheDocument();
   });
 
   it("does not render while closed", () => {

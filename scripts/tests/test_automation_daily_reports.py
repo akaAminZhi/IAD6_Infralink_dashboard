@@ -6,11 +6,15 @@ import pytest
 
 from scripts.automation.daily_reports import (
     ReportNameError,
+    format_mv_report,
     format_report,
     normalize_report_name,
+    read_mv_report,
     read_report,
     report_path,
+    validate_mv_sections,
     validate_sections,
+    write_mv_report,
     write_report,
 )
 
@@ -76,3 +80,57 @@ def test_report_is_written_atomically_and_requires_overwrite(tmp_path: Path) -> 
     loaded = read_report(report_dir, "7-16.md")
     assert loaded["sections"] == replacement
 
+
+def test_mv_report_validation_format_and_atomic_write(tmp_path: Path) -> None:
+    result = validate_mv_sections(
+        "FD1-A\nFD2-B",
+        "FD3-C\nFD4-D",
+        "FD4-D\nFD5-E",
+        "FD2-B\nFD6-F",
+    )
+
+    assert result["sections"] == {
+        "tested_and_passed": ["FD1-A"],
+        "partially_tested": ["FD3-C"],
+        "failed": ["FD4-D", "FD5-E"],
+        "retested_and_passed": ["FD2-B", "FD6-F"],
+    }
+    assert result["counts"] == {
+        "tested_and_passed": 1,
+        "partially_tested": 1,
+        "failed": 2,
+        "retested_and_passed": 2,
+    }
+    assert len(result["warnings"]) == 2
+
+    report_dir = tmp_path / "MV_Daily_test_report"
+    sections = result["sections"]
+    path = write_mv_report(report_dir, "2026-08-19.md", sections, overwrite=False)
+    content = path.read_text(encoding="utf-8")
+    assert content == format_mv_report(sections)
+    assert "# Partially Tested" in content
+    assert read_mv_report(report_dir, path.name)["sections"] == sections
+    assert not list(report_dir.glob("*.tmp"))
+
+
+def test_mv_validation_keeps_only_compact_test_item_ids() -> None:
+    result = validate_mv_sections(
+        """FD01-IAD06-TX6-06R
+CABLE, MV
+PM/KAB
+8/18/2026
+TX6-06F
+XFMR, MV
+GA/DH
+TX6-06R""",
+        "TX6-06B\nTX6-06D",
+        "",
+        "",
+    )
+
+    assert result["sections"]["tested_and_passed"] == [
+        "FD01-IAD06-TX6-06R",
+        "TX6-06F",
+        "TX6-06R",
+    ]
+    assert result["sections"]["partially_tested"] == ["TX6-06B", "TX6-06D"]

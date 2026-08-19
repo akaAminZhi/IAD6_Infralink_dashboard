@@ -59,6 +59,10 @@ class AutomationConfig:
     def report_dir(self) -> Path:
         return self.eps_root / "Daily_test_report"
 
+    @property
+    def mv_report_dir(self) -> Path:
+        return self.eps_root / "MV_Daily_test_report"
+
 
 @dataclass(frozen=True)
 class JobDefinition:

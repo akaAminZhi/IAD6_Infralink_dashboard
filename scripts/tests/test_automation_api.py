@@ -40,6 +40,7 @@ def test_health_and_daily_report_round_trip(tmp_path: Path) -> None:
     health = client.get("/api/automation/health")
     assert health.status_code == 200
     assert health.json()["eps_tracker_root"] == str(config.eps_root)
+    assert health.json()["mv_report_directory"] == str(config.mv_report_dir)
 
     validation = client.post(
         "/api/automation/daily-reports/validate",
@@ -78,6 +79,48 @@ def test_health_and_daily_report_round_trip(tmp_path: Path) -> None:
     assert reports.json()[0]["report_name"] == "7-16.md"
 
 
+def test_mv_daily_report_round_trip_does_not_start_eps_wash(tmp_path: Path) -> None:
+    client, config, manager = make_client(tmp_path)
+    validation = client.post(
+        "/api/automation/mv-daily-reports/validate",
+        json={
+            "tested_and_passed": "FD1-A\nFD2-B",
+            "partially_tested": "FD3-C",
+            "failed": "FD3-C\nFD4-D",
+            "retested_and_passed": "FD2-B",
+        },
+    )
+    assert validation.status_code == 200
+    assert validation.json()["counts"] == {
+        "tested_and_passed": 1,
+        "partially_tested": 0,
+        "failed": 2,
+        "retested_and_passed": 1,
+    }
+
+    saved = client.put(
+        "/api/automation/mv-daily-reports/8-19.md",
+        json={
+            "tested_and_passed": "FD1-A",
+            "partially_tested": "FD2-B",
+            "failed": "FD3-C",
+            "retested_and_passed": "FD4-D",
+            "overwrite": False,
+        },
+    )
+    assert saved.status_code == 202
+    assert "wash_run" not in saved.json()
+    assert not manager.has_active_run()
+    assert (config.mv_report_dir / "8-19.md").exists()
+
+    loaded = client.get("/api/automation/mv-daily-reports/8-19.md")
+    assert loaded.status_code == 200
+    assert loaded.json()["sections"]["partially_tested"] == ["FD2-B"]
+    reports = client.get("/api/automation/mv-daily-reports")
+    assert reports.status_code == 200
+    assert reports.json()[0]["report_name"] == "8-19.md"
+
+
 def test_existing_daily_report_requires_overwrite_confirmation(tmp_path: Path) -> None:
     client, _, manager = make_client(tmp_path)
     payload = {
@@ -110,4 +153,3 @@ def test_api_rejects_unknown_jobs_and_unconfirmed_upload(tmp_path: Path) -> None
         json={"options": {}, "confirmed": False},
     )
     assert upload.status_code == 403
-

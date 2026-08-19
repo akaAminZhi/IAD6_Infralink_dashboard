@@ -4,9 +4,11 @@ import {
   AutomationApiError,
   getAutomationHealth,
   getDailyReport,
+  getMvDailyReport,
   getRunLogs,
   runAutomationJob,
   saveDailyReport,
+  saveMvDailyReport,
 } from "./automationApi";
 
 afterEach(() => {
@@ -25,6 +27,7 @@ describe("automationApi", () => {
     await getAutomationHealth();
     await getRunLogs("run id", 12);
     await getDailyReport("7-30.md");
+    await getMvDailyReport("7-30.md");
 
     expect(fetchMock.mock.calls[0][0]).toBe("http://127.0.0.1:8765/api/automation/health");
     expect(fetchMock.mock.calls[1][0]).toBe(
@@ -32,6 +35,9 @@ describe("automationApi", () => {
     );
     expect(fetchMock.mock.calls[2][0]).toBe(
       "http://127.0.0.1:8765/api/automation/daily-reports/7-30.md",
+    );
+    expect(fetchMock.mock.calls[3][0]).toBe(
+      "http://127.0.0.1:8765/api/automation/mv-daily-reports/7-30.md",
     );
   });
 
@@ -50,6 +56,13 @@ describe("automationApi", () => {
       tested: "C",
       overwrite: false,
     });
+    await saveMvDailyReport("7-30.md", {
+      tested_and_passed: "MV-A",
+      partially_tested: "MV-B",
+      failed: "MV-C",
+      retested_and_passed: "MV-D",
+      overwrite: false,
+    });
 
     expect(fetchMock.mock.calls[0][1]).toMatchObject({
       method: "POST",
@@ -61,6 +74,16 @@ describe("automationApi", () => {
         failed: "A",
         retested_and_passed: "B",
         tested: "C",
+        overwrite: false,
+      }),
+    });
+    expect(fetchMock.mock.calls[2][1]).toMatchObject({
+      method: "PUT",
+      body: JSON.stringify({
+        tested_and_passed: "MV-A",
+        partially_tested: "MV-B",
+        failed: "MV-C",
+        retested_and_passed: "MV-D",
         overwrite: false,
       }),
     });

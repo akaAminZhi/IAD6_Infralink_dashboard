@@ -27,7 +27,9 @@ import type {
   AutomationRunStatus,
   DailyReport,
   JobOptions,
+  MvDailyReport,
   SavedDailyReport,
+  SavedMvDailyReport,
 } from "../types/automation";
 import {
   AutomationApiError,
@@ -38,6 +40,8 @@ import {
   getAutomationRuns,
   getDailyReport,
   getDailyReports,
+  getMvDailyReport,
+  getMvDailyReports,
   getRunLogs,
   resumeAutomationRun,
   runAutomationJob,
@@ -137,11 +141,17 @@ function ErrorBanner({ message, onClose }: { message: string; onClose: () => voi
   );
 }
 
+function isMvDailyReport(report: DailyReport | MvDailyReport): report is MvDailyReport {
+  return "partially_tested" in report.sections;
+}
+
 export function DataOperationsPage({ onDashboardReload }: DataOperationsPageProps) {
   const [health, setHealth] = useState<AutomationHealth | null>(null);
   const [jobs, setJobs] = useState<AutomationJob[]>([]);
   const [runs, setRuns] = useState<AutomationRun[]>([]);
   const [reports, setReports] = useState<DailyReport[]>([]);
+  const [mvReports, setMvReports] = useState<MvDailyReport[]>([]);
+  const [reportView, setReportView] = useState<"eps" | "mv">("eps");
   const [serviceError, setServiceError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
@@ -149,7 +159,7 @@ export function DataOperationsPage({ onDashboardReload }: DataOperationsPageProp
   const [reportsExpanded, setReportsExpanded] = useState(false);
   const [reportPage, setReportPage] = useState(1);
   const [reportDialogOpen, setReportDialogOpen] = useState(false);
-  const [editingReport, setEditingReport] = useState<DailyReport | null>(null);
+  const [editingReport, setEditingReport] = useState<DailyReport | MvDailyReport | null>(null);
   const [loadingReport, setLoadingReport] = useState(false);
   const [confirmUpload, setConfirmUpload] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -200,10 +210,15 @@ export function DataOperationsPage({ onDashboardReload }: DataOperationsPageProp
   }, [onDashboardReload]);
 
   const refreshReports = useCallback(async () => {
-    try {
-      setReports(await getDailyReports());
-    } catch {
-      // The service status panel already communicates connection failures.
+    const [epsResult, mvResult] = await Promise.allSettled([
+      getDailyReports(),
+      getMvDailyReports(),
+    ]);
+    if (epsResult.status === "fulfilled") {
+      setReports(epsResult.value);
+    }
+    if (mvResult.status === "fulfilled") {
+      setMvReports(mvResult.value);
     }
   }, []);
 
@@ -252,9 +267,10 @@ export function DataOperationsPage({ onDashboardReload }: DataOperationsPageProp
   }, [logText]);
 
   useEffect(() => {
-    const totalPages = Math.max(1, Math.ceil(reports.length / REPORT_PAGE_SIZE));
+    const reportCount = reportView === "mv" ? mvReports.length : reports.length;
+    const totalPages = Math.max(1, Math.ceil(reportCount / REPORT_PAGE_SIZE));
     setReportPage((current) => Math.min(current, totalPages));
-  }, [reports.length]);
+  }, [mvReports.length, reportView, reports.length]);
 
   const activeRun = useMemo(
     () => runs.find((run) => run.run_id === health?.active_run_id) ?? null,
@@ -265,10 +281,11 @@ export function DataOperationsPage({ onDashboardReload }: DataOperationsPageProp
   const resumablePipeline =
     latestPipeline && RESUMABLE_STATUSES.has(latestPipeline.status) ? latestPipeline : null;
   const serviceBusy = Boolean(activeRun);
-  const reportPageCount = Math.max(1, Math.ceil(reports.length / REPORT_PAGE_SIZE));
+  const activeReports = reportView === "mv" ? mvReports : reports;
+  const reportPageCount = Math.max(1, Math.ceil(activeReports.length / REPORT_PAGE_SIZE));
   const visibleReports = reportsExpanded
-    ? reports.slice((reportPage - 1) * REPORT_PAGE_SIZE, reportPage * REPORT_PAGE_SIZE)
-    : reports.slice(0, 1);
+    ? activeReports.slice((reportPage - 1) * REPORT_PAGE_SIZE, reportPage * REPORT_PAGE_SIZE)
+    : activeReports.slice(0, 1);
 
   function optionsForJob(job: AutomationJob, overrides: JobOptions = {}): JobOptions {
     const supported = new Set(job.supported_options);
@@ -307,11 +324,14 @@ export function DataOperationsPage({ onDashboardReload }: DataOperationsPageProp
     await perform(() => runAutomationJob(job.job_id, optionsForJob(job, overrides), confirmed));
   }
 
-  async function openExistingReport(reportName: string) {
+  async function openExistingReport(reportName: string, kind: "eps" | "mv") {
     setLoadingReport(true);
     setActionError(null);
     try {
-      const report = await getDailyReport(reportName);
+      const report = kind === "mv"
+        ? await getMvDailyReport(reportName)
+        : await getDailyReport(reportName);
+      setReportView(kind);
       setEditingReport(report);
       setReportDialogOpen(true);
     } catch (error) {
@@ -321,10 +341,12 @@ export function DataOperationsPage({ onDashboardReload }: DataOperationsPageProp
     }
   }
 
-  function handleReportSaved(result: SavedDailyReport) {
+  function handleReportSaved(result: SavedDailyReport | SavedMvDailyReport) {
     setReportDialogOpen(false);
     setEditingReport(null);
-    setSelectedRunId(result.wash_run.run_id);
+    if ("wash_run" in result) {
+      setSelectedRunId(result.wash_run.run_id);
+    }
     void refreshReports();
     void refreshService();
   }
@@ -460,11 +482,12 @@ export function DataOperationsPage({ onDashboardReload }: DataOperationsPageProp
           <div>
             <h2 className="text-lg font-semibold tracking-normal">Daily Test Report Entry</h2>
             <p className="mt-1 break-all text-sm text-muted-foreground">
-              Reports are saved to {health.report_directory}.
+              {reportView === "mv" ? "MV reports" : "EPS reports"} are saved to{" "}
+              {reportView === "mv" ? health.mv_report_directory : health.report_directory}.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            {reports.length > 1 ? (
+            {activeReports.length > 1 ? (
               <Button
                 onClick={() => {
                   setReportsExpanded((current) => !current);
@@ -478,67 +501,149 @@ export function DataOperationsPage({ onDashboardReload }: DataOperationsPageProp
                     reportsExpanded && "rotate-90",
                   )}
                 />
-                {reportsExpanded ? "Show Latest Only" : `Browse All (${reports.length})`}
+                {reportsExpanded ? "Show Latest Only" : `Browse All (${activeReports.length})`}
               </Button>
             ) : null}
             <Button
               disabled={serviceBusy}
               onClick={() => {
+                setReportView("eps");
+                setEditingReport(null);
+                setReportDialogOpen(true);
+              }}
+              variant="outline"
+            >
+              <FileEdit className="mr-2 h-4 w-4" /> New EPS Daily Report
+            </Button>
+            <Button
+              disabled={serviceBusy}
+              onClick={() => {
+                setReportView("mv");
                 setEditingReport(null);
                 setReportDialogOpen(true);
               }}
             >
-              <FileEdit className="mr-2 h-4 w-4" /> New Daily Test Report
+              <FileEdit className="mr-2 h-4 w-4" /> New MV Daily Report
             </Button>
           </div>
+        </div>
+        <div className="flex gap-1 border-b bg-muted/20 px-5 pt-3">
+          <button
+            className={cn(
+              "border-b-2 px-4 py-2 text-sm font-semibold",
+              reportView === "eps"
+                ? "border-blue-600 text-blue-700"
+                : "border-transparent text-muted-foreground hover:text-foreground",
+            )}
+            onClick={() => {
+              setReportView("eps");
+              setReportPage(1);
+            }}
+            type="button"
+          >
+            EPS Reports ({reports.length})
+          </button>
+          <button
+            className={cn(
+              "border-b-2 px-4 py-2 text-sm font-semibold",
+              reportView === "mv"
+                ? "border-amber-600 text-amber-800"
+                : "border-transparent text-muted-foreground hover:text-foreground",
+            )}
+            onClick={() => {
+              setReportView("mv");
+              setReportPage(1);
+            }}
+            type="button"
+          >
+            MV Reports ({mvReports.length})
+          </button>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[720px] text-left text-sm">
             <thead className="border-b bg-muted/35 text-xs uppercase text-muted-foreground">
               <tr>
                 <th className="px-5 py-3 font-medium">Report</th>
-                <th className="px-4 py-3 font-medium">Failed</th>
-                <th className="px-4 py-3 font-medium">Retested + Passed</th>
-                <th className="px-4 py-3 font-medium">Tested</th>
+                {reportView === "mv" ? (
+                  <>
+                    <th className="px-4 py-3 font-medium">Tested + Passed</th>
+                    <th className="px-4 py-3 font-medium">Partially Tested</th>
+                    <th className="px-4 py-3 font-medium">Failed</th>
+                    <th className="px-4 py-3 font-medium">Retested + Passed</th>
+                  </>
+                ) : (
+                  <>
+                    <th className="px-4 py-3 font-medium">Failed</th>
+                    <th className="px-4 py-3 font-medium">Retested + Passed</th>
+                    <th className="px-4 py-3 font-medium">Tested</th>
+                  </>
+                )}
                 <th className="px-4 py-3 font-medium">Modified</th>
                 <th className="px-5 py-3 text-right font-medium">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y">
-              {visibleReports.map((report) => (
-                <tr key={report.report_name}>
-                  <td className="px-5 py-3 font-semibold">{report.report_name}</td>
-                  <td className="px-4 py-3 text-red-700">{report.counts.failed}</td>
-                  <td className="px-4 py-3 text-teal-700">{report.counts.retested_and_passed}</td>
-                  <td className="px-4 py-3 text-emerald-700">{report.counts.tested}</td>
-                  <td className="px-4 py-3 text-muted-foreground">
-                    {formatDateTime(report.modified_at)}
-                  </td>
-                  <td className="px-5 py-3 text-right">
-                    <Button
-                      disabled={loadingReport || serviceBusy}
-                      onClick={() => void openExistingReport(report.report_name)}
-                      variant="ghost"
-                    >
-                      <FileText className="mr-2 h-4 w-4" /> Edit
-                    </Button>
-                  </td>
-                </tr>
-              ))}
-              {reports.length === 0 ? (
+              {visibleReports.map((report) => {
+                const isMvReport = isMvDailyReport(report);
+                return (
+                  <tr key={report.report_name}>
+                    <td className="px-5 py-3 font-semibold">{report.report_name}</td>
+                    {isMvReport ? (
+                      <>
+                        <td className="px-4 py-3 text-emerald-700">
+                          {report.counts.tested_and_passed}
+                        </td>
+                        <td className="px-4 py-3 text-amber-700">
+                          {report.counts.partially_tested}
+                        </td>
+                        <td className="px-4 py-3 text-red-700">{report.counts.failed}</td>
+                        <td className="px-4 py-3 text-teal-700">
+                          {report.counts.retested_and_passed}
+                        </td>
+                      </>
+                    ) : (
+                      <>
+                        <td className="px-4 py-3 text-red-700">{report.counts.failed}</td>
+                        <td className="px-4 py-3 text-teal-700">
+                          {report.counts.retested_and_passed}
+                        </td>
+                        <td className="px-4 py-3 text-emerald-700">{report.counts.tested}</td>
+                      </>
+                    )}
+                    <td className="px-4 py-3 text-muted-foreground">
+                      {formatDateTime(report.modified_at)}
+                    </td>
+                    <td className="px-5 py-3 text-right">
+                      <Button
+                        disabled={loadingReport || serviceBusy}
+                        onClick={() =>
+                          void openExistingReport(report.report_name, isMvReport ? "mv" : "eps")
+                        }
+                        variant="ghost"
+                      >
+                        <FileText className="mr-2 h-4 w-4" /> Edit
+                      </Button>
+                    </td>
+                  </tr>
+                );
+              })}
+              {activeReports.length === 0 ? (
                 <tr>
-                  <td className="px-5 py-8 text-center text-muted-foreground" colSpan={6}>
-                    No daily report files found.
+                  <td
+                    className="px-5 py-8 text-center text-muted-foreground"
+                    colSpan={reportView === "mv" ? 7 : 6}
+                  >
+                    No {reportView === "mv" ? "MV " : "EPS "}daily report files found.
                   </td>
                 </tr>
               ) : null}
             </tbody>
           </table>
         </div>
-        {reportsExpanded && reports.length > REPORT_PAGE_SIZE ? (
+        {reportsExpanded && activeReports.length > REPORT_PAGE_SIZE ? (
           <div className="flex items-center justify-between gap-3 border-t px-5 py-3 text-sm">
             <span className="text-muted-foreground">
-              Page {reportPage} of {reportPageCount} · {reports.length} reports
+              Page {reportPage} of {reportPageCount} / {activeReports.length} reports
             </span>
             <div className="flex gap-2">
               <Button
@@ -773,7 +878,7 @@ export function DataOperationsPage({ onDashboardReload }: DataOperationsPageProp
       </section>
 
       <DailyReportDialog
-        existingReportNames={reports.map((report) => report.report_name)}
+        existingReportNames={activeReports.map((report) => report.report_name)}
         initialReport={editingReport}
         onClose={() => {
           setReportDialogOpen(false);
@@ -781,6 +886,7 @@ export function DataOperationsPage({ onDashboardReload }: DataOperationsPageProp
         }}
         onSaved={handleReportSaved}
         open={reportDialogOpen}
+        reportKind={reportView}
         serviceBusy={serviceBusy}
       />
 

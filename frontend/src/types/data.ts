@@ -263,6 +263,20 @@ export interface PowerPlanAnnotation {
   system_element_status?: string | null;
   system_element_type?: string | null;
   status_match_source?: string | null;
+  mv_daily_test_status?:
+    | "tested_and_passed"
+    | "partially_tested"
+    | "failed"
+    | "retested_and_passed"
+    | string
+    | null;
+  mv_daily_test_date?: string | null;
+  mv_daily_tested_dates?: string[];
+  mv_daily_test_history?: Array<{
+    date: string;
+    status: string;
+    report_name?: string;
+  }>;
 }
 
 export interface PowerPlanPageRecord {
@@ -284,6 +298,9 @@ export interface PowerPlanManifest {
   equipment_annotation_count?: number;
   matched_equipment_annotation_count?: number;
   matched_system_element_annotation_count?: number;
+  mv_daily_report_directory?: string;
+  mv_daily_report_files?: SourceFileMetadata[];
+  mv_daily_tested_annotation_count?: number;
   pages?: PowerPlanPageRecord[];
 }
 

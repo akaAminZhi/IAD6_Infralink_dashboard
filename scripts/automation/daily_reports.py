@@ -22,6 +22,15 @@ HEADING_MAP = {
     "tested": "tested",
     "tested equipment": "tested",
 }
+MV_HEADING_MAP = {
+    "tested and passed": "tested_and_passed",
+    "tested & passed": "tested_and_passed",
+    "partially tested": "partially_tested",
+    "partial tested": "partially_tested",
+    "failed": "failed",
+    "retested and passed": "retested_and_passed",
+    "retest and passed": "retested_and_passed",
+}
 
 
 class ReportNameError(ValueError):
@@ -62,7 +71,7 @@ def report_path(report_dir: Path, report_name: str) -> Path:
     directory = report_dir.resolve()
     candidate = (directory / normalized).resolve()
     if candidate.parent != directory:
-        raise ReportNameError("Report path must stay inside Daily_test_report.")
+        raise ReportNameError("Report path must stay inside the configured report directory.")
     return candidate
 
 
@@ -86,6 +95,15 @@ def normalize_items(value: str | Iterable[str]) -> list[str]:
         items.append(item)
 
     return items
+
+
+def normalize_mv_items(value: str | Iterable[str]) -> list[str]:
+    """Keep compact MV test IDs using the same shape as EPS daily reports."""
+    return [
+        item
+        for item in normalize_items(value)
+        if " " not in item and "-" in item and any(char.isdigit() for char in item)
+    ]
 
 
 def validate_sections(
@@ -156,6 +174,72 @@ def format_report(sections: dict[str, list[str]]) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
+def validate_mv_sections(
+    tested_and_passed: str | Iterable[str],
+    partially_tested: str | Iterable[str],
+    failed: str | Iterable[str],
+    retested_and_passed: str | Iterable[str],
+) -> dict[str, object]:
+    original = {
+        "tested_and_passed": normalize_mv_items(tested_and_passed),
+        "partially_tested": normalize_mv_items(partially_tested),
+        "failed": normalize_mv_items(failed),
+        "retested_and_passed": normalize_mv_items(retested_and_passed),
+    }
+    priority = (
+        "retested_and_passed",
+        "tested_and_passed",
+        "failed",
+        "partially_tested",
+    )
+    labels = {
+        "tested_and_passed": "Tested And Passed",
+        "partially_tested": "Partially Tested",
+        "failed": "Failed",
+        "retested_and_passed": "Retested And Passed",
+    }
+    sections = {name: [] for name in original}
+    kept_by_key: dict[str, str] = {}
+    for section_name in priority:
+        for item in original[section_name]:
+            key = _item_key(item)
+            if key in kept_by_key:
+                continue
+            kept_by_key[key] = section_name
+            sections[section_name].append(item)
+
+    warnings: list[dict[str, str]] = []
+    for section_name, items in original.items():
+        for item in items:
+            kept_section = kept_by_key[_item_key(item)]
+            if kept_section != section_name:
+                warnings.append(
+                    {
+                        "item": item,
+                        "removed_from": labels[section_name],
+                        "kept_in": labels[kept_section],
+                    }
+                )
+
+    return {
+        "sections": sections,
+        "counts": {name: len(items) for name, items in sections.items()},
+        "warnings": warnings,
+    }
+
+
+def format_mv_report(sections: dict[str, list[str]]) -> str:
+    lines: list[str] = ["# Tested And Passed", ""]
+    lines.extend(f"- {item}" for item in sections["tested_and_passed"])
+    lines.extend(["", "# Partially Tested", ""])
+    lines.extend(f"- {item}" for item in sections["partially_tested"])
+    lines.extend(["", "# Failed", ""])
+    lines.extend(f"- {item}" for item in sections["failed"])
+    lines.extend(["", "# Retested And Passed", ""])
+    lines.extend(f"- {item}" for item in sections["retested_and_passed"])
+    return "\n".join(lines).rstrip() + "\n"
+
+
 def parse_report_text(text: str) -> dict[str, list[str]]:
     raw_sections: dict[str, list[str]] = {
         "failed": [],
@@ -176,6 +260,32 @@ def parse_report_text(text: str) -> dict[str, list[str]]:
         raw_sections["failed"],
         raw_sections["retested_and_passed"],
         raw_sections["tested"],
+    )
+    return validation["sections"]  # type: ignore[return-value]
+
+
+def parse_mv_report_text(text: str) -> dict[str, list[str]]:
+    raw_sections: dict[str, list[str]] = {
+        "tested_and_passed": [],
+        "partially_tested": [],
+        "failed": [],
+        "retested_and_passed": [],
+    }
+    current_section: str | None = None
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if line.startswith("#"):
+            heading = line.lstrip("#").strip().lower()
+            current_section = MV_HEADING_MAP.get(heading)
+            continue
+        if current_section is not None:
+            raw_sections[current_section].append(raw_line)
+
+    validation = validate_mv_sections(
+        raw_sections["tested_and_passed"],
+        raw_sections["partially_tested"],
+        raw_sections["failed"],
+        raw_sections["retested_and_passed"],
     )
     return validation["sections"]  # type: ignore[return-value]
 
@@ -208,10 +318,38 @@ def list_reports(report_dir: Path) -> list[dict[str, object]]:
     return reports
 
 
-def write_report(
+def read_mv_report(report_dir: Path, report_name: str) -> dict[str, object]:
+    path = report_path(report_dir, report_name)
+    if not path.exists():
+        raise FileNotFoundError(f"MV daily report not found: {path.name}")
+    text = path.read_text(encoding="utf-8-sig")
+    sections = parse_mv_report_text(text)
+    stat = path.stat()
+    return {
+        "report_name": path.name,
+        "modified_at": datetime.fromtimestamp(stat.st_mtime).astimezone().isoformat(),
+        "sections": sections,
+        "counts": {name: len(items) for name, items in sections.items()},
+    }
+
+
+def list_mv_reports(report_dir: Path) -> list[dict[str, object]]:
+    if not report_dir.exists():
+        return []
+    reports: list[dict[str, object]] = []
+    for path in report_dir.glob("*.md"):
+        try:
+            reports.append(read_mv_report(report_dir, path.name))
+        except (OSError, ReportNameError, UnicodeError):
+            continue
+    reports.sort(key=lambda report: str(report["modified_at"]), reverse=True)
+    return reports
+
+
+def _write_report_content(
     report_dir: Path,
     report_name: str,
-    sections: dict[str, list[str]],
+    content: str,
     *,
     overwrite: bool,
 ) -> Path:
@@ -220,7 +358,6 @@ def write_report(
     if path.exists() and not overwrite:
         raise FileExistsError(f"Daily report already exists: {path.name}")
 
-    content = format_report(sections)
     temporary_path: Path | None = None
     try:
         with tempfile.NamedTemporaryFile(
@@ -242,3 +379,32 @@ def write_report(
             temporary_path.unlink(missing_ok=True)
     return path
 
+
+def write_report(
+    report_dir: Path,
+    report_name: str,
+    sections: dict[str, list[str]],
+    *,
+    overwrite: bool,
+) -> Path:
+    return _write_report_content(
+        report_dir,
+        report_name,
+        format_report(sections),
+        overwrite=overwrite,
+    )
+
+
+def write_mv_report(
+    report_dir: Path,
+    report_name: str,
+    sections: dict[str, list[str]],
+    *,
+    overwrite: bool,
+) -> Path:
+    return _write_report_content(
+        report_dir,
+        report_name,
+        format_mv_report(sections),
+        overwrite=overwrite,
+    )

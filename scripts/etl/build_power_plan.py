@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime
+from datetime import date, datetime
+import os
 from pathlib import Path
 from typing import Any
 
@@ -20,6 +21,25 @@ POWER_PLAN_DIR = PROJECT_ROOT / "raw_data" / "power_plan"
 DATA_DIR = PROJECT_ROOT / "frontend" / "public" / "data"
 OUTPUT_PATH = DATA_DIR / "power_plan.json"
 EQUIPMENT_PATH = DATA_DIR / "equipment.json"
+MV_REPORT_DIR = Path(
+    os.environ.get(
+        "IAD6_EPS_TRACKER_ROOT",
+        str(PROJECT_ROOT.parent / "IAD6_EPS_Testing_Tracker"),
+    )
+) / "MV_Daily_test_report"
+
+MV_SECTION_NAMES = {
+    "tested and passed": "tested_and_passed",
+    "partially tested": "partially_tested",
+    "failed": "failed",
+    "retested and passed": "retested_and_passed",
+}
+MV_SECTION_PRIORITY = (
+    "retested_and_passed",
+    "tested_and_passed",
+    "failed",
+    "partially_tested",
+)
 
 
 def normalize_equipment_key(value: Any) -> str:
@@ -27,6 +47,74 @@ def normalize_equipment_key(value: Any) -> str:
     if text.startswith("IAD06-"):
         text = text[6:]
     return text
+
+
+def mv_report_date(path: Path) -> str | None:
+    parts = path.stem.split("-")
+    try:
+        if len(parts) == 3 and len(parts[0]) == 4:
+            return date(int(parts[0]), int(parts[1]), int(parts[2])).isoformat()
+        if len(parts) == 2:
+            modified_year = datetime.fromtimestamp(path.stat().st_mtime).year
+            return date(modified_year, int(parts[0]), int(parts[1])).isoformat()
+    except (OSError, ValueError):
+        return None
+    return None
+
+
+def parse_mv_report(path: Path) -> dict[str, list[str]]:
+    raw_sections = {name: [] for name in MV_SECTION_NAMES.values()}
+    current_section: str | None = None
+    for raw_line in path.read_text(encoding="utf-8-sig").splitlines():
+        line = raw_line.strip()
+        if line.startswith("#"):
+            current_section = MV_SECTION_NAMES.get(line.lstrip("#").strip().lower())
+            continue
+        if current_section is None:
+            continue
+        item = re.sub(r"^\s*(?:(?:[-*+])|(?:\d+[.)]))\s+", "", raw_line).strip()
+        if item and " " not in item and "-" in item and any(char.isdigit() for char in item):
+            raw_sections[current_section].append(item)
+
+    kept_keys: set[str] = set()
+    sections = {name: [] for name in raw_sections}
+    for section_name in MV_SECTION_PRIORITY:
+        seen_in_section: set[str] = set()
+        for item in raw_sections[section_name]:
+            key = normalize_equipment_key(item)
+            if not key or key in kept_keys or key in seen_in_section:
+                continue
+            kept_keys.add(key)
+            seen_in_section.add(key)
+            sections[section_name].append(item)
+    return sections
+
+
+def build_mv_test_index(
+    report_dir: Path,
+) -> tuple[dict[str, list[dict[str, str]]], list[Path]]:
+    if not report_dir.exists():
+        return {}, []
+
+    dated_reports = [
+        (report_date, path)
+        for path in report_dir.glob("*.md")
+        if (report_date := mv_report_date(path)) is not None
+    ]
+    dated_reports.sort(key=lambda item: (item[0], item[1].name.lower()))
+    index: dict[str, list[dict[str, str]]] = {}
+    for report_date, path in dated_reports:
+        for status, items in parse_mv_report(path).items():
+            for item in items:
+                key = normalize_equipment_key(item)
+                index.setdefault(key, []).append(
+                    {
+                        "date": report_date,
+                        "status": status,
+                        "report_name": path.name,
+                    }
+                )
+    return index, [path for _, path in dated_reports]
 
 
 def slugify(value: str) -> str:
@@ -51,6 +139,7 @@ def annotation_record(
     annotation: fitz.Annot,
     annotation_id: str,
     equipment_index: dict[str, dict[str, Any]],
+    mv_test_index: dict[str, list[dict[str, str]]],
     transform: fitz.Matrix | None = None,
 ) -> dict[str, Any] | None:
     info = annotation.info
@@ -87,6 +176,13 @@ def annotation_record(
         else None
     )
     matchable = kind in {"equipment", "termination", "connection"}
+    mv_test_history = list(mv_test_index.get(equipment_key, [])) if matchable else []
+    latest_mv_test = mv_test_history[-1] if mv_test_history else None
+    mv_tested_dates = [
+        entry["date"]
+        for entry in mv_test_history
+        if entry["status"] in {"tested_and_passed", "retested_and_passed"}
+    ]
 
     record = {
         "annotation_id": annotation_id,
@@ -125,6 +221,10 @@ def annotation_record(
             else None
         ),
         "status_match_source": "annotation_id" if system_element else None,
+        "mv_daily_test_status": latest_mv_test["status"] if latest_mv_test else None,
+        "mv_daily_test_date": latest_mv_test["date"] if latest_mv_test else None,
+        "mv_daily_tested_dates": list(dict.fromkeys(mv_tested_dates)),
+        "mv_daily_test_history": mv_test_history,
     }
     if vertices:
         record["vertices"] = vertices
@@ -135,15 +235,18 @@ def build_power_plan(
     power_plan_dir: str | Path = POWER_PLAN_DIR,
     equipment_path: str | Path = EQUIPMENT_PATH,
     output_path: str | Path = OUTPUT_PATH,
+    mv_report_dir: str | Path = MV_REPORT_DIR,
 ) -> dict[str, Any]:
     source_dir = Path(power_plan_dir)
     equipment_json_path = Path(equipment_path)
     manifest_path = Path(output_path)
+    mv_report_path = Path(mv_report_dir)
     pdf_paths = sorted(source_dir.glob("*.pdf"), key=lambda path: path.name.lower())
     if not pdf_paths:
         raise FileNotFoundError(f"No PDF power plan found in {source_dir}")
 
     equipment_index = build_equipment_index(equipment_json_path)
+    mv_test_index, mv_report_files = build_mv_test_index(mv_report_path)
     pages: list[dict[str, Any]] = []
 
     for pdf_path in pdf_paths:
@@ -156,6 +259,7 @@ def build_power_plan(
                         annotation,
                         f"{slugify(pdf_path.stem)}-{page_index + 1}-{annotation_index}",
                         equipment_index,
+                        mv_test_index,
                         page.rotation_matrix,
                     )
                     if record:
@@ -186,6 +290,8 @@ def build_power_plan(
         "generated_at": datetime.now().astimezone().isoformat(),
         "source_directory": str(source_dir.resolve()),
         "source_files": [file_metadata(path) for path in pdf_paths],
+        "mv_daily_report_directory": str(mv_report_path.resolve()),
+        "mv_daily_report_files": [file_metadata(path) for path in mv_report_files],
         "page_count": len(pages),
         "equipment_annotation_count": len(equipment_annotations),
         "matched_equipment_annotation_count": sum(
@@ -193,6 +299,13 @@ def build_power_plan(
         ),
         "matched_system_element_annotation_count": sum(
             annotation["match_status"] == "matched"
+            for page in pages
+            for annotation in page["annotations"]
+            if annotation["kind"] in {"equipment", "termination", "connection"}
+        ),
+        "mv_daily_tested_annotation_count": sum(
+            annotation.get("mv_daily_test_status")
+            in {"tested_and_passed", "retested_and_passed"}
             for page in pages
             for annotation in page["annotations"]
             if annotation["kind"] in {"equipment", "termination", "connection"}

@@ -29,6 +29,16 @@ describe("MvEquipmentPage", () => {
                 matched_equipment_id: "IAD06-TX6-01A",
                 system_element_status: "Ship to Site",
                 system_element_type: "Transformer - MV",
+                mv_daily_test_status: "tested_and_passed",
+                mv_daily_test_date: "2026-08-18",
+                mv_daily_tested_dates: ["2026-08-18"],
+                mv_daily_test_history: [
+                  {
+                    date: "2026-08-18",
+                    status: "tested_and_passed",
+                    report_name: "8-18.md",
+                  },
+                ],
               },
               {
                 annotation_id: "equipment-2",
@@ -67,6 +77,16 @@ describe("MvEquipmentPage", () => {
                 matched_equipment_id: "FD01-IAD06-TX6-01A",
                 system_element_status: "Installation Complete",
                 system_element_type: "Feeder Cable - MV",
+                mv_daily_test_status: "tested_and_passed",
+                mv_daily_test_date: "2026-08-18",
+                mv_daily_tested_dates: ["2026-08-18"],
+                mv_daily_test_history: [
+                  {
+                    date: "2026-08-18",
+                    status: "tested_and_passed",
+                    report_name: "8-18.md",
+                  },
+                ],
               },
             ],
           },
@@ -108,20 +128,21 @@ describe("MvEquipmentPage", () => {
     ).toBeInTheDocument();
     expect(container.querySelectorAll("[data-mv-termination='true']")).toHaveLength(1);
     expect(container.querySelectorAll("[data-mv-connection='true']")).toHaveLength(1);
-    expect(screen.getByText("Ship to Site 2")).toBeInTheDocument();
+    expect(screen.getByText("MV Daily Tested 2")).toBeInTheDocument();
+    expect(screen.getByText("Ship to Site 1")).toBeInTheDocument();
     expect(
-      screen.getByText("Cable / Termination Installation Complete 2"),
+      screen.getByText("Cable / Termination Installation Complete 1"),
     ).toBeInTheDocument();
     expect(screen.getByText("Other status 1")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Page 1, 4 annotations" })).not.toBeInTheDocument();
 
     const transformerRects = container.querySelectorAll("[data-mv-transformer='true'] rect");
-    expect(transformerRects[1]).toHaveAttribute("stroke", "#7e22ce");
+    expect(transformerRects[1]).toHaveAttribute("stroke", "#16a34a");
     const terminationBody = container.querySelector("[data-mv-termination='true'] > circle");
-    expect(terminationBody).toHaveAttribute("fill", "#d1fae5");
+    expect(terminationBody).toHaveAttribute("fill", "#fef3c7");
     expect(Number(terminationBody?.getAttribute("r"))).toBeGreaterThan(13);
     const cablePaths = container.querySelectorAll("[data-mv-connection='true'] path");
-    expect(cablePaths[1]).toHaveAttribute("stroke", "#059669");
+    expect(cablePaths[1]).toHaveAttribute("stroke", "#16a34a");
     expect(cablePaths[1].getAttribute("d")).toContain("Q");
     expect(cablePaths[1]).toHaveAttribute("stroke-width", "10");
 
@@ -131,6 +152,8 @@ describe("MvEquipmentPage", () => {
     expect(screen.getByRole("heading", { name: "FD01-IAD06-TX6-01A" })).toBeInTheDocument();
     expect(screen.getByText("Installation Complete", { exact: true })).toBeInTheDocument();
     expect(screen.getByText("Feeder Cable - MV")).toBeInTheDocument();
+    expect(screen.getByText("Tested And Passed")).toBeInTheDocument();
+    expect(screen.getByText("Aug 18, 2026")).toBeInTheDocument();
     expect(screen.getByText("Detailed information will be added here.")).toBeInTheDocument();
 
     await user.click(
