@@ -2,6 +2,8 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 
+import { IssueAttachmentManifestProvider } from "../contexts/IssueAttachmentManifestContext";
+import { NetaReportManifestProvider } from "../contexts/NetaReportManifestContext";
 import { makeDashboardData } from "../test/fixtures";
 import { MvEquipmentPage } from "./MvEquipmentPage";
 
@@ -9,6 +11,16 @@ describe("MvEquipmentPage", () => {
   it("combines PDF pages and draws all MV annotations on one canvas", async () => {
     const user = userEvent.setup();
     const data = makeDashboardData({
+      cases: [
+        {
+          case_id: "CASE-MV-1",
+          equipment_id: "IAD06-FD01-IAD06-TX6-01A",
+          system_element_raw: "IAD06-FD01-IAD06-TX6-01A",
+          status: "Acknowledged",
+          priority: "High",
+          summary: "MV cable insulation test requires corrective action.",
+        },
+      ],
       powerPlanManifest: {
         pages: [
           {
@@ -108,6 +120,16 @@ describe("MvEquipmentPage", () => {
                 matched_equipment_id: "IAD06-MDB6-02A",
                 system_element_status: "IFC",
                 system_element_type: "Switchgear-MV",
+                mv_daily_test_status: "failed",
+                mv_daily_test_date: "2026-08-19",
+                mv_daily_tested_dates: ["2026-08-19"],
+                mv_daily_test_history: [
+                  {
+                    date: "2026-08-19",
+                    status: "failed",
+                    report_name: "8-19.md",
+                  },
+                ],
               },
             ],
           },
@@ -115,7 +137,13 @@ describe("MvEquipmentPage", () => {
       },
     });
 
-    const { container } = render(<MvEquipmentPage data={data} />);
+    const { container } = render(
+      <IssueAttachmentManifestProvider manifest={null}>
+        <NetaReportManifestProvider manifest={null}>
+          <MvEquipmentPage data={data} />
+        </NetaReportManifestProvider>
+      </IssueAttachmentManifestProvider>,
+    );
 
     expect(screen.getByText("MV Equipment")).toBeInTheDocument();
     expect(screen.getByText("3 equipment")).toBeInTheDocument();
@@ -129,11 +157,12 @@ describe("MvEquipmentPage", () => {
     expect(container.querySelectorAll("[data-mv-termination='true']")).toHaveLength(1);
     expect(container.querySelectorAll("[data-mv-connection='true']")).toHaveLength(1);
     expect(screen.getByText("MV Daily Tested 2")).toBeInTheDocument();
+    expect(screen.getByText("MV Daily Failed 1")).toBeInTheDocument();
     expect(screen.getByText("Ship to Site 1")).toBeInTheDocument();
     expect(
       screen.getByText("Cable / Termination Installation Complete 1"),
     ).toBeInTheDocument();
-    expect(screen.getByText("Other status 1")).toBeInTheDocument();
+    expect(screen.getByText("Other status 0")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Page 1, 4 annotations" })).not.toBeInTheDocument();
 
     const transformerRects = container.querySelectorAll("[data-mv-transformer='true'] rect");
@@ -154,7 +183,15 @@ describe("MvEquipmentPage", () => {
     expect(screen.getByText("Feeder Cable - MV")).toBeInTheDocument();
     expect(screen.getByText("Tested And Passed")).toBeInTheDocument();
     expect(screen.getByText("Aug 18, 2026")).toBeInTheDocument();
-    expect(screen.getByText("Detailed information will be added here.")).toBeInTheDocument();
+    expect(screen.getByText("CASE-MV-1")).toBeInTheDocument();
+    expect(screen.getByText("1 open / 1 total")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /CASE-MV-1/ }));
+    expect(screen.getByRole("heading", { name: "CASE-MV-1" })).toBeInTheDocument();
+    expect(
+      screen.getAllByText("MV cable insulation test requires corrective action."),
+    ).toHaveLength(2);
+    await user.click(screen.getByRole("button", { name: "Close issue detail" }));
 
     await user.click(
       screen.getByRole("button", { name: "FD01-IAD06-TX6-01A-A, termination" }),
@@ -163,7 +200,12 @@ describe("MvEquipmentPage", () => {
     expect(screen.getByText("Installation Complete", { exact: true })).toBeInTheDocument();
     expect(screen.queryByText("Drawing type")).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "MDB6-02A, MV equipment" }));
+    const failedEquipment = screen.getByRole("button", { name: "MDB6-02A, MV equipment" });
+    expect(failedEquipment.querySelectorAll("rect")[1]).toHaveAttribute("stroke", "#dc2626");
+    expect(failedEquipment.querySelectorAll("rect")[1]).toHaveAttribute("fill", "#ef4444");
+    await user.click(failedEquipment);
     expect(screen.getByRole("heading", { name: "MDB6-02A" })).toBeInTheDocument();
+    expect(screen.getByText("Failed")).toBeInTheDocument();
+    expect(screen.getByText("Aug 19, 2026")).toBeInTheDocument();
   });
 });

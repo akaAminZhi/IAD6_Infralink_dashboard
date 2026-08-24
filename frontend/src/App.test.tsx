@@ -100,6 +100,17 @@ describe("App routing and loading behavior", () => {
     await waitFor(() => expect(loadDetailData).toHaveBeenCalledTimes(1));
   });
 
+  it("loads cases before rendering the MV equipment route", async () => {
+    const loadDetailData = vi.fn(async () => undefined);
+    useDashboardDataMock.mockReturnValue(
+      dashboardState({ loadDetailData, detailDataLoaded: false }),
+    );
+    renderRoute("/mv-equipment");
+
+    expect(screen.getByText("Loading dashboard data")).toBeInTheDocument();
+    await waitFor(() => expect(loadDetailData).toHaveBeenCalledTimes(1));
+  });
+
   it("renders a detail route after detail data is ready", () => {
     useDashboardDataMock.mockReturnValue(
       dashboardState({ detailDataLoaded: true }),

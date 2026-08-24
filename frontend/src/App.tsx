@@ -36,6 +36,7 @@ function App() {
     location.pathname === "/equipment" ||
     location.pathname === "/issues" ||
     location.pathname === "/power-plan" ||
+    location.pathname === "/mv-equipment" ||
     location.pathname === "/data-quality";
   const {
     detailDataLoaded,

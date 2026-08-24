@@ -1,7 +1,7 @@
 import {
+  ArrowLeft,
   Boxes,
   Cable,
-  CheckCircle2,
   CircleDot,
   Maximize2,
   Minus,
@@ -12,12 +12,19 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { EmptyState } from "../components/common/EmptyState";
+import { IssueDetailDrawer } from "../components/issues/IssueDetailDrawer";
+import { IssueStatusBadge } from "../components/issues/IssueStatusBadge";
 import type {
   DashboardData,
   PowerPlanAnnotation,
   PowerPlanPageRecord,
   PowerPlanRect,
 } from "../types/data";
+import {
+  enrichIssuesWithPdmContext,
+  isOpenIssue,
+  type EnrichedIssue,
+} from "../utils/issueUtils";
 
 interface MvEquipmentPageProps {
   data: DashboardData;
@@ -192,7 +199,12 @@ interface MvStatusPalette {
   text: string;
 }
 
-type MvStatusHighlight = "tested" | "shipToSite" | "installationComplete" | "neutral";
+type MvStatusHighlight =
+  | "failed"
+  | "tested"
+  | "shipToSite"
+  | "installationComplete"
+  | "neutral";
 
 const NEUTRAL_PALETTE: MvStatusPalette = {
   fill: "#f8fafc",
@@ -218,6 +230,12 @@ const TESTED_PALETTE: MvStatusPalette = {
   text: "#166534",
 };
 
+const FAILED_PALETTE: MvStatusPalette = {
+  fill: "#ef4444",
+  stroke: "#dc2626",
+  text: "#ffffff",
+};
+
 function normalizeStatus(status: string | null | undefined): string {
   return String(status ?? "").trim().toUpperCase().replace(/\s+/g, " ");
 }
@@ -226,6 +244,10 @@ function isMvDailyTestPassed(annotation: PowerPlanAnnotation): boolean {
   return ["tested_and_passed", "retested_and_passed"].includes(
     String(annotation.mv_daily_test_status ?? ""),
   );
+}
+
+function isMvDailyTestFailed(annotation: PowerPlanAnnotation): boolean {
+  return annotation.mv_daily_test_status === "failed";
 }
 
 function getSystemStatusHighlight(annotation: PowerPlanAnnotation): MvStatusHighlight {
@@ -241,10 +263,12 @@ function getSystemStatusHighlight(annotation: PowerPlanAnnotation): MvStatusHigh
 }
 
 function getStatusHighlight(annotation: PowerPlanAnnotation): MvStatusHighlight {
+  if (isMvDailyTestFailed(annotation)) return "failed";
   return isMvDailyTestPassed(annotation) ? "tested" : getSystemStatusHighlight(annotation);
 }
 
 function paletteForHighlight(highlight: MvStatusHighlight): MvStatusPalette {
+  if (highlight === "failed") return FAILED_PALETTE;
   if (highlight === "tested") return TESTED_PALETTE;
   if (highlight === "shipToSite") return SHIP_TO_SITE_PALETTE;
   if (highlight === "installationComplete") return INSTALLATION_COMPLETE_PALETTE;
@@ -286,6 +310,135 @@ function formatMvTestDate(value: string): string {
         day: "numeric",
         year: "numeric",
       });
+}
+
+function normalizeEquipmentReference(value: unknown): string {
+  return String(value ?? "")
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, " ")
+    .replace(/^IAD06-/, "");
+}
+
+function equipmentReferenceKeys(...values: unknown[]): Set<string> {
+  const keys = new Set<string>();
+  values.forEach((value) => {
+    String(value ?? "")
+      .split(/[\r\n,;|]+/)
+      .forEach((part) => {
+        const key = normalizeEquipmentReference(part);
+        if (key) keys.add(key);
+      });
+  });
+  return keys;
+}
+
+function getRelatedIssues(
+  annotation: PowerPlanAnnotation | null,
+  issues: EnrichedIssue[],
+): EnrichedIssue[] {
+  if (!annotation) return [];
+  const annotationKeys = equipmentReferenceKeys(
+    annotation.label,
+    annotation.normalized_equipment_key,
+    annotation.matched_equipment_id,
+  );
+  if (annotationKeys.size === 0) return [];
+
+  return issues
+    .filter((issue) => {
+      const issueKeys = equipmentReferenceKeys(issue.equipment_id, issue.system_element_raw);
+      return [...issueKeys].some((key) => annotationKeys.has(key));
+    })
+    .sort(
+      (left, right) =>
+        Number(isOpenIssue(right)) - Number(isOpenIssue(left)) ||
+        String(left.case_id ?? "").localeCompare(String(right.case_id ?? ""), undefined, {
+          numeric: true,
+        }),
+    );
+}
+
+function RelatedIssuesPanel({
+  issues,
+  onSelectIssue,
+}: {
+  issues: EnrichedIssue[];
+  onSelectIssue: (issue: EnrichedIssue) => void;
+}) {
+  const openIssueCount = issues.filter(isOpenIssue).length;
+
+  return (
+    <section>
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="text-xs font-semibold uppercase text-muted-foreground">Issues</h3>
+        <span className={openIssueCount > 0 ? "text-xs font-medium text-red-700" : "text-xs text-muted-foreground"}>
+          {openIssueCount > 0
+            ? `${openIssueCount} open / ${issues.length} total`
+            : `${issues.length} total`}
+        </span>
+      </div>
+      <div className="mt-2 space-y-2">
+        {issues.length === 0 ? (
+          <p className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
+            No linked Infralink issues.
+          </p>
+        ) : (
+          issues.map((issue) => (
+            <button
+              className="w-full rounded-md border bg-background p-3 text-left transition-colors hover:border-primary/40 hover:bg-muted"
+              key={issue.row_id}
+              onClick={() => onSelectIssue(issue)}
+              type="button"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <span className="break-words text-xs font-semibold">
+                  {issue.case_id ?? "Unknown case"}
+                </span>
+                <IssueStatusBadge status={issue.status} />
+              </div>
+              <p className="mt-2 line-clamp-3 text-xs leading-5 text-muted-foreground">
+                {issue.summary || "No summary available."}
+              </p>
+            </button>
+          ))
+        )}
+      </div>
+    </section>
+  );
+}
+
+function MvDailyTestPanel({ annotation }: { annotation: PowerPlanAnnotation }) {
+  const history = annotation.mv_daily_test_history ?? [];
+  if (history.length === 0) return null;
+
+  return (
+    <section>
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="text-xs font-semibold uppercase text-muted-foreground">MV Daily Test</h3>
+        <span className="text-xs text-muted-foreground">{history.length} records</span>
+      </div>
+      <div className="mt-2 space-y-2">
+        {history.map((entry) => (
+          <article
+            className="rounded-md border bg-background p-3"
+            key={`${entry.date}-${entry.status}-${entry.report_name ?? ""}`}
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span
+                className={`inline-flex rounded-md border px-2 py-0.5 text-xs font-semibold ${mvTestStatusTone(entry.status)}`}
+              >
+                {mvTestStatusLabel(entry.status)}
+              </span>
+              <span className="text-xs font-medium text-slate-700">
+                {formatMvTestDate(entry.date)}
+              </span>
+            </div>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
 }
 
 function MvScrew({
@@ -538,13 +691,19 @@ export function MvEquipmentPage({ data }: MvEquipmentPageProps) {
   );
   const [viewport, setViewport] = useState<PowerPlanRect>(fullViewport);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedIssue, setSelectedIssue] = useState<EnrichedIssue | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
   const panRef = useRef<PanState | null>(null);
   const suppressClickRef = useRef(false);
+  const enrichedIssues = useMemo(
+    () => enrichIssuesWithPdmContext(data.cases, data.pdms, data.equipment),
+    [data.cases, data.equipment, data.pdms],
+  );
 
   useEffect(() => {
     setViewport(fullViewport);
     setSelectedId(null);
+    setSelectedIssue(null);
   }, [fullViewport]);
 
   useEffect(() => {
@@ -580,6 +739,7 @@ export function MvEquipmentPage({ data }: MvEquipmentPageProps) {
   );
   const selected = currentPage.annotations.find((annotation) => annotation.annotation_id === selectedId) ?? null;
   const selectedPalette = selected ? getSystemElementPalette(selected) : NEUTRAL_PALETTE;
+  const relatedIssues = getRelatedIssues(selected, enrichedIssues);
   const highlightCounts = currentPage.annotations.reduce<Record<MvStatusHighlight, number>>(
     (counts, annotation) => {
       if (["equipment", "termination", "connection"].includes(annotation.kind)) {
@@ -587,7 +747,7 @@ export function MvEquipmentPage({ data }: MvEquipmentPageProps) {
       }
       return counts;
     },
-    { tested: 0, shipToSite: 0, installationComplete: 0, neutral: 0 },
+    { failed: 0, tested: 0, shipToSite: 0, installationComplete: 0, neutral: 0 },
   );
 
   function handlePointerDown(event: React.PointerEvent<SVGSVGElement>) {
@@ -672,6 +832,10 @@ export function MvEquipmentPage({ data }: MvEquipmentPageProps) {
           <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-800">
             <span className="h-3.5 w-3.5 rounded-[3px] border-2 border-green-600 bg-green-100" />
             {`MV Daily Tested ${highlightCounts.tested}`}
+          </span>
+          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-red-800">
+            <span className="h-3.5 w-3.5 rounded-[3px] border-2 border-red-800 bg-red-500" />
+            {`MV Daily Failed ${highlightCounts.failed}`}
           </span>
           <span className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-700">
             <span className="h-3.5 w-3.5 rounded-[3px] border-2 border-purple-700 bg-purple-100" />
@@ -840,89 +1004,92 @@ export function MvEquipmentPage({ data }: MvEquipmentPageProps) {
                 ))}
               </svg>
             </div>
-            <aside className="border-t bg-card p-4 xl:border-l xl:border-t-0">
-              <div className="text-xs font-semibold uppercase text-muted-foreground">Selected annotation</div>
+            <aside className="flex min-h-0 max-h-[680px] flex-col overflow-hidden border-t bg-card xl:h-[680px] xl:border-l xl:border-t-0">
               {selected ? (
-                <div className="mt-4">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-md border bg-slate-50">
-                    {isConnection(selected) ? (
-                      <Cable className="h-5 w-5 text-slate-700" aria-hidden="true" />
-                    ) : isTermination(selected) ? (
-                      <CircleDot className="h-5 w-5 text-slate-700" aria-hidden="true" />
-                    ) : (
-                      <Boxes className="h-5 w-5 text-slate-700" aria-hidden="true" />
-                    )}
-                  </div>
-                  <h2 className="mt-3 break-words text-base font-semibold">{selected.label}</h2>
-                  <div
-                    className="mt-3 inline-flex rounded-md border px-2.5 py-1 text-xs font-semibold"
-                    style={{
-                      backgroundColor: selectedPalette.fill,
-                      borderColor: selectedPalette.stroke,
-                      color: selectedPalette.text,
-                    }}
-                  >
-                    {selected.system_element_status || "SystemElements status unavailable"}
-                  </div>
-                  <dl className="mt-4 grid gap-3 text-sm">
-                    <div>
-                      <dt className="text-[11px] font-semibold uppercase text-muted-foreground">
-                        System Element Type
-                      </dt>
-                      <dd className="mt-1 break-words font-medium">
-                        {selected.system_element_type || "-"}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt className="text-[11px] font-semibold uppercase text-muted-foreground">
-                        Matched System Element
-                      </dt>
-                      <dd className="mt-1 break-words font-medium">
-                        {selected.matched_equipment_id || "Not matched"}
-                      </dd>
-                    </div>
-                  </dl>
-                  {(selected.mv_daily_test_history ?? []).length > 0 ? (
-                    <div className="mt-5 rounded-md border border-emerald-200 bg-emerald-50/50 p-3">
-                      <div className="flex items-center gap-2 text-xs font-semibold uppercase text-emerald-800">
-                        <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
-                        MV Daily Test
+                <>
+                  <div className="border-b p-4">
+                    <button
+                      className="mb-3 inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
+                      onClick={() => setSelectedId(null)}
+                      type="button"
+                    >
+                      <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
+                      MV equipment
+                    </button>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          {isConnection(selected) ? (
+                            <Cable className="h-4 w-4 shrink-0 text-slate-600" aria-hidden="true" />
+                          ) : isTermination(selected) ? (
+                            <CircleDot className="h-4 w-4 shrink-0 text-slate-600" aria-hidden="true" />
+                          ) : (
+                            <Boxes className="h-4 w-4 shrink-0 text-slate-600" aria-hidden="true" />
+                          )}
+                          <h2 className="break-words text-base font-semibold">{selected.label}</h2>
+                        </div>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {isConnection(selected)
+                            ? "MV cable connection"
+                            : isTermination(selected)
+                              ? "MV termination"
+                              : "MV equipment"}
+                        </p>
                       </div>
-                      <div className="mt-3 grid gap-2">
-                        {(selected.mv_daily_test_history ?? []).map((entry) => (
-                          <div
-                            className="flex flex-wrap items-center justify-between gap-2 rounded-md border bg-white px-2.5 py-2"
-                            key={`${entry.date}-${entry.status}-${entry.report_name ?? ""}`}
-                          >
-                            <span
-                              className={`inline-flex rounded-md border px-2 py-0.5 text-xs font-semibold ${mvTestStatusTone(entry.status)}`}
-                            >
-                              {mvTestStatusLabel(entry.status)}
-                            </span>
-                            <span className="text-sm font-semibold text-slate-700">
-                              {formatMvTestDate(entry.date)}
-                            </span>
-                          </div>
-                        ))}
+                      <div
+                        className="max-w-[120px] shrink-0 rounded-md border px-2 py-1 text-right text-xs font-semibold leading-4"
+                        style={{
+                          backgroundColor: selectedPalette.fill,
+                          borderColor: selectedPalette.stroke,
+                          color: selectedPalette.text,
+                        }}
+                      >
+                        {selected.system_element_status || "Status unavailable"}
                       </div>
                     </div>
-                  ) : null}
-                  <div className="mt-5 rounded-md border border-dashed bg-slate-50 p-4">
-                    <div className="text-xs font-semibold uppercase text-slate-500">Details reserved</div>
-                    <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                      Detailed information will be added here.
-                    </p>
                   </div>
-                </div>
+                  <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-4 [overflow-anchor:none] [scrollbar-gutter:stable]">
+                    <section>
+                      <h3 className="text-xs font-semibold uppercase text-muted-foreground">
+                        System Element
+                      </h3>
+                      <dl className="mt-2 divide-y rounded-md border bg-background">
+                        <div className="grid grid-cols-[92px_minmax(0,1fr)] gap-3 px-3 py-2.5 text-xs">
+                          <dt className="text-muted-foreground">Type</dt>
+                          <dd className="break-words font-medium">
+                            {selected.system_element_type || "--"}
+                          </dd>
+                        </div>
+                        <div className="grid grid-cols-[92px_minmax(0,1fr)] gap-3 px-3 py-2.5 text-xs">
+                          <dt className="text-muted-foreground">Matched ID</dt>
+                          <dd className="break-words font-medium">
+                            {selected.matched_equipment_id || "Not matched"}
+                          </dd>
+                        </div>
+                      </dl>
+                    </section>
+                    <RelatedIssuesPanel
+                      issues={relatedIssues}
+                      onSelectIssue={setSelectedIssue}
+                    />
+                    <MvDailyTestPanel annotation={selected} />
+                  </div>
+                </>
               ) : (
-                <p className="mt-3 text-sm leading-6 text-muted-foreground">
-                  Select equipment, a transformer, a screw termination, or a cable to open its details.
-                </p>
+                <div className="p-4">
+                  <div className="text-xs font-semibold uppercase text-muted-foreground">
+                    MV Equipment Details
+                  </div>
+                  <p className="mt-3 text-sm leading-6 text-muted-foreground">
+                    Select equipment, a transformer, a screw termination, or a cable to open its details.
+                  </p>
+                </div>
               )}
             </aside>
           </div>
         )}
       </section>
+      <IssueDetailDrawer issue={selectedIssue} onClose={() => setSelectedIssue(null)} />
     </div>
   );
 }
