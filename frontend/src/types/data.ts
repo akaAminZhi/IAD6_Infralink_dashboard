@@ -46,6 +46,7 @@ export interface Equipment {
   neta_complete?: boolean | string | null;
   neta_completed_at?: string | null;
   neta_test_report?: string | null;
+  feeder_cable_atp?: string | null;
   manufacturer?: string | null;
   model?: string | null;
   serial_number?: string | null;
@@ -247,6 +248,14 @@ export interface PowerPlanPoint {
   y: number;
 }
 
+export interface FeederCableAtpFile {
+  file_name: string;
+  relative_path: string;
+  url: string;
+  bytes?: number;
+  modified_at?: string;
+}
+
 export interface PowerPlanAnnotation {
   annotation_id: string;
   kind: "equipment" | "region" | string;
@@ -277,6 +286,15 @@ export interface PowerPlanAnnotation {
     status: string;
     report_name?: string;
   }>;
+  feeder_cable_atp_names?: string[];
+  feeder_cable_atp_files?: FeederCableAtpFile[];
+  feeder_cable_atp_required?: boolean;
+  feeder_cable_atp_status?:
+    | "available"
+    | "missing_required"
+    | "referenced_file_missing"
+    | "not_required"
+    | string;
 }
 
 export interface PowerPlanPageRecord {
@@ -301,6 +319,16 @@ export interface PowerPlanManifest {
   mv_daily_report_directory?: string;
   mv_daily_report_files?: SourceFileMetadata[];
   mv_daily_tested_annotation_count?: number;
+  feeder_cable_atp_download_directory?: string;
+  feeder_cable_atp_public_link?: Record<string, unknown>;
+  feeder_cable_atp_linked_annotation_count?: number;
+  feeder_cable_atp_missing_required_count?: number;
+  feeder_cable_atp_missing_required?: Array<{
+    equipment_id?: string | null;
+    label?: string | null;
+    system_element_status?: string | null;
+    expected_files?: string[];
+  }>;
   pages?: PowerPlanPageRecord[];
 }
 

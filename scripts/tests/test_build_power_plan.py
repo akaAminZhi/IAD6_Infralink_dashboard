@@ -25,6 +25,13 @@ def test_build_power_plan_extracts_and_matches_equipment_annotations(tmp_path: P
     )
     connection.set_info(content="FD01-IAD06-PDU6-01A-2", title="Test User")
     connection.update()
+    missing_atp_connection = page.add_polyline_annot(
+        [fitz.Point(180, 120), fitz.Point(230, 120), fitz.Point(230, 150)]
+    )
+    missing_atp_connection.set_info(
+        content="FD02-IAD06-PDU6-01A-2", title="Test User"
+    )
+    missing_atp_connection.update()
     room_boundary = page.add_rect_annot(fitz.Rect(20, 20, 280, 180))
     room_boundary.set_info(content="", subject="Room_line", title="Test User")
     room_boundary.update()
@@ -48,7 +55,14 @@ def test_build_power_plan_extracts_and_matches_equipment_annotations(tmp_path: P
             {
                 "equipment_id": "FD01-IAD06-PDU6-01A-2",
                 "equipment_type": "Feeder Cable - MV",
-                "status": "Installation Complete",
+                "status": "L3: Pre Func Testing & Startup",
+                "feeder_cable_atp": "FD01 Cable ATP.pdf",
+            },
+            {
+                "equipment_id": "FD02-IAD06-PDU6-01A-2",
+                "equipment_type": "Feeder Cable - MV",
+                "status": "L3: Pre Func Testing & Startup",
+                "feeder_cable_atp": "FD02 Cable ATP.pdf",
             },
         ],
     )
@@ -70,8 +84,18 @@ def test_build_power_plan_extracts_and_matches_equipment_annotations(tmp_path: P
 """,
         encoding="utf-8",
     )
+    atp_dir = tmp_path / "downloads" / "feeder_cable_atp"
+    atp_equipment_dir = atp_dir / "FD01-IAD06-PDU6-01A-2"
+    atp_equipment_dir.mkdir(parents=True)
+    (atp_equipment_dir / "FD01 Cable ATP.pdf").write_bytes(b"%PDF-test")
     output_path = tmp_path / "power_plan.json"
-    result = build_power_plan(source_dir, equipment_path, output_path, mv_report_dir)
+    result = build_power_plan(
+        source_dir,
+        equipment_path,
+        output_path,
+        mv_report_dir,
+        atp_dir,
+    )
 
     assert result["page_count"] == 1
     assert result["equipment_annotation_count"] == 1
@@ -101,8 +125,15 @@ def test_build_power_plan_extracts_and_matches_equipment_annotations(tmp_path: P
     assert connection_record["label"] == "FD01-IAD06-PDU6-01A-2"
     assert len(connection_record["vertices"]) == 3
     assert connection_record["match_status"] == "matched"
-    assert connection_record["system_element_status"] == "Installation Complete"
+    assert connection_record["system_element_status"] == "L3: Pre Func Testing & Startup"
     assert connection_record["system_element_type"] == "Feeder Cable - MV"
+    assert connection_record["feeder_cable_atp_names"] == ["FD01 Cable ATP.pdf"]
+    assert connection_record["feeder_cable_atp_status"] == "available"
+    assert connection_record["feeder_cable_atp_required"] is True
+    assert connection_record["feeder_cable_atp_files"][0]["file_name"] == "FD01 Cable ATP.pdf"
+    assert connection_record["feeder_cable_atp_files"][0]["url"].endswith(
+        "/FD01-IAD06-PDU6-01A-2/FD01%20Cable%20ATP.pdf"
+    )
     assert connection_record["mv_daily_test_history"] == [
         {
             "date": "2026-08-18",
@@ -116,5 +147,12 @@ def test_build_power_plan_extracts_and_matches_equipment_annotations(tmp_path: P
     assert boundary["label"] == ""
     assert boundary["match_status"] == "not_applicable"
     assert result["mv_daily_tested_annotation_count"] == 2
+    assert result["feeder_cable_atp_linked_annotation_count"] == 1
+    assert result["feeder_cable_atp_public_link"]["status"] == "served_by_vite"
+    assert result["feeder_cable_atp_public_link"]["pdf_only"] is True
+    assert result["feeder_cable_atp_missing_required_count"] == 1
+    assert result["feeder_cable_atp_missing_required"][0]["equipment_id"] == (
+        "FD02-IAD06-PDU6-01A-2"
+    )
     assert result["mv_daily_report_files"][0]["file_name"] == "2026-08-18.md"
     assert output_path.exists()

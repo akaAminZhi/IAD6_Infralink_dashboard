@@ -76,6 +76,7 @@ def test_normalize_equipment_reads_and_trims_workbook_values(tmp_path) -> None:
             "neta_complete": True,
             "neta_completed_at": "2026-07-01T08:30:00",
             "neta_test_report": "report.pdf",
+            "feeder_cable_atp": None,
             "manufacturer": "IEM",
             "model": "MODEL-1",
             "serial_number": "SERIAL-1",
@@ -83,6 +84,20 @@ def test_normalize_equipment_reads_and_trims_workbook_values(tmp_path) -> None:
             "updated_by": "User",
         }
     ]
+
+
+def test_normalize_equipment_preserves_optional_feeder_cable_atp(tmp_path) -> None:
+    workbook_path = tmp_path / "SystemElements_with_atp.xlsx"
+    headers = [*SOURCE_COLUMNS, "Feeder Cable ATP"]
+    row = [None] * len(headers)
+    row[headers.index("Unique ID")] = "FD01-IAD06-TX6-01A"
+    row[headers.index("Open Issues")] = 0
+    row[headers.index("Feeder Cable ATP")] = " FD01 Cable ATP.pdf "
+    make_workbook(workbook_path, headers=headers, rows=[row])
+
+    records = normalize_equipment(str(workbook_path))
+
+    assert records[0]["feeder_cable_atp"] == "FD01 Cable ATP.pdf"
 
 
 def test_normalize_equipment_rejects_missing_columns(tmp_path) -> None:

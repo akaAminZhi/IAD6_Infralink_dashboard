@@ -1,13 +1,16 @@
 import {
+  AlertTriangle,
   ArrowLeft,
   Boxes,
   Cable,
   CircleDot,
+  FileText,
   Maximize2,
   Minus,
   MousePointer2,
   Plus,
   RotateCcw,
+  X,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -61,6 +64,11 @@ function isTransformer(annotation: PowerPlanAnnotation): boolean {
     !isTermination(annotation) &&
     annotation.label.toUpperCase().includes("TX")
   );
+}
+
+interface AtpPreview {
+  fileName: string;
+  url: string;
 }
 
 export function roundedCablePath(points: PowerPlanAnnotation["vertices"], radius = 20): string {
@@ -202,6 +210,8 @@ interface MvStatusPalette {
 type MvStatusHighlight =
   | "failed"
   | "tested"
+  | "cableTestedAndUpdated"
+  | "cableUpdatePending"
   | "shipToSite"
   | "installationComplete"
   | "neutral";
@@ -230,6 +240,12 @@ const TESTED_PALETTE: MvStatusPalette = {
   text: "#166534",
 };
 
+const CABLE_UPDATE_PENDING_PALETTE: MvStatusPalette = {
+  fill: "#dbeafe",
+  stroke: "#2563eb",
+  text: "#1e3a8a",
+};
+
 const FAILED_PALETTE: MvStatusPalette = {
   fill: "#ef4444",
   stroke: "#dc2626",
@@ -250,8 +266,20 @@ function isMvDailyTestFailed(annotation: PowerPlanAnnotation): boolean {
   return annotation.mv_daily_test_status === "failed";
 }
 
+function isCableTestedAndInfralinkUpdated(annotation: PowerPlanAnnotation): boolean {
+  return (
+    isConnection(annotation) &&
+    normalizeStatus(annotation.system_element_status) === "L3: PRE FUNC TESTING & STARTUP"
+  );
+}
+
+function isRequiredAtpMissing(annotation: PowerPlanAnnotation): boolean {
+  return annotation.feeder_cable_atp_status === "missing_required";
+}
+
 function getSystemStatusHighlight(annotation: PowerPlanAnnotation): MvStatusHighlight {
   const status = normalizeStatus(annotation.system_element_status);
+  if (isCableTestedAndInfralinkUpdated(annotation)) return "cableTestedAndUpdated";
   if (status.includes("SHIP TO SITE")) return "shipToSite";
   if (
     (isConnection(annotation) || isTermination(annotation)) &&
@@ -264,12 +292,17 @@ function getSystemStatusHighlight(annotation: PowerPlanAnnotation): MvStatusHigh
 
 function getStatusHighlight(annotation: PowerPlanAnnotation): MvStatusHighlight {
   if (isMvDailyTestFailed(annotation)) return "failed";
+  if (isCableTestedAndInfralinkUpdated(annotation)) return "cableTestedAndUpdated";
+  if (isConnection(annotation) && isMvDailyTestPassed(annotation)) {
+    return "cableUpdatePending";
+  }
   return isMvDailyTestPassed(annotation) ? "tested" : getSystemStatusHighlight(annotation);
 }
 
 function paletteForHighlight(highlight: MvStatusHighlight): MvStatusPalette {
   if (highlight === "failed") return FAILED_PALETTE;
-  if (highlight === "tested") return TESTED_PALETTE;
+  if (highlight === "tested" || highlight === "cableTestedAndUpdated") return TESTED_PALETTE;
+  if (highlight === "cableUpdatePending") return CABLE_UPDATE_PENDING_PALETTE;
   if (highlight === "shipToSite") return SHIP_TO_SITE_PALETTE;
   if (highlight === "installationComplete") return INSTALLATION_COMPLETE_PALETTE;
   return NEUTRAL_PALETTE;
@@ -299,6 +332,28 @@ function mvTestStatusTone(status: string): string {
   }
   if (status === "failed") return "border-red-300 bg-red-50 text-red-800";
   return "border-amber-300 bg-amber-50 text-amber-900";
+}
+
+function cableReadinessLabel(annotation: PowerPlanAnnotation): string {
+  if (isMvDailyTestFailed(annotation)) return "Test Failed";
+  if (isCableTestedAndInfralinkUpdated(annotation)) {
+    return "Tested + Infralink Updated";
+  }
+  if (isMvDailyTestPassed(annotation)) return "Tested - Infralink Update Pending";
+  if (annotation.mv_daily_test_status === "partially_tested") return "Partially Tested";
+  return "Testing Not Confirmed";
+}
+
+function cableReadinessTone(annotation: PowerPlanAnnotation): string {
+  if (isMvDailyTestFailed(annotation)) return "border-red-300 bg-red-50 text-red-800";
+  if (isCableTestedAndInfralinkUpdated(annotation)) {
+    return "border-emerald-300 bg-emerald-50 text-emerald-800";
+  }
+  if (isMvDailyTestPassed(annotation)) return "border-blue-300 bg-blue-50 text-blue-800";
+  if (annotation.mv_daily_test_status === "partially_tested") {
+    return "border-amber-300 bg-amber-50 text-amber-900";
+  }
+  return "border-slate-300 bg-slate-50 text-slate-700";
 }
 
 function formatMvTestDate(value: string): string {
@@ -438,6 +493,117 @@ function MvDailyTestPanel({ annotation }: { annotation: PowerPlanAnnotation }) {
         ))}
       </div>
     </section>
+  );
+}
+
+function FeederCableAtpPanel({
+  annotation,
+  onPreview,
+}: {
+  annotation: PowerPlanAnnotation;
+  onPreview: (preview: AtpPreview) => void;
+}) {
+  const files = annotation.feeder_cable_atp_files ?? [];
+  const referencedNames = annotation.feeder_cable_atp_names ?? [];
+  const missingRequired = isRequiredAtpMissing(annotation);
+  if (
+    !isConnection(annotation) ||
+    (!missingRequired && files.length === 0 && referencedNames.length === 0)
+  ) {
+    return null;
+  }
+
+  return (
+    <section>
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="text-xs font-semibold uppercase text-muted-foreground">
+          Feeder Cable ATP
+        </h3>
+        <span
+          className={
+            missingRequired
+              ? "text-xs font-semibold text-red-700"
+              : files.length > 0
+                ? "text-xs font-medium text-emerald-700"
+                : "text-xs font-medium text-amber-700"
+          }
+        >
+          {missingRequired
+            ? "Required file missing"
+            : `${files.length} file${files.length === 1 ? "" : "s"}`}
+        </span>
+      </div>
+      {missingRequired ? (
+        <div className="mt-2 flex items-start gap-2 rounded-md border border-red-300 bg-red-50 p-3 text-xs leading-5 text-red-900">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+          <span>L3 status requires a downloaded Feeder Cable ATP PDF.</span>
+        </div>
+      ) : null}
+      {files.length > 0 ? (
+        <div className="mt-2 space-y-2">
+          {files.map((file) => (
+            <button
+              className="flex w-full items-center gap-2 rounded-md border border-blue-200 bg-blue-50 p-3 text-left text-xs font-semibold text-blue-950 hover:bg-blue-100"
+              key={file.relative_path}
+              onClick={() => onPreview({ fileName: file.file_name, url: file.url })}
+              type="button"
+            >
+              <FileText className="h-4 w-4 shrink-0 text-blue-700" aria-hidden="true" />
+              <span className="min-w-0 break-all underline-offset-4 hover:underline">
+                {file.file_name}
+              </span>
+            </button>
+          ))}
+        </div>
+      ) : referencedNames.length > 0 && !missingRequired ? (
+        <div className="mt-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-xs leading-5 text-amber-900">
+          Listed in JC2 but not downloaded: {referencedNames.join(", ")}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function AtpPreviewModal({
+  preview,
+  onClose,
+}: {
+  preview: AtpPreview | null;
+  onClose: () => void;
+}) {
+  if (!preview) return null;
+  return (
+    <div className="fixed inset-0 z-[80]" onClick={(event) => event.stopPropagation()}>
+      <button
+        aria-label="Close Feeder Cable ATP preview overlay"
+        className="absolute inset-0 bg-black/35"
+        onClick={onClose}
+        type="button"
+      />
+      <section className="absolute inset-3 flex flex-col overflow-hidden rounded-md border bg-background shadow-2xl md:inset-6">
+        <header className="flex items-center justify-between gap-4 border-b bg-card p-4">
+          <div className="min-w-0">
+            <div className="text-xs font-semibold uppercase text-muted-foreground">
+              Feeder Cable ATP
+            </div>
+            <h2 className="mt-1 break-all text-base font-semibold">{preview.fileName}</h2>
+          </div>
+          <button
+            aria-label="Close Feeder Cable ATP preview"
+            className="rounded-md p-2 text-muted-foreground hover:bg-muted hover:text-foreground"
+            onClick={onClose}
+            type="button"
+          >
+            <X className="h-4 w-4" aria-hidden="true" />
+          </button>
+        </header>
+        <iframe
+          className="h-full w-full flex-1 bg-white"
+          src={preview.url}
+          title={preview.fileName}
+        />
+      </section>
+    </div>
   );
 }
 
@@ -692,6 +858,7 @@ export function MvEquipmentPage({ data }: MvEquipmentPageProps) {
   const [viewport, setViewport] = useState<PowerPlanRect>(fullViewport);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedIssue, setSelectedIssue] = useState<EnrichedIssue | null>(null);
+  const [atpPreview, setAtpPreview] = useState<AtpPreview | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
   const panRef = useRef<PanState | null>(null);
   const suppressClickRef = useRef(false);
@@ -704,6 +871,7 @@ export function MvEquipmentPage({ data }: MvEquipmentPageProps) {
     setViewport(fullViewport);
     setSelectedId(null);
     setSelectedIssue(null);
+    setAtpPreview(null);
   }, [fullViewport]);
 
   useEffect(() => {
@@ -740,6 +908,7 @@ export function MvEquipmentPage({ data }: MvEquipmentPageProps) {
   const selected = currentPage.annotations.find((annotation) => annotation.annotation_id === selectedId) ?? null;
   const selectedPalette = selected ? getSystemElementPalette(selected) : NEUTRAL_PALETTE;
   const relatedIssues = getRelatedIssues(selected, enrichedIssues);
+  const missingRequiredAtpCount = currentPage.annotations.filter(isRequiredAtpMissing).length;
   const highlightCounts = currentPage.annotations.reduce<Record<MvStatusHighlight, number>>(
     (counts, annotation) => {
       if (["equipment", "termination", "connection"].includes(annotation.kind)) {
@@ -747,7 +916,15 @@ export function MvEquipmentPage({ data }: MvEquipmentPageProps) {
       }
       return counts;
     },
-    { failed: 0, tested: 0, shipToSite: 0, installationComplete: 0, neutral: 0 },
+    {
+      failed: 0,
+      tested: 0,
+      cableTestedAndUpdated: 0,
+      cableUpdatePending: 0,
+      shipToSite: 0,
+      installationComplete: 0,
+      neutral: 0,
+    },
   );
 
   function handlePointerDown(event: React.PointerEvent<SVGSVGElement>) {
@@ -831,7 +1008,15 @@ export function MvEquipmentPage({ data }: MvEquipmentPageProps) {
           <span className="h-5 w-px bg-slate-300" aria-hidden="true" />
           <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-800">
             <span className="h-3.5 w-3.5 rounded-[3px] border-2 border-green-600 bg-green-100" />
-            {`MV Daily Tested ${highlightCounts.tested}`}
+            {`Cable Tested + Infralink Updated ${highlightCounts.cableTestedAndUpdated}`}
+          </span>
+          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-800">
+            <span className="h-3.5 w-3.5 rounded-[3px] border-2 border-blue-600 bg-blue-100" />
+            {`Cable Tested / Infralink Pending ${highlightCounts.cableUpdatePending}`}
+          </span>
+          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-800">
+            <span className="h-3.5 w-3.5 rounded-[3px] border-2 border-green-600 bg-green-100" />
+            {`Other MV Daily Passed ${highlightCounts.tested}`}
           </span>
           <span className="inline-flex items-center gap-1.5 text-xs font-medium text-red-800">
             <span className="h-3.5 w-3.5 rounded-[3px] border-2 border-red-800 bg-red-500" />
@@ -848,6 +1033,10 @@ export function MvEquipmentPage({ data }: MvEquipmentPageProps) {
           <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
             <span className="h-3.5 w-3.5 rounded-[3px] border-2 border-slate-500 bg-white" />
             {`Other status ${highlightCounts.neutral}`}
+          </span>
+          <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-red-800">
+            <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
+            {`L3 Missing ATP ${missingRequiredAtpCount}`}
           </span>
           <span className="ml-auto inline-flex items-center gap-1.5 text-xs text-muted-foreground">
             <MousePointer2 className="h-3.5 w-3.5" aria-hidden="true" />
@@ -974,6 +1163,24 @@ export function MvEquipmentPage({ data }: MvEquipmentPageProps) {
                         strokeOpacity={selectedId === annotation.annotation_id ? 1 : 0.86}
                         strokeWidth={selectedId === annotation.annotation_id ? 14 : 10}
                       />
+                      {isRequiredAtpMissing(annotation) ? (
+                        <g
+                          pointerEvents="none"
+                          transform={`translate(${annotation.center.x} ${annotation.center.y})`}
+                        >
+                          <circle fill="#dc2626" r="15" stroke="#ffffff" strokeWidth="3" />
+                          <text
+                            dominantBaseline="central"
+                            fill="#ffffff"
+                            fontSize="20"
+                            fontWeight="800"
+                            textAnchor="middle"
+                            y="1"
+                          >
+                            !
+                          </text>
+                        </g>
+                      ) : null}
                     </g>
                   );
                 })}
@@ -1066,8 +1273,21 @@ export function MvEquipmentPage({ data }: MvEquipmentPageProps) {
                             {selected.matched_equipment_id || "Not matched"}
                           </dd>
                         </div>
+                        {isConnection(selected) ? (
+                          <div className="grid grid-cols-[92px_minmax(0,1fr)] gap-3 px-3 py-2.5 text-xs">
+                            <dt className="text-muted-foreground">Cable State</dt>
+                            <dd>
+                              <span
+                                className={`inline-flex rounded-md border px-2 py-0.5 text-xs font-semibold ${cableReadinessTone(selected)}`}
+                              >
+                                {cableReadinessLabel(selected)}
+                              </span>
+                            </dd>
+                          </div>
+                        ) : null}
                       </dl>
                     </section>
+                    <FeederCableAtpPanel annotation={selected} onPreview={setAtpPreview} />
                     <RelatedIssuesPanel
                       issues={relatedIssues}
                       onSelectIssue={setSelectedIssue}
@@ -1090,6 +1310,7 @@ export function MvEquipmentPage({ data }: MvEquipmentPageProps) {
         )}
       </section>
       <IssueDetailDrawer issue={selectedIssue} onClose={() => setSelectedIssue(null)} />
+      <AtpPreviewModal preview={atpPreview} onClose={() => setAtpPreview(null)} />
     </div>
   );
 }

@@ -52,7 +52,7 @@ Open `http://127.0.0.1:5173/data-operations` to:
 - Enter or edit MV daily test reports with Tested And Passed, Partially Tested,
   Failed, and Retested And Passed sections.
 - Refresh JC2 browser sessions and Excel exports.
-- Download NETA reports and issue attachments.
+- Download NETA reports, Feeder Cable ATP files, and issue attachments.
 - Organize renamed reports for GC.
 - Run the dashboard ETL as a resumable daily workflow.
 - Preview or explicitly confirm CxAlloy uploads as a separate operation.
@@ -71,6 +71,11 @@ python scripts/start_dashboard.py
 ```
 
 Run logs are stored under `runtime/automation/` and are not committed.
+
+The current JC2 SystemElements view URL is stored in the sibling tracker at
+`config/jc2_system_elements_url.txt`. Paste the latest DeviceList URL into that
+file when the JC2 view changes; Excel, NETA, and Feeder Cable ATP download jobs
+all read the same setting. `JC2_SYSTEM_ELEMENTS_URL` can override it temporarily.
 
 ## Manual Weekly Update Workflow
 

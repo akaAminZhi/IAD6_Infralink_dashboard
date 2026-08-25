@@ -156,7 +156,9 @@ describe("MvEquipmentPage", () => {
     ).toBeInTheDocument();
     expect(container.querySelectorAll("[data-mv-termination='true']")).toHaveLength(1);
     expect(container.querySelectorAll("[data-mv-connection='true']")).toHaveLength(1);
-    expect(screen.getByText("MV Daily Tested 2")).toBeInTheDocument();
+    expect(screen.getByText("Cable Tested + Infralink Updated 0")).toBeInTheDocument();
+    expect(screen.getByText("Cable Tested / Infralink Pending 1")).toBeInTheDocument();
+    expect(screen.getByText("Other MV Daily Passed 1")).toBeInTheDocument();
     expect(screen.getByText("MV Daily Failed 1")).toBeInTheDocument();
     expect(screen.getByText("Ship to Site 1")).toBeInTheDocument();
     expect(
@@ -171,7 +173,7 @@ describe("MvEquipmentPage", () => {
     expect(terminationBody).toHaveAttribute("fill", "#fef3c7");
     expect(Number(terminationBody?.getAttribute("r"))).toBeGreaterThan(13);
     const cablePaths = container.querySelectorAll("[data-mv-connection='true'] path");
-    expect(cablePaths[1]).toHaveAttribute("stroke", "#16a34a");
+    expect(cablePaths[1]).toHaveAttribute("stroke", "#2563eb");
     expect(cablePaths[1].getAttribute("d")).toContain("Q");
     expect(cablePaths[1]).toHaveAttribute("stroke-width", "10");
 
@@ -181,6 +183,7 @@ describe("MvEquipmentPage", () => {
     expect(screen.getByRole("heading", { name: "FD01-IAD06-TX6-01A" })).toBeInTheDocument();
     expect(screen.getByText("Installation Complete", { exact: true })).toBeInTheDocument();
     expect(screen.getByText("Feeder Cable - MV")).toBeInTheDocument();
+    expect(screen.getByText("Tested - Infralink Update Pending")).toBeInTheDocument();
     expect(screen.getByText("Tested And Passed")).toBeInTheDocument();
     expect(screen.getByText("Aug 18, 2026")).toBeInTheDocument();
     expect(screen.getByText("CASE-MV-1")).toBeInTheDocument();
@@ -207,5 +210,131 @@ describe("MvEquipmentPage", () => {
     expect(screen.getByRole("heading", { name: "MDB6-02A" })).toBeInTheDocument();
     expect(screen.getByText("Failed")).toBeInTheDocument();
     expect(screen.getByText("Aug 19, 2026")).toBeInTheDocument();
+  });
+
+  it("only paints a tested cable green after its Infralink status reaches L3", async () => {
+    const user = userEvent.setup();
+    const data = makeDashboardData({
+      powerPlanManifest: {
+        pages: [
+          {
+            page_id: "electrical-iad6-mv-l3",
+            document_name: "Electrical-IAD6-MV.pdf",
+            page_number: 1,
+            page_label: "Electrical-IAD6-MV / Page 1",
+            width: 900,
+            height: 500,
+            annotations: [
+              {
+                annotation_id: "connection-l3",
+                kind: "connection",
+                annotation_type: "PolyLine",
+                label: "FD01-IAD06-TX6-06B",
+                rect: { x: 100, y: 100, width: 250, height: 80 },
+                center: { x: 225, y: 140 },
+                vertices: [
+                  { x: 100, y: 100 },
+                  { x: 350, y: 100 },
+                  { x: 350, y: 180 },
+                ],
+                matched_equipment_id: "FD01-IAD06-TX6-06B",
+                system_element_status: "L3: Pre Func Testing & Startup",
+                system_element_type: "Feeder Cable - MV",
+                mv_daily_test_status: "tested_and_passed",
+                feeder_cable_atp_names: ["FD01 Cable ATP.pdf"],
+                feeder_cable_atp_status: "available",
+                feeder_cable_atp_required: true,
+                feeder_cable_atp_files: [
+                  {
+                    file_name: "FD01 Cable ATP.pdf",
+                    relative_path: "FD01-IAD06-TX6-06B/FD01 Cable ATP.pdf",
+                    url: "/feeder-cable-atp/FD01-IAD06-TX6-06B/FD01%20Cable%20ATP.pdf",
+                  },
+                ],
+              },
+              {
+                annotation_id: "connection-pending",
+                kind: "connection",
+                annotation_type: "PolyLine",
+                label: "FD01-IAD06-TX6-05A",
+                rect: { x: 450, y: 100, width: 250, height: 80 },
+                center: { x: 575, y: 140 },
+                vertices: [
+                  { x: 450, y: 100 },
+                  { x: 700, y: 100 },
+                  { x: 700, y: 180 },
+                ],
+                matched_equipment_id: "FD01-IAD06-TX6-05A",
+                system_element_status: "Installation Complete",
+                system_element_type: "Feeder Cable - MV",
+                mv_daily_test_status: "tested_and_passed",
+              },
+              {
+                annotation_id: "connection-missing-atp",
+                kind: "connection",
+                annotation_type: "PolyLine",
+                label: "FD02-IAD06-TX6-06B",
+                rect: { x: 100, y: 260, width: 250, height: 80 },
+                center: { x: 225, y: 300 },
+                vertices: [
+                  { x: 100, y: 260 },
+                  { x: 350, y: 260 },
+                  { x: 350, y: 340 },
+                ],
+                matched_equipment_id: "FD02-IAD06-TX6-06B",
+                system_element_status: "L3: Pre Func Testing & Startup",
+                system_element_type: "Feeder Cable - MV",
+                mv_daily_test_status: "tested_and_passed",
+                feeder_cable_atp_names: ["FD02 Cable ATP.pdf"],
+                feeder_cable_atp_status: "missing_required",
+                feeder_cable_atp_required: true,
+                feeder_cable_atp_files: [],
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    render(
+      <IssueAttachmentManifestProvider manifest={null}>
+        <NetaReportManifestProvider manifest={null}>
+          <MvEquipmentPage data={data} />
+        </NetaReportManifestProvider>
+      </IssueAttachmentManifestProvider>,
+    );
+
+    expect(screen.getByText("Cable Tested + Infralink Updated 2")).toBeInTheDocument();
+    expect(screen.getByText("Cable Tested / Infralink Pending 1")).toBeInTheDocument();
+    expect(screen.getByText("L3 Missing ATP 1")).toBeInTheDocument();
+
+    const updatedCable = screen.getByRole("button", {
+      name: "FD01-IAD06-TX6-06B, cable connection",
+    });
+    const pendingCable = screen.getByRole("button", {
+      name: "FD01-IAD06-TX6-05A, cable connection",
+    });
+    expect(updatedCable.querySelectorAll("path")[1]).toHaveAttribute("stroke", "#16a34a");
+    expect(pendingCable.querySelectorAll("path")[1]).toHaveAttribute("stroke", "#2563eb");
+
+    await user.click(updatedCable);
+    expect(screen.getByText("Tested + Infralink Updated", { exact: true })).toBeInTheDocument();
+    expect(
+      screen.getByText("L3: Pre Func Testing & Startup", { exact: true }),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /FD01 Cable ATP\.pdf/ }));
+    expect(screen.getByTitle("FD01 Cable ATP.pdf")).toHaveAttribute(
+      "src",
+      "/feeder-cable-atp/FD01-IAD06-TX6-06B/FD01%20Cable%20ATP.pdf",
+    );
+    await user.click(screen.getByRole("button", { name: "Close Feeder Cable ATP preview" }));
+
+    await user.click(
+      screen.getByRole("button", { name: "FD02-IAD06-TX6-06B, cable connection" }),
+    );
+    expect(screen.getByText("Required file missing")).toBeInTheDocument();
+    expect(
+      screen.getByText("L3 status requires a downloaded Feeder Cable ATP PDF."),
+    ).toBeInTheDocument();
   });
 });

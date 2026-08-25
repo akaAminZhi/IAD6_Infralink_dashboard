@@ -316,6 +316,14 @@ def print_final_summary(metadata: dict[str, object]) -> None:
                 f"{power_plan.get('matched_equipment_annotation_count', 0)} / "
                 f"{power_plan.get('equipment_annotation_count', 0)}"
             )
+            print(
+                "  linked Feeder Cable ATP files: "
+                f"{power_plan.get('feeder_cable_atp_linked_annotation_count', 0)}"
+            )
+            print(
+                "  L3 cables missing Feeder Cable ATP: "
+                f"{power_plan.get('feeder_cable_atp_missing_required_count', 0)}"
+            )
     print(f"  output folder path: {DATA_DIR}")
 
 

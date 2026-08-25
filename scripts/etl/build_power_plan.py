@@ -7,6 +7,7 @@ from datetime import date, datetime
 import os
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 import fitz
 
@@ -17,16 +18,20 @@ except ImportError:
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-POWER_PLAN_DIR = PROJECT_ROOT / "raw_data" / "power_plan"
-DATA_DIR = PROJECT_ROOT / "frontend" / "public" / "data"
-OUTPUT_PATH = DATA_DIR / "power_plan.json"
-EQUIPMENT_PATH = DATA_DIR / "equipment.json"
-MV_REPORT_DIR = Path(
+EPS_TRACKER_ROOT = Path(
     os.environ.get(
         "IAD6_EPS_TRACKER_ROOT",
         str(PROJECT_ROOT.parent / "IAD6_EPS_Testing_Tracker"),
     )
-) / "MV_Daily_test_report"
+)
+POWER_PLAN_DIR = PROJECT_ROOT / "raw_data" / "power_plan"
+DATA_DIR = PROJECT_ROOT / "frontend" / "public" / "data"
+OUTPUT_PATH = DATA_DIR / "power_plan.json"
+EQUIPMENT_PATH = DATA_DIR / "equipment.json"
+MV_REPORT_DIR = EPS_TRACKER_ROOT / "MV_Daily_test_report"
+FEEDER_CABLE_ATP_DIR = EPS_TRACKER_ROOT / "downloads" / "feeder_cable_atp"
+FEEDER_CABLE_ATP_URL_BASE = "/feeder-cable-atp"
+L3_STATUS = "L3: PRE FUNC TESTING & STARTUP"
 
 MV_SECTION_NAMES = {
     "tested and passed": "tested_and_passed",
@@ -47,6 +52,54 @@ def normalize_equipment_key(value: Any) -> str:
     if text.startswith("IAD06-"):
         text = text[6:]
     return text
+
+
+def split_attachment_names(value: Any) -> list[str]:
+    names: list[str] = []
+    seen: set[str] = set()
+    for part in re.split(r"[;\r\n]+", str(value or "")):
+        name = " ".join(part.strip().split())
+        key = name.casefold()
+        if name and key not in {"n/a", "na", "none", "null"} and key not in seen:
+            names.append(name)
+            seen.add(key)
+    return names
+
+
+def feeder_cable_atp_url(relative_path: Path) -> str:
+    return f"{FEEDER_CABLE_ATP_URL_BASE}/{'/'.join(quote(part) for part in relative_path.parts)}"
+
+
+def build_feeder_cable_atp_index(
+    download_dir: Path,
+) -> dict[str, list[dict[str, Any]]]:
+    if not download_dir.exists():
+        return {}
+
+    index: dict[str, list[dict[str, Any]]] = {}
+    for file_path in sorted(
+        download_dir.rglob("*.pdf"), key=lambda path: str(path).lower()
+    ):
+        if not file_path.is_file():
+            continue
+        relative_path = file_path.relative_to(download_dir)
+        if len(relative_path.parts) < 2:
+            continue
+        equipment_key = normalize_equipment_key(relative_path.parts[0])
+        if not equipment_key:
+            continue
+        index.setdefault(equipment_key, []).append(
+            {
+                "file_name": file_path.name,
+                "relative_path": relative_path.as_posix(),
+                "url": feeder_cable_atp_url(relative_path),
+                "bytes": file_path.stat().st_size,
+                "modified_at": datetime.fromtimestamp(file_path.stat().st_mtime)
+                .astimezone()
+                .isoformat(),
+            }
+        )
+    return index
 
 
 def mv_report_date(path: Path) -> str | None:
@@ -140,6 +193,7 @@ def annotation_record(
     annotation_id: str,
     equipment_index: dict[str, dict[str, Any]],
     mv_test_index: dict[str, list[dict[str, str]]],
+    feeder_cable_atp_index: dict[str, list[dict[str, Any]]],
     transform: fitz.Matrix | None = None,
 ) -> dict[str, Any] | None:
     info = annotation.info
@@ -183,6 +237,32 @@ def annotation_record(
         for entry in mv_test_history
         if entry["status"] in {"tested_and_passed", "retested_and_passed"}
     ]
+    feeder_cable_atp_names = (
+        split_attachment_names(system_element.get("feeder_cable_atp"))
+        if system_element
+        else []
+    )
+    expected_atp_names = {name.casefold() for name in feeder_cable_atp_names}
+    feeder_cable_atp_files = [
+        file_record
+        for file_record in feeder_cable_atp_index.get(equipment_key, [])
+        if file_record["file_name"].casefold() in expected_atp_names
+    ]
+    feeder_cable_atp_required = (
+        kind == "connection"
+        and " ".join(str(system_element.get("status") or "").strip().upper().split())
+        == L3_STATUS
+        if system_element
+        else False
+    )
+    if feeder_cable_atp_files:
+        feeder_cable_atp_status = "available"
+    elif feeder_cable_atp_required:
+        feeder_cable_atp_status = "missing_required"
+    elif feeder_cable_atp_names:
+        feeder_cable_atp_status = "referenced_file_missing"
+    else:
+        feeder_cable_atp_status = "not_required"
 
     record = {
         "annotation_id": annotation_id,
@@ -225,6 +305,10 @@ def annotation_record(
         "mv_daily_test_date": latest_mv_test["date"] if latest_mv_test else None,
         "mv_daily_tested_dates": list(dict.fromkeys(mv_tested_dates)),
         "mv_daily_test_history": mv_test_history,
+        "feeder_cable_atp_names": feeder_cable_atp_names,
+        "feeder_cable_atp_files": feeder_cable_atp_files,
+        "feeder_cable_atp_required": feeder_cable_atp_required,
+        "feeder_cable_atp_status": feeder_cable_atp_status,
     }
     if vertices:
         record["vertices"] = vertices
@@ -236,17 +320,20 @@ def build_power_plan(
     equipment_path: str | Path = EQUIPMENT_PATH,
     output_path: str | Path = OUTPUT_PATH,
     mv_report_dir: str | Path = MV_REPORT_DIR,
+    feeder_cable_atp_dir: str | Path = FEEDER_CABLE_ATP_DIR,
 ) -> dict[str, Any]:
     source_dir = Path(power_plan_dir)
     equipment_json_path = Path(equipment_path)
     manifest_path = Path(output_path)
     mv_report_path = Path(mv_report_dir)
+    feeder_atp_path = Path(feeder_cable_atp_dir)
     pdf_paths = sorted(source_dir.glob("*.pdf"), key=lambda path: path.name.lower())
     if not pdf_paths:
         raise FileNotFoundError(f"No PDF power plan found in {source_dir}")
 
     equipment_index = build_equipment_index(equipment_json_path)
     mv_test_index, mv_report_files = build_mv_test_index(mv_report_path)
+    feeder_atp_index = build_feeder_cable_atp_index(feeder_atp_path)
     pages: list[dict[str, Any]] = []
 
     for pdf_path in pdf_paths:
@@ -260,6 +347,7 @@ def build_power_plan(
                         f"{slugify(pdf_path.stem)}-{page_index + 1}-{annotation_index}",
                         equipment_index,
                         mv_test_index,
+                        feeder_atp_index,
                         page.rotation_matrix,
                     )
                     if record:
@@ -286,6 +374,25 @@ def build_power_plan(
         for annotation in page["annotations"]
         if annotation["kind"] == "equipment"
     ]
+    missing_required_atp_by_equipment: dict[str, dict[str, Any]] = {}
+    for page in pages:
+        for annotation in page["annotations"]:
+            if annotation.get("feeder_cable_atp_status") != "missing_required":
+                continue
+            equipment_id = (
+                annotation.get("matched_equipment_id")
+                or annotation.get("label")
+                or annotation.get("annotation_id")
+            )
+            missing_required_atp_by_equipment.setdefault(
+                str(equipment_id),
+                {
+                    "equipment_id": annotation.get("matched_equipment_id"),
+                    "label": annotation.get("label"),
+                    "system_element_status": annotation.get("system_element_status"),
+                    "expected_files": annotation.get("feeder_cable_atp_names", []),
+                },
+            )
     payload = {
         "generated_at": datetime.now().astimezone().isoformat(),
         "source_directory": str(source_dir.resolve()),
@@ -310,6 +417,24 @@ def build_power_plan(
             for annotation in page["annotations"]
             if annotation["kind"] in {"equipment", "termination", "connection"}
         ),
+        "feeder_cable_atp_download_directory": str(feeder_atp_path.resolve()),
+        "feeder_cable_atp_public_link": {
+            "status": "served_by_vite",
+            "target": str(feeder_atp_path.resolve()),
+            "url_base": FEEDER_CABLE_ATP_URL_BASE,
+            "pdf_only": True,
+        },
+        "feeder_cable_atp_linked_annotation_count": sum(
+            bool(annotation.get("feeder_cable_atp_files"))
+            for page in pages
+            for annotation in page["annotations"]
+        ),
+        "feeder_cable_atp_missing_required_count": len(
+            missing_required_atp_by_equipment
+        ),
+        "feeder_cable_atp_missing_required": list(
+            missing_required_atp_by_equipment.values()
+        ),
         "pages": pages,
     }
     write_json(manifest_path, payload)
@@ -323,6 +448,11 @@ def main() -> dict[str, Any]:
         f"{payload['page_count']} page(s), "
         f"{payload['matched_equipment_annotation_count']}/"
         f"{payload['equipment_annotation_count']} equipment annotations matched"
+    )
+    print(
+        "Feeder Cable ATP: "
+        f"{payload['feeder_cable_atp_linked_annotation_count']} annotation(s) linked, "
+        f"{payload['feeder_cable_atp_missing_required_count']} required file(s) missing"
     )
     print(f"Wrote {OUTPUT_PATH}")
     return payload

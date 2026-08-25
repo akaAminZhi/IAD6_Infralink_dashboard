@@ -54,6 +54,7 @@ OUTPUT_FIELDS = [
     "neta_complete",
     "neta_completed_at",
     "neta_test_report",
+    "feeder_cable_atp",
     "manufacturer",
     "model",
     "serial_number",
@@ -274,6 +275,15 @@ def get_cell(row: tuple[Any, ...], header_map: dict[str, int], source_column: st
     return row[index]
 
 
+def get_optional_cell(
+    row: tuple[Any, ...], header_map: dict[str, int], source_column: str
+) -> Any:
+    index = header_map.get(source_column)
+    if index is None or index >= len(row):
+        return None
+    return row[index]
+
+
 def row_is_empty(row: tuple[Any, ...], header_map: dict[str, int]) -> bool:
     return all(is_blank(get_cell(row, header_map, column)) for column in SOURCE_COLUMNS)
 
@@ -295,6 +305,9 @@ def normalize_row(row: tuple[Any, ...], header_map: dict[str, int]) -> dict[str,
         "neta_complete": neta_complete,
         "neta_completed_at": neta_completed_at,
         "neta_test_report": clean_text(get_cell(row, header_map, "NETA Test Report")),
+        "feeder_cable_atp": clean_text(
+            get_optional_cell(row, header_map, "Feeder Cable ATP")
+        ),
         "manufacturer": clean_text(
             get_cell(row, header_map, "Equipment Manufacturer")
         ),

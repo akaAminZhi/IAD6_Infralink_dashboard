@@ -100,6 +100,14 @@ JOB_DEFINITIONS: dict[str, JobDefinition] = {
         "download_neta_reports.py",
         ("headed", "dry_run", "force", "only", "limit"),
     ),
+    "download_feeder_cable_atp": JobDefinition(
+        "download_feeder_cable_atp",
+        "Download Feeder Cable ATP",
+        "Download Feeder Cable ATP PDFs referenced by SystemElements.",
+        "eps",
+        "download_feeder_cable_atp.py",
+        ("headed", "dry_run", "force", "only", "limit"),
+    ),
     "download_issue_attachments": JobDefinition(
         "download_issue_attachments",
         "Download Issue Attachments",
@@ -139,6 +147,7 @@ DAILY_PIPELINE = (
     "refresh_jc2_exports",
     "wash_daily_reports",
     "download_neta_reports",
+    "download_feeder_cable_atp",
     "download_issue_attachments",
     "organize_gc_reports",
     "run_dashboard_etl",

@@ -64,6 +64,20 @@ def test_build_command_uses_fixed_scripts_and_validated_options(tmp_path: Path) 
         "2",
     ]
 
+    atp_command, atp_cwd = manager.build_command(
+        "download_feeder_cable_atp",
+        {"dry_run": True, "only": ["FD01-IAD06-TX6-01A"]},
+    )
+    assert atp_cwd == manager.config.eps_root
+    assert atp_command[2] == str(
+        manager.config.eps_root / "download_feeder_cable_atp.py"
+    )
+    assert atp_command[3:] == [
+        "--only",
+        "FD01-IAD06-TX6-01A",
+        "--dry-run",
+    ]
+
     with pytest.raises(ValueError, match="Unknown automation job"):
         manager.build_command("powershell")
     with pytest.raises(ValueError, match="does not support option"):

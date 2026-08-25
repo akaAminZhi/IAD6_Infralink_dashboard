@@ -71,6 +71,7 @@ const defaultPipelineSteps = [
   "Refresh JC2 Excel Exports",
   "Rebuild Daily Test Summary",
   "Download NETA Reports",
+  "Download Feeder Cable ATP",
   "Download Issue Attachments",
   "Organize GC Reports",
   "Run Dashboard ETL",
