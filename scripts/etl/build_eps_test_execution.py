@@ -90,6 +90,7 @@ class NotFoundTestItem:
     status: str
     equipment_name: str
     alias_checked: str = ""
+    date_tested: date | None = None
     retested_at: date | None = None
 
 
@@ -201,8 +202,12 @@ def build_not_found_test_items(
     failed_equipment: set[str],
     tracker_equipment_keys: set[str],
     retested_dates: dict[str, date] | None = None,
+    passed_dates: dict[str, date] | None = None,
+    failed_dates: dict[str, date] | None = None,
 ) -> list[NotFoundTestItem]:
     retested_dates = retested_dates or {}
+    passed_dates = passed_dates or {}
+    failed_dates = failed_dates or {}
     items: list[NotFoundTestItem] = []
     for status, equipment_keys in [
         ("Passed", passed_equipment),
@@ -220,6 +225,11 @@ def build_not_found_test_items(
                     status=status,
                     equipment_name=equipment_key,
                     alias_checked=alias_checked,
+                    date_tested=(
+                        passed_dates.get(equipment_key)
+                        if status == "Passed"
+                        else failed_dates.get(equipment_key)
+                    ),
                     retested_at=(
                         retested_dates.get(equipment_key) if status == "Passed" else None
                     ),
@@ -457,8 +467,20 @@ def cumulative_daily_equipment(
     history: DailyTestedEquipmentHistory,
     through_date: date,
 ) -> tuple[set[str], set[str]]:
-    passed: set[str] = set()
-    failed: set[str] = set()
+    passed_dates, failed_dates = cumulative_daily_equipment_dates(
+        history,
+        through_date,
+    )
+    return set(passed_dates), set(failed_dates)
+
+
+def cumulative_daily_equipment_dates(
+    history: DailyTestedEquipmentHistory,
+    through_date: date,
+) -> tuple[dict[str, date], dict[str, date]]:
+    """Return current Passed/Failed items with the date of that status event."""
+    passed: dict[str, date] = {}
+    failed: dict[str, date] = {}
 
     for daily_date in history.dates:
         if daily_date > through_date:
@@ -466,11 +488,11 @@ def cumulative_daily_equipment(
 
         tested_today, failed_today = daily_equipment_on_date(history, daily_date)
         for equipment_key in tested_today:
-            failed.discard(equipment_key)
-            passed.add(equipment_key)
+            failed.pop(equipment_key, None)
+            passed[equipment_key] = daily_date
         for equipment_key in failed_today:
-            passed.discard(equipment_key)
-            failed.add(equipment_key)
+            passed.pop(equipment_key, None)
+            failed[equipment_key] = daily_date
 
     return passed, failed
 
@@ -1115,7 +1137,11 @@ def not_found_item_record(
         "tracker_equipment_type": inferred_tracker_type,
         "follow_up_req": "",
         "comments": comments,
-        "date_tested": "",
+        "date_tested": (
+            f"{item.date_tested.isoformat()}T00:00:00"
+            if item.date_tested
+            else ""
+        ),
         "retested_and_passed": item.retested_at is not None,
         "retested_at": item.retested_at.isoformat() if item.retested_at else None,
         "equipment_serial_number": equipment_info.get("serial_number"),
@@ -2095,10 +2121,12 @@ def build_eps_test_execution(
             f"No dated equipment records found in {DAILY_TESTED_EQUIPMENT_PATH}"
         )
 
-    passed_input_equipment, failed_input_equipment = cumulative_daily_equipment(
+    passed_input_dates, failed_input_dates = cumulative_daily_equipment_dates(
         daily_history,
         current_source_date,
     )
+    passed_input_equipment = set(passed_input_dates)
+    failed_input_equipment = set(failed_input_dates)
     retested_input_dates = current_retested_equipment_dates(
         daily_history,
         current_source_date,
@@ -2126,6 +2154,8 @@ def build_eps_test_execution(
         failed_input_equipment,
         tracker_equipment_keys,
         retested_input_dates,
+        passed_input_dates,
+        failed_input_dates,
     )
 
     module_links = load_module_links()

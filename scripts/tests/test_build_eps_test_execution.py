@@ -6,13 +6,16 @@ from pathlib import Path
 from scripts.etl.build_eps_test_execution import (
     TrackerRecord,
     build_module_link_index,
+    build_not_found_test_items,
     choose_baseline_snapshot,
     choose_baseline_daily_date,
     cumulative_daily_equipment,
+    cumulative_daily_equipment_dates,
     compare_snapshots,
     date_tested_indicates_tested,
     find_module_link_for_tracker_record,
     is_one_day_snapshot_diff,
+    not_found_item_record,
     parse_daily_tested_equipment,
     record_is_failed,
     record_is_complete,
@@ -196,6 +199,40 @@ def test_daily_tested_equipment_parser_uses_dated_sections(tmp_path: Path) -> No
     assert history.records_by_date[date(2026, 7, 2)]["retested"] == {
         "PDU6-01A-4-CT-PRI"
     }
+
+    passed_dates, failed_dates = cumulative_daily_equipment_dates(
+        history,
+        date(2026, 7, 2),
+    )
+    assert passed_dates == {
+        "PDU6-01A-1": date(2026, 7, 1),
+        "PDU6-01A-3": date(2026, 7, 2),
+        "PDU6-01A-4-CT-PRI": date(2026, 7, 2),
+    }
+    assert failed_dates == {"PDU6-01A-2": date(2026, 7, 2)}
+
+
+def test_not_found_items_preserve_daily_report_test_dates() -> None:
+    items = build_not_found_test_items(
+        passed_equipment={"PDU6-01A-1-MCB1"},
+        failed_equipment={"PDU6-01A-1-CT-PRI"},
+        tracker_equipment_keys=set(),
+        passed_dates={"PDU6-01A-1-MCB1": date(2026, 6, 22)},
+        failed_dates={"PDU6-01A-1-CT-PRI": date(2026, 6, 23)},
+    )
+
+    records = {
+        item.equipment_name: not_found_item_record(
+            item=item,
+            module_link=None,
+            equipment_info={},
+            module_match_status="unmatched",
+        )
+        for item in items
+    }
+
+    assert records["PDU6-01A-1-MCB1"]["date_tested"] == "2026-06-22T00:00:00"
+    assert records["PDU6-01A-1-CT-PRI"]["date_tested"] == "2026-06-23T00:00:00"
 
 
 def test_retested_item_is_fixed_and_appends_retest_comment() -> None:

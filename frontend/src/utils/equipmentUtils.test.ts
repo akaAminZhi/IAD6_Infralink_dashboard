@@ -124,6 +124,49 @@ describe("equipmentUtils", () => {
     expect(getOpenCaseCount(result[0])).toBe(0);
   });
 
+  it("includes NETA equipment that is not present in module equipment links", () => {
+    const result = flattenEquipmentFromPdms(
+      [
+        {
+          pdm_name: "PDM-A",
+          equipment: [
+            {
+              equipment_id: "IAD06-EQ-1",
+              source_equipment_label: "EQ-1",
+              neta_complete: true,
+              neta_test_report: "EQ-1.pdf",
+            },
+          ],
+        },
+      ],
+      [
+        {
+          equipment_id: "IAD06-EQ-1",
+          neta_complete: true,
+          neta_test_report: "EQ-1.pdf",
+        },
+        {
+          equipment_id: "IAD06-CUPP6-02F-2",
+          neta_complete: true,
+          neta_test_report: "CUPP6-02F-2.pdf",
+        },
+        {
+          equipment_id: "IAD06-UNRELATED",
+          neta_complete: false,
+          neta_test_report: null,
+        },
+      ],
+    );
+
+    expect(result).toHaveLength(2);
+    expect(result[1]).toMatchObject({
+      display_equipment_id: "IAD06-CUPP6-02F-2",
+      pdm_name: null,
+      source: "equipment",
+    });
+    expect(getEquipmentSummaryMetrics(result).netaComplete).toBe(2);
+  });
+
   it("derives NETA status and attention reasons", () => {
     const missingReport = row({
       neta_complete: true,

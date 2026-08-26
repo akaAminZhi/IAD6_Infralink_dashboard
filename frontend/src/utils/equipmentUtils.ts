@@ -136,6 +136,10 @@ function equipmentLookupKeys(value: unknown): string[] {
     : [normalized, `IAD06-${normalized}`];
 }
 
+function hasNetaEvidence(equipment: Equipment): boolean {
+  return equipment.neta_complete === true || !isBlank(equipment.neta_test_report);
+}
+
 function buildCxalloyStatusIndex(
   manifest: CxalloyReportStatusManifest | null,
 ): Map<string, CxalloyReportStatusRecord> {
@@ -265,47 +269,65 @@ export function flattenEquipmentFromPdms(
     });
   });
 
-  if (rows.length > 0) {
-    return rows;
-  }
-
-  return equipmentRecords.map((equipment, index) => {
-    const displayId = getEquipmentDisplayId(equipment);
-    const cases = casesIndex.get(normalizeLookup(equipment.equipment_id)) ?? [];
-    const cxalloyStatus = equipmentLookupKeys(equipment.equipment_id ?? displayId)
-      .map((key) => cxalloyStatusIndex.get(key))
-      .find(Boolean);
-    return {
-      row_id: `${displayId}-equipment-${index}`,
-      pdm_name: null,
-      module_type: null,
-      equipment_id: firstText(equipment.equipment_id),
-      source_equipment_label: null,
-      display_equipment_id: displayId,
-      equipment_type: firstText(equipment.equipment_type),
-      status: firstText(equipment.status),
-      parent: firstText(equipment.parent),
-      system: firstText(equipment.system),
-      manufacturer: firstText(equipment.manufacturer),
-      model: firstText(equipment.model),
-      serial_number: firstText(equipment.serial_number),
-      open_issues_count_from_system_elements: firstNumber(
-        equipment.open_issues_count_from_system_elements,
+  const includeAllStandaloneEquipment = rows.length === 0;
+  const representedEquipmentKeys = new Set(
+    rows.flatMap((row) =>
+      [row.equipment_id, row.source_equipment_label, row.display_equipment_id].flatMap(
+        equipmentLookupKeys,
       ),
-      calculated_open_case_count: null,
-      neta_complete: equipment.neta_complete ?? null,
-      neta_completed_at: firstText(equipment.neta_completed_at),
-      neta_test_report: firstText(equipment.neta_test_report),
-      neta_report_status: null,
-      ...cxalloyFields(cxalloyStatus),
-      cases,
-      eps_test_items: getIndexedEpsTestItems(epsTestItemIndex, [
-        equipment.equipment_id,
-        displayId,
-      ]),
-      source: "equipment",
-    };
-  });
+    ),
+  );
+  const standaloneRows = equipmentRecords
+    .filter((equipment) => {
+      if (includeAllStandaloneEquipment) {
+        return true;
+      }
+      if (!hasNetaEvidence(equipment)) {
+        return false;
+      }
+
+      const lookupKeys = equipmentLookupKeys(equipment.equipment_id);
+      return lookupKeys.length > 0 && lookupKeys.every((key) => !representedEquipmentKeys.has(key));
+    })
+    .map<FlattenedEquipmentRow>((equipment, index) => {
+      const displayId = getEquipmentDisplayId(equipment);
+      const cases = casesIndex.get(normalizeLookup(equipment.equipment_id)) ?? [];
+      const cxalloyStatus = equipmentLookupKeys(equipment.equipment_id ?? displayId)
+        .map((key) => cxalloyStatusIndex.get(key))
+        .find(Boolean);
+      return {
+        row_id: `${displayId}-equipment-${index}`,
+        pdm_name: null,
+        module_type: null,
+        equipment_id: firstText(equipment.equipment_id),
+        source_equipment_label: null,
+        display_equipment_id: displayId,
+        equipment_type: firstText(equipment.equipment_type),
+        status: firstText(equipment.status),
+        parent: firstText(equipment.parent),
+        system: firstText(equipment.system),
+        manufacturer: firstText(equipment.manufacturer),
+        model: firstText(equipment.model),
+        serial_number: firstText(equipment.serial_number),
+        open_issues_count_from_system_elements: firstNumber(
+          equipment.open_issues_count_from_system_elements,
+        ),
+        calculated_open_case_count: null,
+        neta_complete: equipment.neta_complete ?? null,
+        neta_completed_at: firstText(equipment.neta_completed_at),
+        neta_test_report: firstText(equipment.neta_test_report),
+        neta_report_status: null,
+        ...cxalloyFields(cxalloyStatus),
+        cases,
+        eps_test_items: getIndexedEpsTestItems(epsTestItemIndex, [
+          equipment.equipment_id,
+          displayId,
+        ]),
+        source: "equipment",
+      };
+    });
+
+  return [...rows, ...standaloneRows];
 }
 
 export function isOpenCase(caseItem: CaseIssue): boolean {
