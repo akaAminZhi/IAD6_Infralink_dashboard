@@ -296,6 +296,18 @@ describe("KprPage", () => {
             month_change: -22,
           },
           {
+            key: "neta_complete",
+            label: "NETA Complete",
+            color: "#0d9488",
+            order: 3,
+            baseline_count: 9,
+            current_count: 48,
+            month_change: 39,
+            retained_count: 5,
+            entered_count: 43,
+            exited_count: 4,
+          },
+          {
             key: "ship_to_site",
             label: "Ship to Site",
             color: "#059669",
@@ -334,6 +346,11 @@ describe("KprPage", () => {
     expect(screen.getByText("210 forward")).toBeInTheDocument();
     expect(screen.getByLabelText("77 fewer than month start")).toBeInTheDocument();
     expect(screen.getByLabelText("135 more than month start")).toBeInTheDocument();
+    expect(
+      screen.getByLabelText(
+        "NETA Complete: 9 at month start plus 43 entered minus 4 left equals 48 current",
+      ),
+    ).toHaveTextContent("48");
     expect(screen.getByText("Movement details").closest("details")).not.toHaveAttribute("open");
     expect(screen.getByText("Blank: 78")).toBeInTheDocument();
   });

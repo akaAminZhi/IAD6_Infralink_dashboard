@@ -119,6 +119,38 @@ def test_lifecycle_summary_reports_forward_regressed_and_unmapped_records() -> N
     assert stages["ship"]["equipment_ids"] == ["EQ-1"]
     assert stages["red"]["equipment_ids"] == ["EQ-2"]
     assert stages["unmapped"]["equipment_ids"] == ["EQ-3"]
+    assert stages["ifc"]["entered_count"] == 0
+    assert stages["ifc"]["exited_count"] == 1
+    assert stages["red"]["entered_count"] == 1
+    assert stages["red"]["exited_count"] == 0
+    assert stages["ship"]["entered_count"] == 1
+    assert stages["ship"]["retained_count"] == 0
+    assert stages["unmapped"]["retained_count"] == 1
+
+
+def test_lifecycle_stage_reconciliation_includes_retained_equipment() -> None:
+    config = lifecycle_config()
+    baseline = {
+        "EQ-1": {"status": "Cond Red Tag", "neta_complete": True},
+        "EQ-2": {"status": "IFC", "neta_complete": False},
+        "EQ-3": {"status": "IFC", "neta_complete": False},
+    }
+    current = {
+        "EQ-1": {"status": "Cond Red Tag", "neta_complete": True},
+        "EQ-2": {"status": "IFC", "neta_complete": True},
+        "EQ-3": {"status": "Ship to Site", "neta_complete": True},
+    }
+
+    stages = {
+        stage["key"]: stage
+        for stage in lifecycle_summary(current, baseline, config)["stages"]
+    }
+
+    assert stages["neta"]["baseline_count"] == 1
+    assert stages["neta"]["retained_count"] == 1
+    assert stages["neta"]["entered_count"] == 1
+    assert stages["neta"]["exited_count"] == 0
+    assert stages["neta"]["current_count"] == 2
 
 
 def test_monthly_trend_keeps_pre_month_baseline_point() -> None:

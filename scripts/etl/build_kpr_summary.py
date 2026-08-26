@@ -285,17 +285,28 @@ def lifecycle_summary(
     current_counts = Counter(current_stage_by_key.values())
     baseline_counts = Counter(baseline_stage_by_key.values())
     transitions: Counter[tuple[str, str]] = Counter()
+    retained_counts: Counter[str] = Counter()
+    entered_counts: Counter[str] = Counter()
+    exited_counts: Counter[str] = Counter()
     advanced = 0
     regressed = 0
     unchanged = 0
     unmapped_key = str(unmapped["key"])
 
-    for equipment_key, current_stage in current_stage_by_key.items():
+    for equipment_key in set(current_stage_by_key) | set(baseline_stage_by_key):
+        current_stage = current_stage_by_key.get(equipment_key)
         baseline_stage = baseline_stage_by_key.get(equipment_key)
-        if baseline_stage is None:
-            continue
         if baseline_stage == current_stage:
-            unchanged += 1
+            if current_stage is not None:
+                retained_counts[current_stage] += 1
+                unchanged += 1
+            continue
+
+        if current_stage is not None:
+            entered_counts[current_stage] += 1
+        if baseline_stage is not None:
+            exited_counts[baseline_stage] += 1
+        if baseline_stage is None or current_stage is None:
             continue
 
         transitions[(baseline_stage, current_stage)] += 1
@@ -326,6 +337,9 @@ def lifecycle_summary(
                 "baseline_count": baseline_counts.get(stage["key"], 0),
                 "month_change": current_counts.get(stage["key"], 0)
                 - baseline_counts.get(stage["key"], 0),
+                "retained_count": retained_counts.get(stage["key"], 0),
+                "entered_count": entered_counts.get(stage["key"], 0),
+                "exited_count": exited_counts.get(stage["key"], 0),
                 "equipment_ids": sorted(
                     str(current_equipment[equipment_key].get("equipment_id") or equipment_key)
                     for equipment_key, current_stage in current_stage_by_key.items()

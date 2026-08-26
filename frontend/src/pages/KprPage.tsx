@@ -933,7 +933,7 @@ function EquipmentLifecycle({
   summary: KprSummary;
 }) {
   const lifecycle = summary.equipment_lifecycle;
-  const visibleTransitions = lifecycle.transitions.slice(0, 10);
+  const visibleTransitions = lifecycle.transitions;
   const workflowStages = lifecycle.stages.filter((stage) => stage.key !== "unmapped");
   const mappedEquipmentCount = workflowStages.reduce(
     (total, stage) => total + stage.current_count,
@@ -1007,64 +1007,135 @@ function EquipmentLifecycle({
               aria-hidden="true"
             />
           </summary>
-          <div className="grid gap-5 border-t bg-white p-4 xl:grid-cols-[1.4fr_1fr]">
-            <div className="overflow-hidden rounded-md border">
-              {visibleTransitions.length > 0 ? (
-                visibleTransitions.map((transition, index) => (
-                  <div
-                    className={cn(
-                      "grid grid-cols-[1fr_auto_1fr_auto] items-center gap-3 px-4 py-2.5 text-sm",
-                      index < visibleTransitions.length - 1 && "border-b",
-                    )}
-                    key={`${transition.from_key}-${transition.to_key}`}
-                  >
-                    <span className="text-slate-700">{transition.from_label}</span>
-                    <ArrowRight className="h-4 w-4 text-slate-400" aria-hidden="true" />
-                    <span className="font-medium text-slate-950">{transition.to_label}</span>
-                    <strong
-                      className={
-                        transition.direction === "regressed"
-                          ? "text-red-700"
-                          : "text-emerald-700"
-                      }
-                    >
-                      {formatNumber(transition.count)}
-                    </strong>
-                  </div>
-                ))
-              ) : (
-                <div className="px-4 py-6 text-center text-sm text-muted-foreground">
-                  No stage changes.
-                </div>
-              )}
-            </div>
-            <div
-              className={cn(
-                "rounded-md border p-4",
-                unmappedCount > 0 ? "border-amber-300 bg-amber-50/60" : "bg-slate-50",
-              )}
-            >
-              <div className="flex items-baseline gap-2">
-                <strong className="text-2xl text-slate-950">{formatNumber(unmappedCount)}</strong>
-                <span className="text-xs font-medium uppercase text-muted-foreground">
-                  Unmapped
-                </span>
+          <div className="space-y-5 border-t bg-white p-4">
+            <div>
+              <div className="mb-2 text-xs font-semibold uppercase text-muted-foreground">
+                Stage reconciliation
               </div>
-              {unmappedStage ? (
-                <div className="mt-1 text-xs text-muted-foreground">
-                  {`${formatNumber(unmappedStage.baseline_count)} to ${formatNumber(unmappedStage.current_count)}`}
+              <div className="overflow-x-auto rounded-md border">
+                <div className="min-w-[720px]">
+                  <div className="grid grid-cols-[minmax(220px,1fr)_110px_110px_110px_110px] border-b bg-slate-50 px-4 py-2 text-xs font-medium uppercase text-muted-foreground">
+                    <span>Stage</span>
+                    <span className="text-right">Month start</span>
+                    <span className="text-right">Entered</span>
+                    <span className="text-right">Left</span>
+                    <span className="text-right">Current</span>
+                  </div>
+                  {lifecycle.stages.map((stage, index) => {
+                    const entered =
+                      stage.entered_count ??
+                      lifecycle.transitions.reduce(
+                        (total, transition) =>
+                          total + (transition.to_key === stage.key ? transition.count : 0),
+                        0,
+                      );
+                    const exited =
+                      stage.exited_count ??
+                      lifecycle.transitions.reduce(
+                        (total, transition) =>
+                          total + (transition.from_key === stage.key ? transition.count : 0),
+                        0,
+                      );
+                    return (
+                      <div
+                        className={cn(
+                          "grid grid-cols-[minmax(220px,1fr)_110px_110px_110px_110px] items-center px-4 py-2.5 text-sm",
+                          index < lifecycle.stages.length - 1 && "border-b",
+                        )}
+                        key={stage.key}
+                      >
+                        <span className="flex items-center gap-2 font-medium text-slate-950">
+                          <span
+                            className="h-2.5 w-2.5 shrink-0 rounded-full"
+                            style={{ backgroundColor: stage.color }}
+                          />
+                          {stage.label}
+                        </span>
+                        <span className="text-right text-slate-600">
+                          {formatNumber(stage.baseline_count)}
+                        </span>
+                        <span className="text-right font-semibold text-emerald-700">
+                          {entered > 0 ? `+${formatNumber(entered)}` : "-"}
+                        </span>
+                        <span className="text-right font-semibold text-red-700">
+                          {exited > 0 ? `-${formatNumber(exited)}` : "-"}
+                        </span>
+                        <strong
+                          className="text-right text-slate-950"
+                          aria-label={`${stage.label}: ${formatNumber(stage.baseline_count)} at month start plus ${formatNumber(entered)} entered minus ${formatNumber(exited)} left equals ${formatNumber(stage.current_count)} current`}
+                        >
+                          {formatNumber(stage.current_count)}
+                        </strong>
+                      </div>
+                    );
+                  })}
                 </div>
-              ) : null}
-              <div className="mt-3 flex flex-wrap gap-2">
-                {lifecycle.unmapped_statuses.length > 0 ? (
-                  lifecycle.unmapped_statuses.map((item) => (
-                    <StatusBadge key={item.status} tone="warning">
-                      {`${item.status}: ${formatNumber(item.count)}`}
-                    </StatusBadge>
-                  ))
-                ) : (
-                  <StatusBadge tone="success">All statuses mapped</StatusBadge>
+              </div>
+            </div>
+            <div className="grid gap-5 xl:grid-cols-[1.4fr_1fr]">
+              <div>
+                <div className="mb-2 text-xs font-semibold uppercase text-muted-foreground">
+                  Changed paths
+                </div>
+                <div className="overflow-hidden rounded-md border">
+                  {visibleTransitions.length > 0 ? (
+                    visibleTransitions.map((transition, index) => (
+                      <div
+                        className={cn(
+                          "grid grid-cols-[1fr_auto_1fr_auto] items-center gap-3 px-4 py-2.5 text-sm",
+                          index < visibleTransitions.length - 1 && "border-b",
+                        )}
+                        key={`${transition.from_key}-${transition.to_key}`}
+                      >
+                        <span className="text-slate-700">{transition.from_label}</span>
+                        <ArrowRight className="h-4 w-4 text-slate-400" aria-hidden="true" />
+                        <span className="font-medium text-slate-950">{transition.to_label}</span>
+                        <strong
+                          className={
+                            transition.direction === "regressed"
+                              ? "text-red-700"
+                              : "text-emerald-700"
+                          }
+                        >
+                          {formatNumber(transition.count)}
+                        </strong>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="px-4 py-6 text-center text-sm text-muted-foreground">
+                      No stage changes.
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div
+                className={cn(
+                  "rounded-md border p-4",
+                  unmappedCount > 0 ? "border-amber-300 bg-amber-50/60" : "bg-slate-50",
                 )}
+              >
+                <div className="flex items-baseline gap-2">
+                  <strong className="text-2xl text-slate-950">{formatNumber(unmappedCount)}</strong>
+                  <span className="text-xs font-medium uppercase text-muted-foreground">
+                    Unmapped
+                  </span>
+                </div>
+                {unmappedStage ? (
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    {`${formatNumber(unmappedStage.baseline_count)} to ${formatNumber(unmappedStage.current_count)}`}
+                  </div>
+                ) : null}
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {lifecycle.unmapped_statuses.length > 0 ? (
+                    lifecycle.unmapped_statuses.map((item) => (
+                      <StatusBadge key={item.status} tone="warning">
+                        {`${item.status}: ${formatNumber(item.count)}`}
+                      </StatusBadge>
+                    ))
+                  ) : (
+                    <StatusBadge tone="success">All statuses mapped</StatusBadge>
+                  )}
+                </div>
               </div>
             </div>
           </div>

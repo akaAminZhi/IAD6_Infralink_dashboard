@@ -562,6 +562,9 @@ export interface KprLifecycleStage {
   current_count: number;
   baseline_count: number;
   month_change: number;
+  retained_count?: number;
+  entered_count?: number;
+  exited_count?: number;
   equipment_ids?: string[];
 }
 
