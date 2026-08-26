@@ -40,6 +40,7 @@ class Equipment(SchemaRecord):
     parent: str | None = None
     system: str | None = None
     open_issues_count_from_system_elements: int | None = None
+    test_tracking_required: bool = True
     neta_complete: bool | str | None = None
     neta_completed_at: DateValue | None = None
     neta_test_report: str | None = None
@@ -127,6 +128,7 @@ class PdmEquipmentRecord(SchemaRecord):
     system: str | None = None
     open_issues_count_from_system_elements: int | None = None
     calculated_open_case_count: int = 0
+    test_tracking_required: bool = True
     neta_complete: bool | str | None = None
     neta_completed_at: DateValue | None = None
     neta_test_report: str | None = None

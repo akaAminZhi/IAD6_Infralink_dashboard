@@ -12,6 +12,7 @@ import {
   normalizeEpsEquipmentKey,
 } from "../../utils/epsTestItemUtils";
 import { formatNumber } from "../../utils/formatters";
+import { requiresEquipmentTestTracking } from "../../utils/equipmentTrackingUtils";
 import { getNetaReportCount } from "../../utils/netaReports";
 import {
   getEquipmentAttentionReasons,
@@ -86,7 +87,17 @@ function getEpsStatusDisplay(record: EpsModuleExecutionRecord | null): {
   return { label: "No Tracker Data", tone: "muted" };
 }
 
-function EpsExecutionCell({ record }: { record: EpsModuleExecutionRecord | null }) {
+function EpsExecutionCell({
+  record,
+  trackingRequired,
+}: {
+  record: EpsModuleExecutionRecord | null;
+  trackingRequired: boolean;
+}) {
+  if (!trackingRequired) {
+    return <StatusBadge tone="muted">Not Tracked</StatusBadge>;
+  }
+
   const status = getEpsStatusDisplay(record);
   const total = record?.tracker_item_count ?? 0;
   const completed = record?.completed_test_item_count ?? 0;
@@ -140,6 +151,7 @@ export function PdmEquipmentList({
           reasons: getEquipmentAttentionReasons(record),
           openCases: getOpenCaseCountForEquipment(record),
           reportCount: getNetaReportCount(record.neta_test_report),
+          trackingRequired: requiresEquipmentTestTracking(record),
           epsExecution: getEpsModuleExecution(epsModuleExecutionIndex, record),
           testItems: linkedTestItems,
         };
@@ -173,7 +185,16 @@ export function PdmEquipmentList({
         </thead>
         <tbody>
           {rows.map(
-            ({ record, key, reasons, openCases, reportCount, epsExecution, testItems }) => {
+            ({
+              record,
+              key,
+              reasons,
+              openCases,
+              reportCount,
+              trackingRequired,
+              epsExecution,
+              testItems,
+            }) => {
               const isExpanded = expandedEquipmentKey === key;
 
             return (
@@ -197,7 +218,10 @@ export function PdmEquipmentList({
                   <td className="px-3 py-2">{record.equipment_type ?? "--"}</td>
                   <td className="px-3 py-2">{record.status ?? "--"}</td>
                   <td className="px-3 py-2">
-                    <EpsExecutionCell record={epsExecution} />
+                    <EpsExecutionCell
+                      record={epsExecution}
+                      trackingRequired={trackingRequired}
+                    />
                   </td>
                   <td className="px-3 py-2">
                     <NetaStatusBadge equipment={record} />

@@ -71,6 +71,8 @@ describe("summaryUtils", () => {
     const equipment: Equipment[] = [
       { equipment_id: "EQ-1", neta_complete: true },
       { equipment_id: "EQ-2", neta_complete: false },
+      { equipment_id: "IAD06-INV6-H1-1 BATTERY1", neta_complete: true },
+      { equipment_id: "IAD06-INV6-04R", neta_complete: true },
     ];
 
     expect(groupCountBy(cases, "status")).toEqual({ Open: 1, Resolved: 1, Unknown: 1 });
@@ -93,6 +95,16 @@ describe("summaryUtils", () => {
             neta_complete: true,
             neta_test_report: null,
             cases: [{ status: "Open" }, { status: "Resolved" }],
+          },
+          {
+            equipment_id: "IAD06-INV6-H1-1 BATTERY1",
+            neta_complete: true,
+            neta_test_report: null,
+          },
+          {
+            equipment_id: "IAD06-INV6-04R",
+            neta_complete: true,
+            neta_test_report: null,
           },
         ],
       },

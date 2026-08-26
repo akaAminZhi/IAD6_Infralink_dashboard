@@ -50,6 +50,7 @@ import {
   type EnrichedPowerPlanEquipment,
   type PowerPlanEquipmentStatus,
 } from "../utils/powerPlanUtils";
+import { requiresEquipmentTestTracking } from "../utils/equipmentTrackingUtils";
 import { downloadPowerPlanSelectionXlsx } from "../utils/exportPowerPlanSelection";
 import { getSearchMatchScore, matchesSearchQuery } from "../utils/searchUtils";
 
@@ -769,7 +770,11 @@ function EquipmentDetail({
   onToggleExport: (row: EnrichedPowerPlanEquipment) => void;
   selectedForExport: boolean;
 }) {
-  const netaComplete = row.equipment?.neta_complete === true;
+  const trackingRequired = requiresEquipmentTestTracking({
+    ...row.equipment,
+    equipment_id: row.equipment?.equipment_id ?? row.equipmentId,
+  });
+  const netaComplete = trackingRequired && row.equipment?.neta_complete === true;
   const sortedItems = useMemo(
     () =>
       [...row.testItems].sort((a, b) => {
@@ -877,7 +882,7 @@ function EquipmentDetail({
             <div>
               <dt className="text-muted-foreground">Infralink NETA</dt>
               <dd className="mt-0.5 font-medium">
-                {netaComplete ? "Complete" : "Incomplete"}
+                {trackingRequired ? (netaComplete ? "Complete" : "Incomplete") : "Not Tracked"}
               </dd>
             </div>
             <div>
@@ -1099,7 +1104,11 @@ function PdmOverview({
     { action: 0, testing: 0, waitingNeta: 0, ready: 0, noData: 0 },
   );
   const netaCompleteCount = rows.filter(
-    (row) => row.equipment?.neta_complete === true,
+    (row) =>
+      requiresEquipmentTestTracking({
+        ...row.equipment,
+        equipment_id: row.equipment?.equipment_id ?? row.equipmentId,
+      }) && row.equipment?.neta_complete === true,
   ).length;
   const openIssueCount = rows.reduce(
     (total, row) => total + row.openIssues.length,

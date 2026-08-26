@@ -91,6 +91,17 @@ describe("issueUtils", () => {
     expect(
       getIssueNetaStatus(issue({ neta_complete: true, neta_test_report: null })),
     ).toBe("Complete - Missing Report");
+    expect(
+      getIssueNetaStatus(
+        issue({ equipment_id: "IAD06-INV6-H1-1 BATTERY 2", neta_complete: false }),
+      ),
+    ).toBe("Not Tracked");
+    expect(
+      getIssueNetaStatus(issue({ equipment_id: "IAD06-INV6-04R", neta_complete: false })),
+    ).toBe("Not Tracked");
+    expect(
+      getIssueNetaStatus(issue({ equipment_id: "IAD06-TX-INV6-03R", neta_complete: false })),
+    ).toBe("Incomplete");
   });
 
   it("splits attachment references while preserving file names", () => {

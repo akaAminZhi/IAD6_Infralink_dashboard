@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useNetaReportManifest } from "../../contexts/NetaReportManifestContext";
 import type { EpsTestItemRecord, PdmEquipmentRecord } from "../../types/data";
 import { formatDateTime, formatNumber } from "../../utils/formatters";
+import { requiresEquipmentTestTracking } from "../../utils/equipmentTrackingUtils";
 import {
   getNetaReportNames,
   hasGcNetaReportLinks,
@@ -40,6 +41,7 @@ export function PdmEquipmentDetail({ equipment, epsTestItems }: PdmEquipmentDeta
     useState<NetaReportNameMode>("original");
   const reportNames = getNetaReportNames(equipment.neta_test_report);
   const canShowGcNames = hasGcNetaReportLinks(reportNames, manifest);
+  const trackingRequired = requiresEquipmentTestTracking(equipment);
 
   return (
     <div className="space-y-4 rounded-md border bg-muted/20 p-4">
@@ -65,12 +67,27 @@ export function PdmEquipmentDetail({ equipment, epsTestItems }: PdmEquipmentDeta
           value={formatNumber(equipment.open_issues_count_from_system_elements ?? 0)}
         />
         <Field label="Calculated Open Cases" value={formatNumber(getOpenCaseCountForEquipment(equipment))} />
-        <Field label="NETA Complete" value={equipment.neta_complete === true ? "Complete" : "Incomplete"} />
-        <Field label="NETA Completed At" value={formatDateTime(equipment.neta_completed_at)} />
-        <Field label="NETA Report Status" value={equipment.neta_report_status} />
+        <Field
+          label="NETA Complete"
+          value={
+            trackingRequired
+              ? equipment.neta_complete === true
+                ? "Complete"
+                : "Incomplete"
+              : "Not Tracked"
+          }
+        />
+        <Field
+          label="NETA Completed At"
+          value={trackingRequired ? formatDateTime(equipment.neta_completed_at) : "--"}
+        />
+        <Field
+          label="NETA Report Status"
+          value={trackingRequired ? equipment.neta_report_status : "Not Tracked"}
+        />
       </div>
 
-      <div>
+      {trackingRequired ? <div>
         <div className="flex items-center gap-2">
           <div className="text-xs font-medium uppercase text-muted-foreground">NETA Test Report</div>
           {canShowGcNames ? (
@@ -96,12 +113,12 @@ export function PdmEquipmentDetail({ equipment, epsTestItems }: PdmEquipmentDeta
           reports={reportNames}
           showLinkedFileNames
         />
-      </div>
+      </div> : null}
 
-      <div className="space-y-2">
+      {trackingRequired ? <div className="space-y-2">
         <div className="text-sm font-semibold">EPS Test Execution</div>
         <EpsTestItemsPanel items={epsTestItems} />
-      </div>
+      </div> : null}
 
       <div className="space-y-2">
         <div className="text-sm font-semibold">Related Cases</div>

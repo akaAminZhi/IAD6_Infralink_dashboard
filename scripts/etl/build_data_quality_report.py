@@ -14,6 +14,7 @@ try:
         selected_input_files_metadata,
         write_json as write_json_payload,
     )
+    from .tracking_rules import requires_equipment_test_tracking
 except ImportError:
     from file_discovery import get_input_files
     from json_utils import (
@@ -21,6 +22,7 @@ except ImportError:
         selected_input_files_metadata,
         write_json as write_json_payload,
     )
+    from tracking_rules import requires_equipment_test_tracking
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -160,6 +162,8 @@ def build_neta_completed_but_missing_test_report(
 
     for pdm in pdms:
         for equipment in pdm.get("equipment", []):
+            if not requires_equipment_test_tracking(equipment):
+                continue
             has_completion_value = (
                 equipment.get("neta_complete") is True
                 or not is_blank(equipment.get("neta_completed_at"))
@@ -188,6 +192,8 @@ def build_neta_test_report_present_but_not_complete(
 
     for pdm in pdms:
         for equipment in pdm.get("equipment", []):
+            if not requires_equipment_test_tracking(equipment):
+                continue
             if is_blank(equipment.get("neta_test_report")):
                 continue
             if equipment.get("neta_complete") is True:

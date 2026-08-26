@@ -75,3 +75,38 @@ def test_build_summary_is_pdm_centric_and_uses_closed_case_rules() -> None:
     assert summary["neta_missing_report_count"] == 1
     assert summary["pdms_with_open_cases"] == 1
     assert summary["cases_by_status"] == {"Acknowledged": 1, "Resolved": 1}
+
+
+def test_build_summary_excludes_battery_equipment_from_neta_metrics() -> None:
+    pdms = [
+        {
+            "pdm_name": "PDM-BATTERY",
+            "equipment": [
+                {
+                    "equipment_id": "IAD06-INV6-H1-1 BATTERY 2",
+                    "neta_complete": False,
+                    "neta_test_report": None,
+                    "neta_report_status": "not_tracked",
+                },
+                {
+                    "equipment_id": "IAD06-INV6-H1-1",
+                    "neta_complete": False,
+                    "neta_test_report": None,
+                    "neta_report_status": "not_tracked",
+                },
+                {
+                    "equipment_id": "IAD06-TX-INV6-H1-1",
+                    "neta_complete": False,
+                    "neta_test_report": None,
+                    "neta_report_status": "not_required_or_not_complete",
+                },
+            ],
+        }
+    ]
+
+    summary = build_summary(pdms, [], [], [])
+
+    assert summary["total_pdm_equipment_links"] == 3
+    assert summary["neta_incomplete_count"] == 1
+    assert summary["neta_completion_rate"] == 0
+    assert summary["neta_report_status_by_pdm"][0]["not_tracked"] == 2

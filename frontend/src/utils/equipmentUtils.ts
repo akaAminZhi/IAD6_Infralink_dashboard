@@ -11,6 +11,7 @@ import {
   buildEpsTestItemIndex,
   getIndexedEpsTestItems,
 } from "./epsTestItemUtils";
+import { requiresEquipmentTestTracking } from "./equipmentTrackingUtils";
 import { getNetaReportNames } from "./netaReports";
 
 export { getNetaReportNames };
@@ -19,6 +20,7 @@ export type EquipmentNetaDisplayStatus =
   | "Complete + Report Available"
   | "Complete - Missing Report"
   | "Incomplete"
+  | "Not Tracked"
   | "Unknown";
 
 export interface FlattenedEquipmentRow {
@@ -36,6 +38,7 @@ export interface FlattenedEquipmentRow {
   model: string | null;
   serial_number: string | null;
   open_issues_count_from_system_elements: number | null;
+  test_tracking_required: boolean;
   calculated_open_case_count: number | null;
   neta_complete: boolean | string | null;
   neta_completed_at: string | null;
@@ -137,7 +140,10 @@ function equipmentLookupKeys(value: unknown): string[] {
 }
 
 function hasNetaEvidence(equipment: Equipment): boolean {
-  return equipment.neta_complete === true || !isBlank(equipment.neta_test_report);
+  return (
+    requiresEquipmentTestTracking(equipment) &&
+    (equipment.neta_complete === true || !isBlank(equipment.neta_test_report))
+  );
 }
 
 function buildCxalloyStatusIndex(
@@ -252,6 +258,10 @@ export function flattenEquipmentFromPdms(
           equipment.open_issues_count_from_system_elements,
           enrichment?.open_issues_count_from_system_elements,
         ),
+        test_tracking_required: requiresEquipmentTestTracking({
+          ...equipment,
+          ...enrichment,
+        }),
         calculated_open_case_count: firstNumber(equipment.calculated_open_case_count),
         neta_complete: equipment.neta_complete ?? enrichment?.neta_complete ?? null,
         neta_completed_at: firstText(equipment.neta_completed_at, enrichment?.neta_completed_at),
@@ -312,6 +322,7 @@ export function flattenEquipmentFromPdms(
         open_issues_count_from_system_elements: firstNumber(
           equipment.open_issues_count_from_system_elements,
         ),
+        test_tracking_required: requiresEquipmentTestTracking(equipment),
         calculated_open_case_count: null,
         neta_complete: equipment.neta_complete ?? null,
         neta_completed_at: firstText(equipment.neta_completed_at),
@@ -358,6 +369,7 @@ export function getCasesMissingIssueImageCount(equipment: FlattenedEquipmentRow)
 
 export function hasMissingNetaReport(equipment: FlattenedEquipmentRow): boolean {
   return (
+    requiresEquipmentTestTracking(equipment) &&
     equipment.neta_complete === true &&
     (isBlank(equipment.neta_test_report) || equipment.neta_report_status === "missing_report")
   );
@@ -371,6 +383,10 @@ export function hasPendingCxalloyReport(equipment: FlattenedEquipmentRow): boole
 }
 
 export function getNetaDisplayStatus(equipment: FlattenedEquipmentRow): EquipmentNetaDisplayStatus {
+  if (!requiresEquipmentTestTracking(equipment)) {
+    return "Not Tracked";
+  }
+
   if (equipment.neta_complete === true && !hasMissingNetaReport(equipment)) {
     return "Complete + Report Available";
   }

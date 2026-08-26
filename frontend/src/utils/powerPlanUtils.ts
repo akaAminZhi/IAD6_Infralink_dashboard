@@ -9,6 +9,7 @@ import type {
   PowerPlanRect,
 } from "../types/data";
 import { isOpenIssue } from "./issueUtils";
+import { requiresEquipmentTestTracking } from "./equipmentTrackingUtils";
 
 export type PowerPlanEquipmentStatus =
   | "action"
@@ -227,7 +228,12 @@ export function enrichPowerPlanEquipment(
       const testItems = data.epsTestItems.filter(
         (item) => normalizePowerPlanEquipmentKey(item.module_equipment) === key,
       );
-      const netaComplete = equipment?.neta_complete === true;
+      const netaComplete =
+        requiresEquipmentTestTracking({
+          ...equipment,
+          equipment_id: equipment?.equipment_id ?? annotation.matched_equipment_id,
+          source_equipment_label: annotation.label,
+        }) && equipment?.neta_complete === true;
       const pdmName = pdmIndex.get(key) || null;
 
       return {
@@ -299,7 +305,12 @@ export function enrichPdmSchematicEquipment(
       const issues = issueIndex.get(key) ?? [];
       const openIssues = issues.filter(isOpenIssue);
       const testItems = testItemIndex.get(key) ?? [];
-      const netaComplete = equipment?.neta_complete === true;
+      const netaComplete =
+        requiresEquipmentTestTracking({
+          ...pdmEquipment,
+          ...equipment,
+          equipment_id: equipment?.equipment_id ?? pdmEquipment.equipment_id,
+        }) && equipment?.neta_complete === true;
       const label = rawEquipmentId.replace(/^IAD06-/i, "");
       rows.push({
         annotation: {

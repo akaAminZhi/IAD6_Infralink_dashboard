@@ -5,6 +5,7 @@ import { useNetaReportManifest } from "../../contexts/NetaReportManifestContext"
 import { formatDateTime } from "../../utils/formatters";
 import {
   getNetaReportReferences,
+  getIssueNetaStatus,
   isBlank,
   type EnrichedIssue,
 } from "../../utils/issueUtils";
@@ -49,6 +50,8 @@ export function IssueDetailDrawer({ issue, onClose }: IssueDetailDrawerProps) {
   if (!issue) {
     return null;
   }
+
+  const netaTracked = getIssueNetaStatus(issue) !== "Not Tracked";
 
   const netaReportNames = getNetaReportReferences(issue.neta_test_report);
   const canShowGcNames = hasGcNetaReportLinks(netaReportNames, manifest);
@@ -141,7 +144,10 @@ export function IssueDetailDrawer({ issue, onClose }: IssueDetailDrawerProps) {
                         <IssueEquipmentNetaBadge issue={issue} />
                       </div>
                     </div>
-                    <Field label="NETA Completed Time" value={formatDateTime(issue.neta_completed_at)} />
+                    <Field
+                      label="NETA Completed Time"
+                      value={netaTracked ? formatDateTime(issue.neta_completed_at) : "--"}
+                    />
                   </div>
                 )}
               </CardContent>

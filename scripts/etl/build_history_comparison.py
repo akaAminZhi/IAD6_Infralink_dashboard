@@ -12,11 +12,13 @@ try:
     from .json_utils import file_metadata, selected_input_files_metadata, write_json
     from .normalize_cases import normalize_cases
     from .normalize_equipment import normalize_equipment
+    from .tracking_rules import requires_equipment_test_tracking
 except ImportError:
     from file_discovery import CASES_DIR, SYSTEM_ELEMENTS_DIR, get_input_files
     from json_utils import file_metadata, selected_input_files_metadata, write_json
     from normalize_cases import normalize_cases
     from normalize_equipment import normalize_equipment
+    from tracking_rules import requires_equipment_test_tracking
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -81,7 +83,10 @@ def normalize_lookup(value: Any) -> str:
 
 
 def is_neta_complete(record: dict[str, Any]) -> bool:
-    return record.get("neta_complete") is True
+    return (
+        requires_equipment_test_tracking(record)
+        and record.get("neta_complete") is True
+    )
 
 
 def is_closed_case(record: dict[str, Any] | None) -> bool:

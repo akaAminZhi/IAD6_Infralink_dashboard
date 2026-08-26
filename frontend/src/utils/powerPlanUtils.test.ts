@@ -140,4 +140,39 @@ describe("powerPlanUtils", () => {
     expect(result[0].equipment?.manufacturer).toBe("IEM");
     expect(result[0].status).toBe("testing");
   });
+
+  it("does not treat BATTERY equipment as NETA-ready", () => {
+    const result = enrichPowerPlanEquipment(
+      [annotation("INV6-H1-1 BATTERY1")],
+      makeDashboardData({
+        equipment: [
+          {
+            equipment_id: "IAD06-INV6-H1-1 BATTERY1",
+            neta_complete: true,
+          },
+        ],
+      }),
+    );
+
+    expect(result[0].status).toBe("noData");
+  });
+
+  it("excludes direct INV6 equipment but still tracks TX-INV6 equipment", () => {
+    const result = enrichPowerPlanEquipment(
+      [annotation("INV6-04R"), annotation("TX-INV6-03R")],
+      makeDashboardData({
+        equipment: [
+          { equipment_id: "IAD06-INV6-04R", neta_complete: true },
+          { equipment_id: "IAD06-TX-INV6-03R", neta_complete: true },
+        ],
+      }),
+    );
+
+    expect(result.find((item) => item.equipmentId === "IAD06-INV6-04R")?.status).toBe(
+      "noData",
+    );
+    expect(result.find((item) => item.equipmentId === "IAD06-TX-INV6-03R")?.status).toBe(
+      "ready",
+    );
+  });
 });

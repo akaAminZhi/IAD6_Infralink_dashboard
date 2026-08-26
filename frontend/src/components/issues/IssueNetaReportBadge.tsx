@@ -21,14 +21,19 @@ export function IssueNetaReportBadge({
   compact = false,
   showLinkedFileNames = false,
 }: IssueNetaReportBadgeProps) {
+  const netaStatus = getIssueNetaStatus(issue);
   const references = getNetaReportReferences(issue.neta_test_report);
+
+  if (netaStatus === "Not Tracked") {
+    return <StatusBadge tone="muted">Not Tracked</StatusBadge>;
+  }
 
   if (hasMissingNetaReportForIssue(issue)) {
     return <StatusBadge tone="danger">Missing Report</StatusBadge>;
   }
 
   if (references.length === 0) {
-    return <span className="text-muted-foreground">{getIssueNetaStatus(issue) === "Incomplete" ? "Not Complete" : "--"}</span>;
+    return <span className="text-muted-foreground">{netaStatus === "Incomplete" ? "Not Complete" : "--"}</span>;
   }
 
   if (compact) {

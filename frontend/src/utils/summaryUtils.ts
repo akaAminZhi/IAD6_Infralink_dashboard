@@ -5,6 +5,7 @@ import type {
   ModuleEquipmentLink,
   PdmRecord,
 } from "../types/data";
+import { requiresEquipmentTestTracking } from "./equipmentTrackingUtils";
 
 export interface ChartDatum {
   name: string;
@@ -187,7 +188,11 @@ export function countOpenCasesFromPdm(pdm: PdmRecord): number {
 
 export function countMissingNetaReportsFromPdm(pdm: PdmRecord): number {
   return (pdm.equipment ?? []).filter((equipment) => {
-    return equipment.neta_complete === true && !equipment.neta_test_report;
+    return (
+      requiresEquipmentTestTracking(equipment) &&
+      equipment.neta_complete === true &&
+      !equipment.neta_test_report
+    );
   }).length;
 }
 
@@ -215,5 +220,7 @@ export function countUniqueMatchedEquipment(moduleLinks: ModuleEquipmentLink[]):
 }
 
 export function countNetaComplete(equipment: Equipment[]): number {
-  return equipment.filter((record) => record.neta_complete === true).length;
+  return equipment.filter(
+    (record) => requiresEquipmentTestTracking(record) && record.neta_complete === true,
+  ).length;
 }

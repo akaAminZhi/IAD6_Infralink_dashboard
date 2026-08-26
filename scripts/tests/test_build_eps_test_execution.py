@@ -6,6 +6,8 @@ from pathlib import Path
 from scripts.etl.build_eps_test_execution import (
     TrackerRecord,
     build_module_link_index,
+    build_module_execution_records,
+    build_pdm_execution_records,
     build_not_found_test_items,
     choose_baseline_snapshot,
     choose_baseline_daily_date,
@@ -50,6 +52,58 @@ def test_tracker_record_prefers_equipment_prefix_when_substation_points_to_wrong
     record = make_tracker_record("CDS6-02R-3-MCB1", "CDS6-01R-8")
 
     assert tracker_module_key_for_record(record, module_keys) == "CDS6-02R-3"
+
+
+def test_battery_module_is_not_included_in_eps_pdm_denominator() -> None:
+    module_records, *_ = build_module_execution_records(
+        [
+            {
+                "pdm_name": "PDM-BATTERY",
+                "source_equipment_label": "INV6-H1-1 BATTERY1",
+                "matched_equipment_id": "IAD06-INV6-H1-1 BATTERY1",
+                "match_status": "matched",
+            },
+            {
+                "pdm_name": "PDM-BATTERY",
+                "source_equipment_label": "INV6-H1-1",
+                "matched_equipment_id": "IAD06-INV6-H1-1",
+                "match_status": "matched",
+            },
+            {
+                "pdm_name": "PDM-BATTERY",
+                "source_equipment_label": "TX-INV6-H1-1",
+                "matched_equipment_id": "IAD06-TX-INV6-H1-1",
+                "match_status": "matched",
+            },
+        ],
+        {
+            "INV6-H1-1BATTERY1": {
+                "equipment_id": "IAD06-INV6-H1-1 BATTERY1",
+                "neta_complete": False,
+            },
+            "INV6-H1-1": {
+                "equipment_id": "IAD06-INV6-H1-1",
+                "neta_complete": False,
+            },
+            "TX-INV6-H1-1": {
+                "equipment_id": "IAD06-TX-INV6-H1-1",
+                "neta_complete": False,
+            },
+        },
+        {},
+        set(),
+        set(),
+    )
+
+    assert [record["eps_test_status"] for record in module_records] == [
+        "Not Tracked",
+        "Not Tracked",
+        "No Tracker Records",
+    ]
+    pdm = build_pdm_execution_records(module_records)[0]
+    assert pdm["module_equipment_count"] == 1
+    assert pdm["no_tracker_record_count"] == 1
+    assert pdm["not_tracked_count"] == 2
 
 
 def test_tracker_record_module_link_prefers_equipment_prefix_over_substation() -> None:

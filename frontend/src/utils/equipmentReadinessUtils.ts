@@ -1,4 +1,5 @@
 import type { CaseIssue, PdmEquipmentRecord, PdmRecord } from "../types/data";
+import { requiresEquipmentTestTracking } from "./equipmentTrackingUtils";
 
 export interface FlatPdmEquipment extends PdmEquipmentRecord {
   pdm_name: string | null;
@@ -85,28 +86,34 @@ function isUnmatched(equipment: PdmEquipmentRecord): boolean {
 
 function hasMissingNetaReport(equipment: PdmEquipmentRecord): boolean {
   return (
+    requiresEquipmentTestTracking(equipment) &&
     equipment.neta_complete === true &&
     (isBlank(equipment.neta_test_report) || equipment.neta_report_status === "missing_report")
   );
 }
 
 function isNetaComplete(equipment: PdmEquipmentRecord): boolean {
-  return equipment.neta_complete === true && !hasMissingNetaReport(equipment);
+  return (
+    requiresEquipmentTestTracking(equipment) &&
+    equipment.neta_complete === true &&
+    !hasMissingNetaReport(equipment)
+  );
 }
 
 function isNetaIncomplete(equipment: PdmEquipmentRecord): boolean {
-  return equipment.neta_complete !== true;
+  return requiresEquipmentTestTracking(equipment) && equipment.neta_complete !== true;
 }
 
 function hasPdmNetaTestingStarted(pdm: PdmRecord): boolean {
-  const equipmentCount = pdm.equipment_count ?? (pdm.equipment ?? []).length;
+  const trackedEquipment = (pdm.equipment ?? []).filter(requiresEquipmentTestTracking);
+  const equipmentCount = trackedEquipment.length;
   if (equipmentCount === 0) {
     return false;
   }
 
-  const incompleteCount =
-    pdm.neta_incomplete_count ??
-    (pdm.equipment ?? []).filter((equipment) => equipment.neta_complete !== true).length;
+  const incompleteCount = trackedEquipment.filter(
+    (equipment) => equipment.neta_complete !== true,
+  ).length;
 
   return incompleteCount !== equipmentCount;
 }
@@ -145,11 +152,12 @@ export function flattenPdmEquipment(pdms: PdmRecord[]): FlatPdmEquipment[] {
 
 export function getEquipmentReadinessMetrics(pdms: PdmRecord[]): EquipmentReadinessMetrics {
   const flatEquipment = flattenPdmEquipment(pdms);
+  const trackedEquipment = flatEquipment.filter(requiresEquipmentTestTracking);
   const statusDistribution = getEquipmentStatusDistribution(flatEquipment);
   const mostCommonStatus = statusDistribution[0] ?? null;
-  const netaComplete = flatEquipment.filter(isNetaComplete).length;
-  const netaMissingReports = flatEquipment.filter(hasMissingNetaReport).length;
-  const netaIncomplete = flatEquipment.filter(isNetaIncomplete).length;
+  const netaComplete = trackedEquipment.filter(isNetaComplete).length;
+  const netaMissingReports = trackedEquipment.filter(hasMissingNetaReport).length;
+  const netaIncomplete = trackedEquipment.filter(isNetaIncomplete).length;
   const totalOpenCases = flatEquipment.reduce(
     (total, equipment) => total + openCaseCount(equipment),
     0,
@@ -189,7 +197,7 @@ export function getEquipmentStatusDistribution(
 export function getEquipmentTypeReadiness(
   flatEquipment: FlatPdmEquipment[],
 ): EquipmentTypeReadinessDatum[] {
-  const rows = flatEquipment.reduce<Record<string, EquipmentTypeReadinessDatum>>(
+  const rows = flatEquipment.filter(requiresEquipmentTestTracking).reduce<Record<string, EquipmentTypeReadinessDatum>>(
     (accumulator, equipment) => {
       const equipmentType = isBlank(equipment.equipment_type)
         ? "Unknown"
@@ -301,7 +309,11 @@ export function getEquipmentNeedingAttention(pdms: PdmRecord[]): EquipmentAttent
         source_equipment_label: equipment.source_equipment_label ?? null,
         equipment_type: equipment.equipment_type ?? null,
         status: equipment.status ?? null,
-        neta: equipment.neta_complete === true ? "Complete" : "Incomplete",
+        neta: requiresEquipmentTestTracking(equipment)
+          ? equipment.neta_complete === true
+            ? "Complete"
+            : "Incomplete"
+          : "Not Tracked",
         neta_test_report: equipment.neta_test_report ?? null,
         open_cases: openCaseCount(equipment),
         reason: reasons,

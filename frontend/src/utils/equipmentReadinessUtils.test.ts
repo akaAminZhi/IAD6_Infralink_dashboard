@@ -60,4 +60,20 @@ describe("equipmentReadinessUtils", () => {
     expect(rows.map((row) => row.equipment_id)).toEqual(["EQ-RISK"]);
     expect(rows[0]?.reason).toEqual(["NETA incomplete", "Open case"]);
   });
+
+  it("keeps BATTERY equipment out of NETA totals", () => {
+    const metrics = getEquipmentReadinessMetrics([
+      {
+        pdm_name: "PDM-BATTERY",
+        equipment: [
+          { equipment_id: "IAD06-INV6-H1-1 BATTERY1", neta_complete: false },
+          { equipment_id: "IAD06-INV6-H1-1", neta_complete: false },
+          { equipment_id: "IAD06-TX-INV6-H1-1", neta_complete: false },
+        ],
+      },
+    ]);
+
+    expect(metrics.totalEquipmentLinks).toBe(3);
+    expect(metrics.netaIncomplete).toBe(1);
+  });
 });

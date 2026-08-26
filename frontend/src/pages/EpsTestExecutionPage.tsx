@@ -67,6 +67,7 @@ const STATUS_FAILED = "Failed";
 const STATUS_PARTIAL = "Partial";
 const STATUS_NOT_STARTED = "Not Started";
 const STATUS_NO_TRACKER_RECORDS = "No Tracker Records";
+const STATUS_NOT_TRACKED = "Not Tracked";
 
 const defaultFilters: EpsFiltersState = {
   search: "",
@@ -300,7 +301,11 @@ function statusTone(status: string | null | undefined): "default" | "success" | 
   if (status === STATUS_PARTIAL || status === STATUS_WAITING_INFRALINK_NETA) {
     return "warning";
   }
-  if (status === STATUS_NOT_STARTED || status === STATUS_NO_TRACKER_RECORDS) {
+  if (
+    status === STATUS_NOT_STARTED ||
+    status === STATUS_NO_TRACKER_RECORDS ||
+    status === STATUS_NOT_TRACKED
+  ) {
     return "muted";
   }
   return "default";

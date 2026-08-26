@@ -4,6 +4,7 @@ import type {
   PdmEquipmentRecord,
   PdmRecord,
 } from "../types/data";
+import { requiresEquipmentTestTracking } from "./equipmentTrackingUtils";
 
 export type PdmReadinessLevel = "Not Started" | "Good" | "Watch" | "Attention" | "Critical";
 
@@ -72,7 +73,7 @@ export function hasMissingIssueImage(caseItem: CaseIssue): boolean {
 }
 
 export function isNetaComplete(equipment: PdmEquipmentRecord): boolean {
-  return equipment.neta_complete === true;
+  return requiresEquipmentTestTracking(equipment) && equipment.neta_complete === true;
 }
 
 export function hasMissingNetaReport(equipment: PdmEquipmentRecord): boolean {
@@ -84,9 +85,10 @@ export function hasMissingNetaReport(equipment: PdmEquipmentRecord): boolean {
 
 export function hasNetaTestingSignal(equipment: PdmEquipmentRecord): boolean {
   return (
-    isNetaComplete(equipment) ||
-    !isBlank(equipment.neta_completed_at) ||
-    !isBlank(equipment.neta_test_report)
+    requiresEquipmentTestTracking(equipment) &&
+    (isNetaComplete(equipment) ||
+      !isBlank(equipment.neta_completed_at) ||
+      !isBlank(equipment.neta_test_report))
   );
 }
 
@@ -145,30 +147,33 @@ export function getPdmOpenCaseCount(pdm: PdmRecord): number {
 }
 
 export function getNetaCompleteCount(pdm: PdmRecord): number {
-  const sourceCount = asNumber(pdm.neta_complete_count);
-  if (sourceCount !== null) {
-    return sourceCount;
+  if ((pdm.equipment ?? []).length > 0) {
+    return (pdm.equipment ?? []).filter(isNetaComplete).length;
   }
 
-  return (pdm.equipment ?? []).filter(isNetaComplete).length;
+  return asNumber(pdm.neta_complete_count) ?? 0;
 }
 
 export function getNetaIncompleteCount(pdm: PdmRecord): number {
-  const sourceCount = asNumber(pdm.neta_incomplete_count);
-  if (sourceCount !== null) {
-    return sourceCount;
+  if ((pdm.equipment ?? []).length > 0) {
+    return (pdm.equipment ?? []).filter(
+      (equipment) => requiresEquipmentTestTracking(equipment) && !isNetaComplete(equipment),
+    ).length;
   }
 
-  return (pdm.equipment ?? []).filter((equipment) => !isNetaComplete(equipment)).length;
+  return asNumber(pdm.neta_incomplete_count) ?? 0;
+}
+
+export function getTrackedEquipmentCount(pdm: PdmRecord): number {
+  return (pdm.equipment ?? []).filter(requiresEquipmentTestTracking).length;
 }
 
 export function getMissingNetaReportCount(pdm: PdmRecord): number {
-  const sourceCount = asNumber(pdm.neta_missing_report_count);
-  if (sourceCount !== null) {
-    return sourceCount;
+  if ((pdm.equipment ?? []).length > 0) {
+    return (pdm.equipment ?? []).filter(hasMissingNetaReport).length;
   }
 
-  return (pdm.equipment ?? []).filter(hasMissingNetaReport).length;
+  return asNumber(pdm.neta_missing_report_count) ?? 0;
 }
 
 export function getPdmEquipmentCount(pdm: PdmRecord): number {
@@ -183,7 +188,7 @@ export function hasPdmTestingStarted(
     return true;
   }
 
-  const equipmentCount = getPdmEquipmentCount(pdm);
+  const equipmentCount = getTrackedEquipmentCount(pdm);
   if (equipmentCount === 0) {
     return false;
   }
@@ -269,7 +274,7 @@ export function getPdmSummaryMetrics(pdms: PdmRecord[]): PdmSummaryMetrics {
 export function getEquipmentAttentionReasons(equipment: PdmEquipmentRecord): string[] {
   const reasons: string[] = [];
 
-  if (!isNetaComplete(equipment)) {
+  if (requiresEquipmentTestTracking(equipment) && !isNetaComplete(equipment)) {
     reasons.push("NETA incomplete");
   }
   if (hasMissingNetaReport(equipment)) {

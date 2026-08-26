@@ -12,7 +12,7 @@ export function IssueEquipmentNetaBadge({ issue }: IssueEquipmentNetaBadgeProps)
       ? "success"
       : status === "Complete - Missing Report"
         ? "danger"
-        : status === "Unknown"
+        : status === "Unknown" || status === "Not Tracked"
           ? "muted"
           : "warning";
 

@@ -15,6 +15,7 @@ try:
         write_json as write_json_payload,
     )
     from .pdm_assignment import choose_effective_pdm_name
+    from .tracking_rules import requires_equipment_test_tracking
 except ImportError:
     from file_discovery import get_input_files
     from json_utils import (
@@ -23,6 +24,7 @@ except ImportError:
         write_json as write_json_payload,
     )
     from pdm_assignment import choose_effective_pdm_name
+    from tracking_rules import requires_equipment_test_tracking
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -88,6 +90,7 @@ CSV_FIELDS = [
     "urgent_case_count",
     "high_priority_case_count",
     "neta_complete",
+    "test_tracking_required",
     "neta_completed_at",
     "neta_test_report",
     "neta_report_status",
@@ -155,6 +158,9 @@ def group_cases_by_equipment(cases: list[dict[str, Any]]) -> dict[str, list[dict
 
 
 def determine_neta_report_status(equipment: dict[str, Any]) -> str:
+    if not requires_equipment_test_tracking(equipment):
+        return "not_tracked"
+
     neta_complete = equipment.get("neta_complete")
     neta_test_report = equipment.get("neta_test_report")
 
@@ -166,6 +172,9 @@ def determine_neta_report_status(equipment: dict[str, Any]) -> str:
 
 
 def determine_neta_validation_status(equipment: dict[str, Any]) -> str:
+    if not requires_equipment_test_tracking(equipment):
+        return "valid"
+
     neta_report_status = determine_neta_report_status(equipment)
     if neta_report_status == "missing_report":
         return "error"
@@ -203,7 +212,13 @@ def make_pdm_equipment_record(
     output_equipment_id = matched_equipment_id or link.get("normalized_equipment_id")
     equipment = equipment_by_id.get(matched_equipment_id, {}) if matched_equipment_id else {}
     related_cases = cases_by_equipment.get(matched_equipment_id, []) if matched_equipment_id else []
-    neta_report_status = determine_neta_report_status(equipment)
+    tracking_reference = {
+        **link,
+        **equipment,
+        "equipment_id": output_equipment_id,
+    }
+    test_tracking_required = requires_equipment_test_tracking(tracking_reference)
+    neta_report_status = determine_neta_report_status(tracking_reference)
 
     return {
         "equipment_id": output_equipment_id,
@@ -219,11 +234,12 @@ def make_pdm_equipment_record(
         "calculated_open_case_count": sum(
             1 for case in related_cases if not is_closed_case(case)
         ),
+        "test_tracking_required": test_tracking_required,
         "neta_complete": equipment.get("neta_complete"),
         "neta_completed_at": equipment.get("neta_completed_at"),
         "neta_test_report": equipment.get("neta_test_report"),
         "neta_report_status": neta_report_status,
-        "neta_validation_status": determine_neta_validation_status(equipment),
+        "neta_validation_status": determine_neta_validation_status(tracking_reference),
         "manufacturer": equipment.get("manufacturer"),
         "model": equipment.get("model"),
         "serial_number": equipment.get("serial_number"),
@@ -255,6 +271,11 @@ def make_empty_pdm(link: dict[str, Any]) -> dict[str, Any]:
 
 def recalculate_pdm_counts(pdm: dict[str, Any]) -> None:
     equipment_records = pdm["equipment"]
+    tracked_equipment_records = [
+        equipment
+        for equipment in equipment_records
+        if equipment.get("test_tracking_required") is not False
+    ]
     all_cases = [
         case
         for equipment in equipment_records
@@ -275,14 +296,18 @@ def recalculate_pdm_counts(pdm: dict[str, Any]) -> None:
         1 for case in all_cases if is_high_priority_case(case)
     )
     pdm["neta_complete_count"] = sum(
-        1 for equipment in equipment_records if equipment.get("neta_complete") is True
+        1
+        for equipment in tracked_equipment_records
+        if equipment.get("neta_complete") is True
     )
     pdm["neta_incomplete_count"] = sum(
-        1 for equipment in equipment_records if equipment.get("neta_complete") is not True
+        1
+        for equipment in tracked_equipment_records
+        if equipment.get("neta_complete") is not True
     )
     pdm["neta_missing_report_count"] = sum(
         1
-        for equipment in equipment_records
+        for equipment in tracked_equipment_records
         if equipment.get("neta_report_status") == "missing_report"
     )
 

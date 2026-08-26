@@ -43,6 +43,7 @@ export interface Equipment {
   parent?: string | null;
   system?: string | null;
   open_issues_count_from_system_elements?: number | null;
+  test_tracking_required?: boolean;
   neta_complete?: boolean | string | null;
   neta_completed_at?: string | null;
   neta_test_report?: string | null;
@@ -80,6 +81,7 @@ export interface PdmEquipmentRecord {
   system?: string | null;
   open_issues_count_from_system_elements?: number | null;
   calculated_open_case_count?: number | null;
+  test_tracking_required?: boolean;
   neta_complete?: boolean | string | null;
   neta_completed_at?: string | null;
   neta_test_report?: string | null;
@@ -480,6 +482,7 @@ export interface EpsPdmExecutionRecord {
   failed_count?: number;
   not_started_count?: number;
   no_tracker_record_count?: number;
+  not_tracked_count?: number;
   tracker_item_count?: number;
   completed_test_item_count?: number;
   failed_test_item_count?: number;
@@ -495,6 +498,7 @@ export interface EpsModuleExecutionRecord {
   matched_equipment_id?: string | null;
   match_status?: string | null;
   source_equipment_column?: string | null;
+  test_tracking_required?: boolean;
   eps_test_status?: string | null;
   tracker_item_count?: number;
   completed_test_item_count?: number;

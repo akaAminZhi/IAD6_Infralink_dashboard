@@ -18,9 +18,11 @@ from openpyxl.utils.datetime import from_excel
 try:
     from .file_discovery import get_input_files
     from .json_utils import file_metadata, write_json as write_json_payload
+    from .tracking_rules import requires_equipment_test_tracking
 except ImportError:
     from file_discovery import get_input_files
     from json_utils import file_metadata, write_json as write_json_payload
+    from tracking_rules import requires_equipment_test_tracking
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -51,6 +53,7 @@ OUTPUT_FIELDS = [
     "parent",
     "system",
     "open_issues_count_from_system_elements",
+    "test_tracking_required",
     "neta_complete",
     "neta_completed_at",
     "neta_test_report",
@@ -289,18 +292,22 @@ def row_is_empty(row: tuple[Any, ...], header_map: dict[str, int]) -> bool:
 
 
 def normalize_row(row: tuple[Any, ...], header_map: dict[str, int]) -> dict[str, Any]:
+    equipment_id = clean_text(get_cell(row, header_map, "Unique ID"))
     neta_complete, neta_completed_at = parse_neta_complete(
         get_cell(row, header_map, "NETA Complete: Completed")
     )
 
     return {
-        "equipment_id": clean_text(get_cell(row, header_map, "Unique ID")),
+        "equipment_id": equipment_id,
         "equipment_type": clean_text(get_cell(row, header_map, "Type")),
         "status": clean_text(get_cell(row, header_map, "Status")),
         "parent": clean_text(get_cell(row, header_map, "Parent")),
         "system": clean_text(get_cell(row, header_map, "System")),
         "open_issues_count_from_system_elements": parse_open_issues(
             get_cell(row, header_map, "Open Issues")
+        ),
+        "test_tracking_required": requires_equipment_test_tracking(
+            {"equipment_id": equipment_id}
         ),
         "neta_complete": neta_complete,
         "neta_completed_at": neta_completed_at,

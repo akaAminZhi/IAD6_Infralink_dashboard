@@ -14,6 +14,7 @@ try:
         selected_input_files_metadata,
         write_json as write_json_payload,
     )
+    from .tracking_rules import requires_equipment_test_tracking
 except ImportError:
     from file_discovery import get_input_files
     from json_utils import (
@@ -21,6 +22,7 @@ except ImportError:
         selected_input_files_metadata,
         write_json as write_json_payload,
     )
+    from tracking_rules import requires_equipment_test_tracking
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -80,7 +82,9 @@ def is_missing_issue_image(case: dict[str, Any]) -> bool:
 
 
 def is_neta_missing_report(equipment: dict[str, Any]) -> bool:
-    return equipment.get("neta_complete") is True and is_blank(
+    return requires_equipment_test_tracking(equipment) and equipment.get(
+        "neta_complete"
+    ) is True and is_blank(
         equipment.get("neta_test_report")
     )
 
@@ -158,6 +162,7 @@ def make_neta_report_status_by_pdm(pdms: list[dict[str, Any]]) -> list[dict[str,
                 ),
                 "report_available": counter.get("report_available", 0),
                 "missing_report": counter.get("missing_report", 0),
+                "not_tracked": counter.get("not_tracked", 0),
                 "unknown": counter.get("Unknown", 0),
             }
         )
@@ -175,6 +180,11 @@ def build_summary(
     # groupings remain PDM-centric by using equipment attached to PDM records.
     _ = equipment_records
     pdm_equipment = get_pdm_equipment(pdms)
+    tracked_pdm_equipment = [
+        equipment
+        for equipment in pdm_equipment
+        if requires_equipment_test_tracking(equipment)
+    ]
     matched_equipment_ids = {
         link.get("matched_equipment_id")
         for link in module_links
@@ -185,10 +195,14 @@ def build_summary(
     total_cases = len(cases)
     total_cases_missing_issue_image = sum(1 for case in cases if is_missing_issue_image(case))
     neta_complete_count = sum(
-        1 for equipment in pdm_equipment if equipment.get("neta_complete") is True
+        1
+        for equipment in tracked_pdm_equipment
+        if equipment.get("neta_complete") is True
     )
     neta_incomplete_count = sum(
-        1 for equipment in pdm_equipment if equipment.get("neta_complete") is not True
+        1
+        for equipment in tracked_pdm_equipment
+        if equipment.get("neta_complete") is not True
     )
     neta_denominator = neta_complete_count + neta_incomplete_count
 
@@ -209,7 +223,7 @@ def build_summary(
         "neta_complete_count": neta_complete_count,
         "neta_incomplete_count": neta_incomplete_count,
         "neta_missing_report_count": sum(
-            1 for equipment in pdm_equipment if is_neta_missing_report(equipment)
+            1 for equipment in tracked_pdm_equipment if is_neta_missing_report(equipment)
         ),
         "neta_completion_rate": (
             round(neta_complete_count / neta_denominator, 4)

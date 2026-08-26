@@ -28,6 +28,7 @@ function row(overrides: Partial<FlattenedEquipmentRow> = {}): FlattenedEquipment
     model: null,
     serial_number: null,
     open_issues_count_from_system_elements: 0,
+    test_tracking_required: true,
     calculated_open_case_count: 0,
     neta_complete: false,
     neta_completed_at: null,
@@ -185,6 +186,33 @@ describe("equipmentUtils", () => {
     );
     expect(getNetaDisplayStatus(row({ neta_complete: false }))).toBe("Incomplete");
     expect(getNetaDisplayStatus(row({ neta_complete: "unexpected" }))).toBe("Unknown");
+  });
+
+  it("does not track BATTERY equipment in NETA metrics or attention", () => {
+    const battery = row({
+      equipment_id: "IAD06-INV6-H1-1 BATTERY 2",
+      display_equipment_id: "IAD06-INV6-H1-1 BATTERY 2",
+      source_equipment_label: "INV6-H1-1 BATTERY 2",
+      test_tracking_required: false,
+      neta_complete: false,
+    });
+
+    expect(getNetaDisplayStatus(battery)).toBe("Not Tracked");
+    expect(getEquipmentAttentionReasons(battery)).toEqual([]);
+    expect(getEquipmentSummaryMetrics([battery])).toMatchObject({
+      netaComplete: 0,
+      netaIncomplete: 0,
+      missingNetaReports: 0,
+    });
+  });
+
+  it("does not track direct INV6 equipment while tracking TX-INV6 equipment", () => {
+    const inverter = row({ equipment_id: "IAD06-INV6-04R", neta_complete: false });
+    const transformer = row({ equipment_id: "IAD06-TX-INV6-03R", neta_complete: false });
+
+    expect(getNetaDisplayStatus(inverter)).toBe("Not Tracked");
+    expect(getEquipmentAttentionReasons(inverter)).toEqual([]);
+    expect(getNetaDisplayStatus(transformer)).toBe("Incomplete");
   });
 
   it("calculates summary metrics and groups duplicate equipment IDs", () => {

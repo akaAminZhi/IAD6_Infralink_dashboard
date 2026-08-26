@@ -22,10 +22,10 @@ import {
   getMissingNetaReportCount,
   getNetaCompleteCount,
   getNetaIncompleteCount,
-  getPdmEquipmentCount,
   getPdmOpenCaseCount,
   getPdmReadinessLevel,
   getPdmReadinessScore,
+  getTrackedEquipmentCount,
   isBlank,
 } from "../../utils/pdmUtils";
 import { IssueDetailDrawer } from "../issues/IssueDetailDrawer";
@@ -247,7 +247,7 @@ export function PdmDetailDrawer({
   const missingIssueImages = getCasesMissingIssueImageCount(pdm);
   const missingReports = getMissingNetaReportCount(pdm);
   const openCases = getPdmOpenCaseCount(pdm);
-  const equipmentCount = getPdmEquipmentCount(pdm);
+  const trackedEquipmentCount = getTrackedEquipmentCount(pdm);
   const epsStarted = epsExecution?.started_module_equipment_count ?? 0;
   const epsComplete = epsExecution?.complete_count ?? 0;
   const epsWaitingNeta = epsExecution?.waiting_infralink_neta_count ?? 0;
@@ -296,7 +296,7 @@ export function PdmDetailDrawer({
                     completed={epsStarted}
                     icon={<Activity className="h-4 w-4 text-blue-600" aria-hidden="true" />}
                     label="EPS Execution Started"
-                    total={equipmentCount}
+                    total={trackedEquipmentCount}
                   />
                   <div className="grid min-w-0 grid-cols-2 gap-x-6 gap-y-3 xl:grid-cols-3">
                     <SummaryStatus
@@ -343,7 +343,7 @@ export function PdmDetailDrawer({
                     completed={netaComplete}
                     icon={<ShieldCheck className="h-4 w-4 text-emerald-600" aria-hidden="true" />}
                     label="Infralink NETA Complete"
-                    total={equipmentCount}
+                    total={trackedEquipmentCount}
                   />
                   <div className="grid min-w-0 grid-cols-2 gap-x-6 gap-y-3 xl:grid-cols-3">
                     <SummaryStatus

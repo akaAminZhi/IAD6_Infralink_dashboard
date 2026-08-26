@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useNetaReportManifest } from "../../contexts/NetaReportManifestContext";
 import type { CaseIssue } from "../../types/data";
 import { formatDateTime, formatNumber } from "../../utils/formatters";
+import { requiresEquipmentTestTracking } from "../../utils/equipmentTrackingUtils";
 import {
   getCasesMissingIssueImageCount,
   getNetaReportNames,
@@ -115,6 +116,7 @@ export function EquipmentDetailDrawer({
   const pdmNames = rows
     .map((row) => row.pdm_name)
     .filter((name): name is string => !isBlank(name));
+  const trackingRequired = requiresEquipmentTestTracking(equipment);
 
   return (
     <div className="fixed inset-0 z-40">
@@ -162,14 +164,17 @@ export function EquipmentDetailDrawer({
                       <EquipmentNetaBadge equipment={equipment} />
                     </div>
                   </div>
-                  <Field label="NETA Completed Time" value={formatDateTime(equipment.neta_completed_at)} />
+                  <Field
+                    label="NETA Completed Time"
+                    value={trackingRequired ? formatDateTime(equipment.neta_completed_at) : "--"}
+                  />
                   <Field label="Open Case Count" value={formatNumber(openCaseCount)} />
                   <Field label="Cases Missing Issue Image" value={formatNumber(missingImageCount)} />
                 </div>
-                <div>
+                {trackingRequired ? <div>
                   <NetaReportNames value={equipment.neta_test_report} />
-                </div>
-                {equipment.cxalloy_upload_status ? (
+                </div> : null}
+                {trackingRequired && equipment.cxalloy_upload_status ? (
                   <div className="space-y-3 border-t pt-4">
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div>
@@ -224,7 +229,7 @@ export function EquipmentDetailDrawer({
               </CardContent>
             </Card>
 
-            <Card>
+            {trackingRequired ? <Card>
               <CardContent className="space-y-4 p-4">
                 <div>
                   <h3 className="text-lg font-semibold tracking-normal">EPS Test Execution</h3>
@@ -234,7 +239,7 @@ export function EquipmentDetailDrawer({
                 </div>
                 <EpsTestItemsPanel items={equipment.eps_test_items} />
               </CardContent>
-            </Card>
+            </Card> : null}
 
             <Card>
               <CardContent className="space-y-4 p-4">

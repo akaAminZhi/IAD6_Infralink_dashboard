@@ -20,9 +20,11 @@ from openpyxl.utils.cell import range_boundaries
 try:
     from .json_utils import file_metadata, load_records_json, write_json
     from .pdm_assignment import choose_effective_pdm_name, is_pdm_name
+    from .tracking_rules import requires_equipment_test_tracking
 except ImportError:
     from json_utils import file_metadata, load_records_json, write_json
     from pdm_assignment import choose_effective_pdm_name, is_pdm_name
+    from tracking_rules import requires_equipment_test_tracking
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -59,6 +61,7 @@ ITEM_STATUS_FIXED_NOT_IN_TRACKER = "Fixed - Not In Tracker"
 STATUS_PARTIAL = "Partial"
 STATUS_NOT_STARTED = "Not Started"
 STATUS_NO_TRACKER_RECORDS = "No Tracker Records"
+STATUS_NOT_TRACKED = "Not Tracked"
 
 STATUS_ORDER = {
     STATUS_FAILED: 0,
@@ -67,6 +70,7 @@ STATUS_ORDER = {
     STATUS_COMPLETE: 3,
     STATUS_NOT_STARTED: 4,
     STATUS_NO_TRACKER_RECORDS: 5,
+    STATUS_NOT_TRACKED: 6,
 }
 
 
@@ -1332,6 +1336,15 @@ def build_tracker_test_items(
             equipment_info = module_equipment_info or equipment_info
             module_link = link_with_effective_pdm(module_link, equipment_info)
 
+        if not requires_equipment_test_tracking(
+            {
+                **(module_link or {}),
+                **equipment_info,
+                "module_equipment": tracker_record.substation,
+            }
+        ):
+            continue
+
         retested_at = fixed_equipment_dates.get(tracker_record.equipment_key)
         if record_is_failed(
             tracker_record,
@@ -1386,16 +1399,27 @@ def build_module_execution_records(
         module_key = compact_equipment_key(module_link.get("source_equipment_label"))
         equipment_info = lookup_equipment_info(module_link, info_by_key)
         module_link = link_with_effective_pdm(module_link, equipment_info)
-        tracker_records = records_by_module.get(module_key, [])
-        status, completed_records, failed_records, incomplete_records = (
-            summarize_module_status(
+        tracking_required = requires_equipment_test_tracking(
+            {**module_link, **equipment_info}
+        )
+        tracker_records = (
+            records_by_module.get(module_key, []) if tracking_required else []
+        )
+        if tracking_required:
+            status, completed_records, failed_records, incomplete_records = summarize_module_status(
                 tracker_records,
                 equipment_info,
                 completed_equipment,
                 failed_equipment,
                 fixed_equipment,
             )
-        )
+        else:
+            status, completed_records, failed_records, incomplete_records = (
+                STATUS_NOT_TRACKED,
+                [],
+                [],
+                [],
+            )
 
         for record in tracker_records:
             retested_at = fixed_equipment_dates.get(record.equipment_key)
@@ -1454,6 +1478,7 @@ def build_module_execution_records(
                 "matched_equipment_id": module_link.get("matched_equipment_id"),
                 "match_status": module_link.get("match_status"),
                 "source_equipment_column": module_link.get("source_equipment_column"),
+                "test_tracking_required": tracking_required,
                 "eps_test_status": status,
                 "tracker_item_count": tracker_item_count,
                 "completed_test_item_count": completed_count,
@@ -1529,6 +1554,13 @@ def add_unmatched_failed_items(
 
 
 def pdm_execution_status(status_counts: Counter[str]) -> str:
+    tracked_count = sum(
+        count
+        for status, count in status_counts.items()
+        if status != STATUS_NOT_TRACKED
+    )
+    if tracked_count == 0 and status_counts[STATUS_NOT_TRACKED] > 0:
+        return STATUS_NOT_TRACKED
     if status_counts[STATUS_FAILED] > 0:
         return STATUS_FAILED
     if status_counts[STATUS_PARTIAL] > 0:
@@ -1563,7 +1595,7 @@ def build_pdm_execution_records(
     pdm_records: list[dict[str, Any]] = []
     for pdm_name, records in grouped.items():
         counts = Counter(record["eps_test_status"] for record in records)
-        total = len(records)
+        total = len(records) - counts[STATUS_NOT_TRACKED]
         started_count = (
             total - counts[STATUS_NOT_STARTED] - counts[STATUS_NO_TRACKER_RECORDS]
         )
@@ -1589,6 +1621,7 @@ def build_pdm_execution_records(
                 "failed_count": counts[STATUS_FAILED],
                 "not_started_count": counts[STATUS_NOT_STARTED],
                 "no_tracker_record_count": counts[STATUS_NO_TRACKER_RECORDS],
+                "not_tracked_count": counts[STATUS_NOT_TRACKED],
                 "tracker_item_count": tracker_items,
                 "completed_test_item_count": completed_items,
                 "failed_test_item_count": failed_items,
@@ -1985,7 +2018,11 @@ def build_summary(
         "snapshot_date": current_snapshot.get("snapshot_date"),
         "source_date_label": current_snapshot.get("source_date_label"),
         "total_pdm_count": len(pdm_records),
-        "total_module_equipment_count": len(module_records),
+        "total_module_equipment_count": sum(
+            1
+            for record in module_records
+            if record.get("eps_test_status") != STATUS_NOT_TRACKED
+        ),
         "total_tracker_test_item_count": tracker_item_count,
         "completed_tracker_test_item_count": completed_item_count,
         "field_test_completion_rate": (
@@ -2042,6 +2079,7 @@ def build_summary(
         "failed_count": status_counts[STATUS_FAILED],
         "not_started_count": status_counts[STATUS_NOT_STARTED],
         "no_tracker_record_count": status_counts[STATUS_NO_TRACKER_RECORDS],
+        "not_tracked_count": status_counts[STATUS_NOT_TRACKED],
         "yesterday": yesterday,
         "seven_day": seven_day,
         "previous_seven_day": previous_seven_day,

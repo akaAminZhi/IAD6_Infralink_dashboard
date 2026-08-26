@@ -6,6 +6,8 @@ import type {
   PdmRecord,
 } from "../types/data";
 import {
+  getNetaIncompleteCount,
+  getTrackedEquipmentCount,
   getPdmOpenCaseCount,
   getPdmReadinessLevel,
   hasEpsTestingStarted,
@@ -96,10 +98,30 @@ describe("pdmUtils", () => {
             { case_id: "2", status: "Open", issue_image: null },
           ],
         }),
+        equipment({ equipment_id: "EQ-2", neta_complete: false }),
+        equipment({ equipment_id: "EQ-3", neta_complete: false }),
+        equipment({ equipment_id: "EQ-4", neta_complete: false }),
       ],
     });
     expect(getPdmReadinessLevel(record, { failed_test_item_count: 1 })).toBe(
       "Critical",
     );
+  });
+
+  it("excludes BATTERY labels from PDM test readiness denominators", () => {
+    const record = pdm({
+      equipment_count: 5,
+      neta_incomplete_count: 5,
+      equipment: [
+        equipment({ equipment_id: "IAD06-INV6-H1-1 BATTERY 2" }),
+        equipment({ equipment_id: "IAD06-INV6-H1-1 BATTERY1" }),
+        equipment({ equipment_id: "IAD06-INV6-H1-1" }),
+        equipment({ equipment_id: "IAD06-TX-INV6-H1-1" }),
+        equipment({ equipment_id: "IAD06-ATS-TX-INV6-H1-1" }),
+      ],
+    });
+
+    expect(getTrackedEquipmentCount(record)).toBe(2);
+    expect(getNetaIncompleteCount(record)).toBe(2);
   });
 });

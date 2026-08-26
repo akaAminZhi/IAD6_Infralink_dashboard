@@ -1,4 +1,5 @@
 import type { CaseIssue, Equipment, PdmRecord } from "../types/data";
+import { requiresEquipmentTestTracking } from "./equipmentTrackingUtils";
 import { getNetaReportNames } from "./netaReports";
 
 export type IssueDueState = "Overdue" | "Due Soon" | "No Due Date" | "Normal" | "Closed";
@@ -7,6 +8,7 @@ export type IssueNetaStatus =
   | "Complete + Report"
   | "Complete - Missing Report"
   | "Incomplete"
+  | "Not Tracked"
   | "Unknown";
 
 export interface EnrichedIssue {
@@ -352,6 +354,10 @@ export function enrichIssuesWithPdmContext(
 }
 
 export function getIssueNetaStatus(issue: EnrichedIssue): IssueNetaStatus {
+  if (!requiresEquipmentTestTracking(issue)) {
+    return "Not Tracked";
+  }
+
   if (issue.neta_complete === true && !hasMissingNetaReportForIssue(issue)) {
     return "Complete + Report";
   }
@@ -369,6 +375,7 @@ export function getIssueNetaStatus(issue: EnrichedIssue): IssueNetaStatus {
 
 export function hasMissingNetaReportForIssue(issue: EnrichedIssue): boolean {
   return (
+    requiresEquipmentTestTracking(issue) &&
     issue.neta_complete === true &&
     (isBlank(issue.neta_test_report) || issue.neta_report_status === "missing_report")
   );

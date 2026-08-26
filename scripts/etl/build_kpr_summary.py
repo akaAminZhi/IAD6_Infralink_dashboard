@@ -18,12 +18,14 @@ try:
     )
     from .normalize_cases import normalize_cases
     from .normalize_equipment import normalize_equipment
+    from .tracking_rules import requires_equipment_test_tracking
 except ImportError:
     from build_history_comparison import CLOSED_CASE_STATUSES, parse_export_date
     from file_discovery import CASES_DIR, SYSTEM_ELEMENTS_DIR, get_input_files
     from json_utils import load_records_json, selected_input_files_metadata, write_json
     from normalize_cases import normalize_cases
     from normalize_equipment import normalize_equipment
+    from tracking_rules import requires_equipment_test_tracking
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -191,7 +193,10 @@ def is_open_case(record: dict[str, Any] | None) -> bool:
 
 
 def is_neta_complete(record: dict[str, Any]) -> bool:
-    return record.get("neta_complete") is True
+    return (
+        requires_equipment_test_tracking(record)
+        and record.get("neta_complete") is True
+    )
 
 
 def neta_month_movement(
@@ -762,9 +767,13 @@ def build_kpr_summary(input_files: dict[str, str] | None = None) -> dict[str, An
         baseline_equipment,
         lifecycle_config,
     )
+    tracked_current_equipment_count = sum(
+        requires_equipment_test_tracking(record)
+        for record in current_equipment.values()
+    )
     neta_completion_rate = (
-        round((len(current_neta_ids) / lifecycle["total_equipment"]) * 100, 1)
-        if lifecycle["total_equipment"]
+        round((len(current_neta_ids) / tracked_current_equipment_count) * 100, 1)
+        if tracked_current_equipment_count
         else 0.0
     )
     latest_equipment = index_equipment(
