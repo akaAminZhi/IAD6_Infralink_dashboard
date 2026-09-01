@@ -10,6 +10,7 @@ import {
   getTrackedEquipmentCount,
   getPdmOpenCaseCount,
   getPdmReadinessLevel,
+  getPdmTableRows,
   hasEpsTestingStarted,
   hasPdmTestingStarted,
 } from "./pdmUtils";
@@ -108,14 +109,16 @@ describe("pdmUtils", () => {
     );
   });
 
-  it("excludes BATTERY labels from PDM test readiness denominators", () => {
+  it("excludes non-NETA equipment from PDM test readiness denominators", () => {
     const record = pdm({
-      equipment_count: 5,
-      neta_incomplete_count: 5,
+      equipment_count: 7,
+      neta_incomplete_count: 7,
       equipment: [
         equipment({ equipment_id: "IAD06-INV6-H1-1 BATTERY 2" }),
         equipment({ equipment_id: "IAD06-INV6-H1-1 BATTERY1" }),
         equipment({ equipment_id: "IAD06-INV6-H1-1" }),
+        equipment({ equipment_id: "IAD06-UPS6-01A-3" }),
+        equipment({ equipment_id: "IAD06-MBC3-01A-3" }),
         equipment({ equipment_id: "IAD06-TX-INV6-H1-1" }),
         equipment({ equipment_id: "IAD06-ATS-TX-INV6-H1-1" }),
       ],
@@ -123,5 +126,19 @@ describe("pdmUtils", () => {
 
     expect(getTrackedEquipmentCount(record)).toBe(2);
     expect(getNetaIncompleteCount(record)).toBe(2);
+  });
+
+  it("adds the EPS waiting Infralink NETA count to PDM table rows", () => {
+    const rows = getPdmTableRows(
+      [pdm({ pdm_name: "PDM-WAITING" })],
+      [
+        {
+          pdm_name: "PDM-WAITING",
+          waiting_infralink_neta_count: 3,
+        },
+      ],
+    );
+
+    expect(rows[0].waitingInfralinkNetaCount).toBe(3);
   });
 });

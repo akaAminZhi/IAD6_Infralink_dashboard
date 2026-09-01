@@ -578,6 +578,7 @@ export interface KprLifecycleTransition {
   to_key: string;
   to_label: string;
   count: number;
+  equipment_ids?: string[];
   direction: "advanced" | "regressed" | "unmapped";
 }
 

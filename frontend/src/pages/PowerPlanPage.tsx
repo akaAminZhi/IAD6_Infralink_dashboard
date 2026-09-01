@@ -1595,8 +1595,15 @@ export function PowerPlanPage({ data }: PowerPlanPageProps) {
       pan.moved = true;
     }
     event.preventDefault();
-    const deltaX = ((event.clientX - pan.clientX) / bounds.width) * pan.viewport.width;
-    const deltaY = ((event.clientY - pan.clientY) / bounds.height) * pan.viewport.height;
+    // The SVG uses `preserveAspectRatio="meet"`, which can leave empty space
+    // on one axis. Pan using the rendered uniform scale so vertical drags are
+    // not slowed by that letterboxing.
+    const renderedScale = Math.max(
+      Number.EPSILON,
+      Math.min(bounds.width / pan.viewport.width, bounds.height / pan.viewport.height),
+    );
+    const deltaX = (event.clientX - pan.clientX) / renderedScale;
+    const deltaY = (event.clientY - pan.clientY) / renderedScale;
     setViewport(
       clampViewport(
         {

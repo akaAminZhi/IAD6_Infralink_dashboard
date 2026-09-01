@@ -954,10 +954,16 @@ export function MvEquipmentPage({ data }: MvEquipmentPageProps) {
     const dx = event.clientX - pan.clientX;
     const dy = event.clientY - pan.clientY;
     if (Math.abs(dx) + Math.abs(dy) > 4) pan.moved = true;
+    // `meet` may letterbox the SVG. Use its uniform rendered scale instead of
+    // the element's height/width so both pan directions track the pointer.
+    const renderedScale = Math.max(
+      Number.EPSILON,
+      Math.min(bounds.width / pan.viewport.width, bounds.height / pan.viewport.height),
+    );
     setViewport({
       ...pan.viewport,
-      x: pan.viewport.x - (dx / Math.max(1, bounds.width)) * pan.viewport.width,
-      y: pan.viewport.y - (dy / Math.max(1, bounds.height)) * pan.viewport.height,
+      x: pan.viewport.x - dx / renderedScale,
+      y: pan.viewport.y - dy / renderedScale,
     });
   }
 

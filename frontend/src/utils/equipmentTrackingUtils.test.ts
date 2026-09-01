@@ -23,4 +23,20 @@ describe("requiresEquipmentTestTracking", () => {
       requiresEquipmentTestTracking({ equipment_id: "IAD06-ATS-TX-INV6-H1-1" }),
     ).toBe(true);
   });
+
+  it("excludes UPS6 and MBC equipment references", () => {
+    expect(requiresEquipmentTestTracking({ equipment_id: "IAD06-UPS6-01A-3" })).toBe(
+      false,
+    );
+    expect(
+      requiresEquipmentTestTracking({ source_equipment_label: "UPS6-01A-3 BATT" }),
+    ).toBe(false);
+    expect(requiresEquipmentTestTracking({ equipment_id: "IAD06-MBC3-01A-3" })).toBe(
+      false,
+    );
+    expect(
+      requiresEquipmentTestTracking({ normalized_equipment_id: "IAD06-MBC6-01R-2" }),
+    ).toBe(false);
+    expect(requiresEquipmentTestTracking({ equipment_id: "IAD06-PDU6-01A-3" })).toBe(true);
+  });
 });

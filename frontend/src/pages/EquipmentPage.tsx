@@ -189,8 +189,9 @@ function getKprEquipmentFilterIds(
   data: DashboardData,
   kprFilter: string,
   lifecycleStage: string,
+  lifecycleTransition: string,
 ): Set<string> | null {
-  if (!kprFilter && !lifecycleStage) {
+  if (!kprFilter && !lifecycleStage && !lifecycleTransition) {
     return null;
   }
 
@@ -205,6 +206,13 @@ function getKprEquipmentFilterIds(
     values =
       data.kprSummary?.equipment_lifecycle.stages.find(
         (stage) => stage.key === lifecycleStage,
+      )?.equipment_ids ?? [];
+  } else if (lifecycleTransition) {
+    const [fromKey, toKey] = lifecycleTransition.split(":", 2);
+    values =
+      data.kprSummary?.equipment_lifecycle.transitions.find(
+        (transition) =>
+          transition.from_key === fromKey && transition.to_key === toKey,
       )?.equipment_ids ?? [];
   }
 
@@ -244,6 +252,8 @@ export function EquipmentPage({ data }: EquipmentPageProps) {
   const statusParam = searchParams.get("status")?.trim() ?? "";
   const kprFilterParam = searchParams.get("kprFilter")?.trim() ?? "";
   const lifecycleStageParam = searchParams.get("lifecycleStage")?.trim() ?? "";
+  const lifecycleTransitionParam =
+    searchParams.get("lifecycleTransition")?.trim() ?? "";
   const [filters, setFilters] = useState<EquipmentFiltersState>(() =>
     statusParam
       ? { ...getFiltersForQuickFilter(quickFilterParam), status: statusParam }
@@ -266,8 +276,14 @@ export function EquipmentPage({ data }: EquipmentPageProps) {
   const summaryMetrics = useMemo(() => getEquipmentSummaryMetrics(equipmentRows), [equipmentRows]);
   const newNetaCompleteIds = useMemo(() => getNewNetaCompleteIds(data), [data]);
   const kprEquipmentFilterIds = useMemo(
-    () => getKprEquipmentFilterIds(data, kprFilterParam, lifecycleStageParam),
-    [data, kprFilterParam, lifecycleStageParam],
+    () =>
+      getKprEquipmentFilterIds(
+        data,
+        kprFilterParam,
+        lifecycleStageParam,
+        lifecycleTransitionParam,
+      ),
+    [data, kprFilterParam, lifecycleStageParam, lifecycleTransitionParam],
   );
   const newNetaCompleteCount = useMemo(
     () => getNewNetaCompleteDisplayCount(equipmentRows, newNetaCompleteIds),

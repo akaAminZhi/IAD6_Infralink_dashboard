@@ -30,6 +30,7 @@ export interface PdmTableRow {
   netaMissingReportCount: number;
   openCaseCount: number;
   casesMissingIssueImageCount: number;
+  waitingInfralinkNetaCount: number;
   readinessScore: number;
   readinessLevel: PdmReadinessLevel;
 }
@@ -339,6 +340,8 @@ export function getPdmTableRows(
       netaMissingReportCount: getMissingNetaReportCount(pdm),
       openCaseCount: getPdmOpenCaseCount(pdm),
       casesMissingIssueImageCount: getCasesMissingIssueImageCount(pdm),
+      waitingInfralinkNetaCount:
+        asNumber(epsExecution?.waiting_infralink_neta_count) ?? 0,
       readinessScore: getPdmReadinessScore(pdm, epsExecution),
       readinessLevel: getPdmReadinessLevel(pdm, epsExecution),
     };

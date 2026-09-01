@@ -98,4 +98,46 @@ describe("EquipmentPage", () => {
     expect(screen.getByText("IAD06-EQ-IN")).toBeInTheDocument();
     expect(screen.queryByText("IAD06-EQ-OUT")).not.toBeInTheDocument();
   });
+
+  it("applies an exact KPR lifecycle-transition equipment cohort", () => {
+    const data = makeDashboardData({
+      pdms: [
+        {
+          pdm_name: "PDM-A",
+          equipment: [{ equipment_id: "IAD06-EQ-MOVED" }],
+        },
+        {
+          pdm_name: "PDM-B",
+          equipment: [{ equipment_id: "IAD06-EQ-OTHER" }],
+        },
+      ],
+      kprSummary: {
+        equipment_lifecycle: {
+          transitions: [
+            {
+              from_key: "ifc",
+              to_key: "neta_complete",
+              equipment_ids: ["IAD06-EQ-MOVED"],
+            },
+          ],
+        },
+      } as unknown as KprSummary,
+    });
+
+    render(
+      <MemoryRouter
+        initialEntries={[
+          "/equipment?lifecycleTransition=ifc%3Aneta_complete",
+        ]}
+      >
+        <NetaReportManifestProvider manifest={null}>
+          <EquipmentPage data={data} />
+        </NetaReportManifestProvider>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText("IAD06-EQ-MOVED")).toBeInTheDocument();
+    expect(screen.queryByText("IAD06-EQ-OTHER")).not.toBeInTheDocument();
+  });
+
 });

@@ -892,13 +892,11 @@ function LifecycleStage({
           <div className="text-3xl font-semibold leading-none text-slate-950">
             {formatNumber(stage.current_count)}
           </div>
-          <div className="mt-1 text-[11px] font-medium uppercase text-muted-foreground">
-            Current
-          </div>
+          <div className="mt-1 text-[11px] font-medium uppercase text-muted-foreground">Current</div>
         </div>
         <div className="text-right" title={changeLabel}>
           <div
-            className="inline-flex items-center gap-1 text-base font-semibold"
+            className="inline-flex items-center gap-1 text-sm font-semibold"
             style={{ color: stage.color }}
           >
             {change > 0 ? (
@@ -916,7 +914,7 @@ function LifecycleStage({
             )}
             {change !== 0 ? formatNumber(Math.abs(change)) : null}
           </div>
-          <div className="mt-1 text-[11px] text-muted-foreground">
+          <div className="mt-1 text-[10px] text-muted-foreground">
             {`from ${formatNumber(stage.baseline_count)}`}
           </div>
         </div>
@@ -1016,7 +1014,7 @@ function EquipmentLifecycle({
                 <div className="min-w-[720px]">
                   <div className="grid grid-cols-[minmax(220px,1fr)_110px_110px_110px_110px] border-b bg-slate-50 px-4 py-2 text-xs font-medium uppercase text-muted-foreground">
                     <span>Stage</span>
-                    <span className="text-right">Month start</span>
+                    <span className="text-right" title={baselineDate}>Base</span>
                     <span className="text-right">Entered</span>
                     <span className="text-right">Left</span>
                     <span className="text-right">Current</span>
@@ -1090,15 +1088,24 @@ function EquipmentLifecycle({
                         <span className="text-slate-700">{transition.from_label}</span>
                         <ArrowRight className="h-4 w-4 text-slate-400" aria-hidden="true" />
                         <span className="font-medium text-slate-950">{transition.to_label}</span>
-                        <strong
-                          className={
+                        <button
+                          aria-label={`View ${formatNumber(transition.count)} equipment moved from ${transition.from_label} to ${transition.to_label}`}
+                          className={cn(
+                            "-mr-2 min-w-9 rounded px-2 py-1 text-right font-semibold transition hover:bg-slate-100 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                             transition.direction === "regressed"
                               ? "text-red-700"
-                              : "text-emerald-700"
+                              : "text-emerald-700",
+                          )}
+                          onClick={() =>
+                            onNavigate(
+                              `/equipment?lifecycleTransition=${encodeURIComponent(`${transition.from_key}:${transition.to_key}`)}`,
+                            )
                           }
+                          title={`View ${formatNumber(transition.count)} equipment`}
+                          type="button"
                         >
                           {formatNumber(transition.count)}
-                        </strong>
+                        </button>
                       </div>
                     ))
                   ) : (
@@ -1122,7 +1129,7 @@ function EquipmentLifecycle({
                 </div>
                 {unmappedStage ? (
                   <div className="mt-1 text-xs text-muted-foreground">
-                    {`${formatNumber(unmappedStage.baseline_count)} to ${formatNumber(unmappedStage.current_count)}`}
+                    {`Base ${formatNumber(unmappedStage.baseline_count)} | Current ${formatNumber(unmappedStage.current_count)}`}
                   </div>
                 ) : null}
                 <div className="mt-3 flex flex-wrap gap-2">

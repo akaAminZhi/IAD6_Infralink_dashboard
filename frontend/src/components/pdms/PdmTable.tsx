@@ -98,11 +98,11 @@ export function PdmTable({ rows, selectedPdmName, onSelectPdm }: PdmTableProps) 
         cell: ({ row }) => <span>{formatNumber(row.original.openCaseCount)}</span>,
       },
       {
-        accessorKey: "casesMissingIssueImageCount",
-        header: "Cases Missing Image",
+        accessorKey: "waitingInfralinkNetaCount",
+        header: "Waiting Infralink NETA",
         cell: ({ row }) => (
-          <span className="text-red-700">
-            {formatNumber(row.original.casesMissingIssueImageCount)}
+          <span className="text-teal-700">
+            {formatNumber(row.original.waitingInfralinkNetaCount)}
           </span>
         ),
       },

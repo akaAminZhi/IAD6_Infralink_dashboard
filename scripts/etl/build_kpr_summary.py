@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from collections import Counter
+from collections import Counter, defaultdict
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Iterable
@@ -163,12 +163,12 @@ def linked_equipment_catalog(module_links: list[dict[str, Any]]) -> dict[str, di
 
 def index_equipment(
     records: Iterable[dict[str, Any]],
-    allowed_keys: set[str],
+    allowed_keys: set[str] | None = None,
 ) -> dict[str, dict[str, Any]]:
     indexed: dict[str, dict[str, Any]] = {}
     for record in records:
         key = normalize_key(record.get("equipment_id"))
-        if key and key in allowed_keys and key not in indexed:
+        if key and (allowed_keys is None or key in allowed_keys) and key not in indexed:
             indexed[key] = record
     return indexed
 
@@ -196,6 +196,12 @@ def is_neta_complete(record: dict[str, Any]) -> bool:
     return (
         requires_equipment_test_tracking(record)
         and record.get("neta_complete") is True
+    )
+
+
+def is_neta_complete_with_report(record: dict[str, Any]) -> bool:
+    return is_neta_complete(record) and bool(
+        str(record.get("neta_test_report") or "").strip()
     )
 
 
@@ -290,6 +296,7 @@ def lifecycle_summary(
     current_counts = Counter(current_stage_by_key.values())
     baseline_counts = Counter(baseline_stage_by_key.values())
     transitions: Counter[tuple[str, str]] = Counter()
+    transition_equipment_ids: dict[tuple[str, str], set[str]] = defaultdict(set)
     retained_counts: Counter[str] = Counter()
     entered_counts: Counter[str] = Counter()
     exited_counts: Counter[str] = Counter()
@@ -315,6 +322,13 @@ def lifecycle_summary(
             continue
 
         transitions[(baseline_stage, current_stage)] += 1
+        transition_equipment_ids[(baseline_stage, current_stage)].add(
+            str(
+                current_equipment.get(equipment_key, {}).get("equipment_id")
+                or baseline_equipment.get(equipment_key, {}).get("equipment_id")
+                or equipment_key
+            )
+        )
         if baseline_stage in order and current_stage in order:
             if order[current_stage] > order[baseline_stage]:
                 advanced += 1
@@ -364,6 +378,9 @@ def lifecycle_summary(
                 "to_key": to_key,
                 "to_label": stage_labels[to_key],
                 "count": count,
+                "equipment_ids": sorted(
+                    transition_equipment_ids[(from_key, to_key)]
+                ),
                 "direction": (
                     "advanced"
                     if from_key in order
@@ -701,6 +718,12 @@ def build_kpr_summary(input_files: dict[str, str] | None = None) -> dict[str, An
 
     current_system_path = report_system[1]
     current_cases_path = report_cases[1]
+    all_current_equipment = index_equipment(equipment_records(current_system_path))
+    all_baseline_equipment = (
+        index_equipment(equipment_records(system_baseline[1]))
+        if system_baseline
+        else {}
+    )
     current_equipment = index_equipment(
         equipment_records(current_system_path),
         allowed_equipment_keys,
@@ -720,13 +743,13 @@ def build_kpr_summary(input_files: dict[str, str] | None = None) -> dict[str, An
 
     current_neta_ids = {
         equipment_key
-        for equipment_key, record in current_equipment.items()
-        if is_neta_complete(record)
+        for equipment_key, record in all_current_equipment.items()
+        if is_neta_complete_with_report(record)
     }
     baseline_neta_ids = {
         equipment_key
-        for equipment_key, record in baseline_equipment.items()
-        if is_neta_complete(record)
+        for equipment_key, record in all_baseline_equipment.items()
+        if is_neta_complete_with_report(record)
     }
     neta_movement = neta_month_movement(current_neta_ids, baseline_neta_ids)
     issues = issue_performance(current_cases, baseline_cases, period_end)
@@ -747,8 +770,10 @@ def build_kpr_summary(input_files: dict[str, str] | None = None) -> dict[str, An
     for export_date, path in system_exports.items():
         if export_date < month_start and (not system_baseline or path != system_baseline[1]):
             continue
-        indexed = index_equipment(equipment_records(path), allowed_equipment_keys)
-        neta_values[export_date] = sum(is_neta_complete(record) for record in indexed.values())
+        indexed = index_equipment(equipment_records(path))
+        neta_values[export_date] = sum(
+            is_neta_complete_with_report(record) for record in indexed.values()
+        )
 
     issue_values: dict[date, int] = {}
     for export_date, path in case_exports.items():
@@ -769,7 +794,7 @@ def build_kpr_summary(input_files: dict[str, str] | None = None) -> dict[str, An
     )
     tracked_current_equipment_count = sum(
         requires_equipment_test_tracking(record)
-        for record in current_equipment.values()
+        for record in all_current_equipment.values()
     )
     neta_completion_rate = (
         round((len(current_neta_ids) / tracked_current_equipment_count) * 100, 1)
@@ -778,7 +803,6 @@ def build_kpr_summary(input_files: dict[str, str] | None = None) -> dict[str, An
     )
     latest_equipment = index_equipment(
         equipment_records(Path(selected_inputs["system_elements"]).resolve()),
-        allowed_equipment_keys,
     )
     latest_cases = index_cases(
         case_records(Path(selected_inputs["cases"]).resolve())
@@ -786,7 +810,7 @@ def build_kpr_summary(input_files: dict[str, str] | None = None) -> dict[str, An
     latest_neta_complete_ids = {
         equipment_key
         for equipment_key, record in latest_equipment.items()
-        if is_neta_complete(record)
+        if is_neta_complete_with_report(record)
     }
     latest_open_issue_ids = {
         case_id for case_id, record in latest_cases.items() if is_open_case(record)

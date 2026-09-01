@@ -126,6 +126,12 @@ def test_lifecycle_summary_reports_forward_regressed_and_unmapped_records() -> N
     assert stages["ship"]["entered_count"] == 1
     assert stages["ship"]["retained_count"] == 0
     assert stages["unmapped"]["retained_count"] == 1
+    transitions = {
+        (transition["from_key"], transition["to_key"]): transition
+        for transition in summary["transitions"]
+    }
+    assert transitions[("ifc", "ship")]["equipment_ids"] == ["EQ-1"]
+    assert transitions[("yellow", "red")]["equipment_ids"] == ["EQ-2"]
 
 
 def test_lifecycle_stage_reconciliation_includes_retained_equipment() -> None:

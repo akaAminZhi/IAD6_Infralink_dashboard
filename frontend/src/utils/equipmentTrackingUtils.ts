@@ -7,12 +7,12 @@ interface EquipmentTrackingReference {
   test_tracking_required?: unknown;
 }
 
-const EXCLUDED_TRACKING_TOKEN = "BATTERY";
+const EXCLUDED_TRACKING_TOKENS = ["BATTERY", "UPS6", "MBC"];
 const DIRECT_INVERTER_PREFIX = "INV6";
 
 function referenceRequiresTracking(value: unknown): boolean {
   const reference = String(value ?? "").trim().toUpperCase();
-  if (reference.includes(EXCLUDED_TRACKING_TOKEN)) {
+  if (EXCLUDED_TRACKING_TOKENS.some((token) => reference.includes(token))) {
     return false;
   }
 

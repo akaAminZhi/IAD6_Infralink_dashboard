@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any, Mapping
 
 
-TRACKING_EXCLUDED_TOKEN = "BATTERY"
+TRACKING_EXCLUDED_TOKENS = ("BATTERY", "UPS6", "MBC")
 DIRECT_INVERTER_PREFIX = "INV6"
 EQUIPMENT_REFERENCE_FIELDS = (
     "equipment_id",
@@ -17,10 +17,10 @@ EQUIPMENT_REFERENCE_FIELDS = (
 
 
 def requires_equipment_test_tracking(record: Mapping[str, Any]) -> bool:
-    """Return false for batteries and direct INV6 inverter equipment."""
+    """Return false for excluded UPS/MBC assets and direct INV6 inverters."""
     for field in EQUIPMENT_REFERENCE_FIELDS:
         reference = str(record.get(field) or "").strip().upper()
-        if TRACKING_EXCLUDED_TOKEN in reference:
+        if any(token in reference for token in TRACKING_EXCLUDED_TOKENS):
             return False
 
         without_project_prefix = (

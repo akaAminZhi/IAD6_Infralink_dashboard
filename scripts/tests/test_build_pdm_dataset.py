@@ -134,7 +134,7 @@ def test_pdm_dataset_keeps_module_pdm_when_parent_scope_conflicts() -> None:
     assert pdms[0]["equipment"][0]["equipment_id"] == "IAD06-MP6-01A-1"
 
 
-def test_pdm_dataset_excludes_battery_labels_from_neta_counts() -> None:
+def test_pdm_dataset_excludes_non_neta_equipment_from_neta_counts() -> None:
     equipment = [
         {
             "equipment_id": "IAD06-INV6-H1-1 BATTERY1",
@@ -148,6 +148,16 @@ def test_pdm_dataset_excludes_battery_labels_from_neta_counts() -> None:
         },
         {
             "equipment_id": "IAD06-TX-INV6-H1-1",
+            "neta_complete": False,
+            "neta_test_report": None,
+        },
+        {
+            "equipment_id": "IAD06-UPS6-01A-3",
+            "neta_complete": False,
+            "neta_test_report": None,
+        },
+        {
+            "equipment_id": "IAD06-MBC3-01A-3",
             "neta_complete": False,
             "neta_test_report": None,
         },
@@ -174,14 +184,30 @@ def test_pdm_dataset_excludes_battery_labels_from_neta_counts() -> None:
             "matched_equipment_id": "IAD06-TX-INV6-H1-1",
             "match_status": "matched",
         },
+        {
+            "pdm_name": "PDM-BATTERY",
+            "source_equipment_label": "UPS6-01A-3",
+            "normalized_equipment_id": "IAD06-UPS6-01A-3",
+            "matched_equipment_id": "IAD06-UPS6-01A-3",
+            "match_status": "matched",
+        },
+        {
+            "pdm_name": "PDM-BATTERY",
+            "source_equipment_label": "MBC3-01A-3",
+            "normalized_equipment_id": "IAD06-MBC3-01A-3",
+            "matched_equipment_id": "IAD06-MBC3-01A-3",
+            "match_status": "matched",
+        },
     ]
 
     pdm = build_pdm_dataset(equipment, module_links, [])[0]
 
-    assert pdm["equipment_count"] == 3
+    assert pdm["equipment_count"] == 5
     assert pdm["neta_incomplete_count"] == 1
     assert pdm["equipment"][0]["test_tracking_required"] is False
     assert pdm["equipment"][0]["neta_report_status"] == "not_tracked"
     assert pdm["equipment"][1]["test_tracking_required"] is False
     assert pdm["equipment"][1]["neta_report_status"] == "not_tracked"
     assert pdm["equipment"][2]["test_tracking_required"] is True
+    assert pdm["equipment"][3]["test_tracking_required"] is False
+    assert pdm["equipment"][4]["test_tracking_required"] is False

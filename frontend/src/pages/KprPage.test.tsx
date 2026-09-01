@@ -273,6 +273,16 @@ describe("KprPage", () => {
   it("presents lifecycle counts as stage inventory and separates mapping gaps", () => {
     const baseSummary = kprSummary();
     const summary = kprSummary({
+      period: {
+        ...baseSummary.period,
+        start_date: "2026-08-01",
+        end_date: "2026-08-27",
+        system_baseline_date: "2026-07-31",
+      },
+      current_snapshot: {
+        ...baseSummary.current_snapshot,
+        as_of_date: "2026-08-27",
+      },
       equipment_lifecycle: {
         ...baseSummary.equipment_lifecycle,
         advanced_count: 210,
@@ -333,6 +343,7 @@ describe("KprPage", () => {
             to_key: "ship_to_site",
             to_label: "Ship to Site",
             count: 44,
+            equipment_ids: ["IAD06-EQ-1"],
             direction: "advanced",
           },
         ],
@@ -343,9 +354,18 @@ describe("KprPage", () => {
     renderKprPage(summary);
 
     expect(screen.getByText("Equipment Lifecycle")).toBeInTheDocument();
+    expect(
+      screen.getByText("Jul 31, 2026 to Aug 27, 2026 | 1,161 equipment"),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText("Current").length).toBeGreaterThan(0);
+    expect(screen.getByText("from 9")).toBeInTheDocument();
     expect(screen.getByText("210 forward")).toBeInTheDocument();
-    expect(screen.getByLabelText("77 fewer than month start")).toBeInTheDocument();
-    expect(screen.getByLabelText("135 more than month start")).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("77 fewer than month start"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("135 more than month start"),
+    ).toBeInTheDocument();
     expect(
       screen.getByLabelText(
         "NETA Complete: 9 at month start plus 43 entered minus 4 left equals 48 current",
@@ -412,6 +432,43 @@ describe("KprPage", () => {
 
     expect(
       screen.getByText("/eps-test-execution?testItemFilter=Failed"),
+    ).toBeInTheDocument();
+  });
+
+  it("opens the exact equipment cohort from a lifecycle transition count", async () => {
+    const user = userEvent.setup();
+    const summary = kprSummary();
+    summary.equipment_lifecycle.transitions = [
+      {
+        from_key: "ifc",
+        from_label: "IFC",
+        to_key: "pre_installation_complete",
+        to_label: "Pre-Installation Complete",
+        count: 47,
+        equipment_ids: ["IAD06-EQ-1"],
+        direction: "advanced",
+      },
+    ];
+
+    render(
+      <MemoryRouter initialEntries={["/kpr"]}>
+        <Routes>
+          <Route element={<KprPage data={dashboardData(summary)} />} path="/kpr" />
+          <Route element={<CurrentLocation />} path="/equipment" />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await user.click(
+      screen.getByRole("button", {
+        name: "View 47 equipment moved from IFC to Pre-Installation Complete",
+      }),
+    );
+
+    expect(
+      screen.getByText(
+        "/equipment?lifecycleTransition=ifc%3Apre_installation_complete",
+      ),
     ).toBeInTheDocument();
   });
 });
