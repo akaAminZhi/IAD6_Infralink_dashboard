@@ -25,11 +25,13 @@ Major completed areas include:
   login continuation, EPS/MV daily report editing, and the daily refresh pipeline.
 - NETA/GC report manifests, CxAlloy upload status, Feeder Cable ATP evidence,
   power-plan selection/export, and MV annotation/test visualization.
+- Local MV-equipment comments with add/delete controls, persistent local storage,
+  clickable comment markers, and zoom-aware animated marker sizing.
 - Monthly KPR metrics separated by PDM, equipment, test-item, and issue units.
 
 ## Current Uncommitted Implementation
 
-At inspection time, these pre-existing files were modified:
+The current uncommitted worktree includes these pre-existing files:
 
 - `frontend/src/components/pdms/PdmTable.tsx`
 - `frontend/src/pages/EquipmentPage.tsx` and its test
@@ -45,6 +47,16 @@ At inspection time, these pre-existing files were modified:
 - `scripts/tests/test_build_pdm_dataset.py`
 - `scripts/tests/test_tracking_rules.py`
 
+This conversation also modified:
+
+- `frontend/src/pages/MvEquipmentPage.tsx` and its test
+- `frontend/src/types/automation.ts`
+- `frontend/src/utils/automationApi.ts` and its test
+- `scripts/automation/api.py`
+- `scripts/automation/mv_comments.py`
+- `scripts/automation/runner.py`
+- `scripts/tests/test_automation_api.py`
+
 The current diff includes these relevant behaviors:
 
 - EPS/NETA tracking exclusions for `BATTERY`, `UPS6`, `MBC`, and direct `INV6`;
@@ -54,6 +66,10 @@ The current diff includes these relevant behaviors:
 - KPR Changed Paths persist exact equipment IDs; clicking a colored transition
   count opens Equipment filtered to that cohort.
 - PDM/Equipment views and power-plan/MV detail handling have related updates.
+- MV Equipment details support comments. They are keyed by PDF annotation ID,
+  stored only in `runtime/automation/mv_equipment_comments.json`, and are not
+  part of ETL outputs. The on-plan marker is clickable, opens Comments first in
+  the detail pane, enlarges when zooming out, and supports local deletion.
 
 Generated files under `frontend/public/data/` are gitignored and may have been
 rebuilt locally; they are not the source of truth for code review.
@@ -74,6 +90,10 @@ rebuilt locally; they are not the source of truth for code review.
   frontend readiness calculations.
 - Data Operations remains local and unauthenticated; do not expose it remotely
   as-is.
+- MV comments use the existing loopback automation API; they require the local
+  dashboard service (`python scripts/start_dashboard.py`) rather than a static
+  dashboard deployment. The task runner ignores non-run JSON state in its
+  runtime directory so comment state cannot prevent service startup.
 
 ## Known Bugs and Unresolved Issues
 
@@ -82,8 +102,8 @@ rebuilt locally; they are not the source of truth for code review.
   Functional export failure was not proven; investigate runtime cost or test
   timeout before treating it as a product bug.
 - **Needs verification:** Confirm whether the recent uncommitted
-  `MvEquipmentPage.tsx` and `PowerPlanPage.tsx` edits are complete and visually
-  approved; they were present in the worktree at documentation time.
+  `PowerPlanPage.tsx` edits are complete and visually approved; they were
+  present in the worktree at documentation time.
 - **Needs verification:** Verify all tracker-dependent ETL builders honor
   `IAD6_EPS_TRACKER_ROOT`; several manifest modules still show a fixed sibling
   path.
@@ -115,16 +135,26 @@ the recent KPR work:
   Isolated rerun passed `exportIssues.test.ts`; the Power Plan export test still
   timed out.
 
-No tests or builds were run for this documentation-only task.
+For the MV-comment work in this conversation:
+
+- `python -m pytest scripts/tests/test_automation_api.py -q`: 5 passed.
+- `python -m py_compile scripts/automation/api.py scripts/automation/mv_comments.py scripts/automation/runner.py`: passed.
+- `git diff --check`: passed.
+- `npm run build` was started twice and reached the TypeScript/Vite build
+  stages, but the terminal's 30-second execution window did not return a final
+  build summary; do not treat it as a confirmed frontend build pass.
 
 ## Recommended Next Steps
 
-1. Review the current diff and manually verify KPR lifecycle stage counts,
-   Changed Path drill-down, PDM tracking exclusions, and Power Plan/MV details
+1. Manually verify MV comment marker placement at multiple zoom levels,
+   click-to-open behavior, and deletion after restarting the local service.
+2. Review the current diff and manually verify KPR lifecycle stage counts,
+   Changed Path drill-down, PDM tracking exclusions, and Power Plan details
    against the latest generated data.
-2. Resolve or explicitly adjust the slow Power Plan Excel export test.
-3. Run targeted tests for any files changed during review, then `npm run build`.
-4. Run full Python/frontend suites before committing if time permits.
+3. Resolve or explicitly adjust the slow Power Plan Excel export test.
+4. Run targeted frontend tests and a completed `npm run build` outside the
+   30-second command window, then run full Python/frontend suites before
+   committing if time permits.
 5. Commit application changes separately from documentation if a clean history
    is desired.
 
