@@ -21,6 +21,11 @@ from scripts.automation.daily_reports import (
     write_mv_report,
     write_report,
 )
+from scripts.automation.mv_comments import (
+    add_mv_equipment_comment,
+    delete_mv_equipment_comment,
+    list_mv_equipment_comments,
+)
 from scripts.automation.runner import AutomationConfig, TaskManager
 
 
@@ -68,6 +73,13 @@ class MvDailyReportRequest(BaseModel):
     overwrite: bool = False
 
 
+class MvEquipmentCommentRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    annotation_id: str = Field(min_length=1, max_length=300)
+    text: str = Field(min_length=1, max_length=4_000)
+
+
 def _file_status(path: Path) -> dict[str, Any]:
     if not path.exists():
         return {"exists": False, "modified_at": None}
@@ -105,7 +117,7 @@ def create_app(
         CORSMiddleware,
         allow_origin_regex=r"^https?://(?:localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$",
         allow_credentials=False,
-        allow_methods=["GET", "POST", "PUT"],
+        allow_methods=["GET", "POST", "PUT", "DELETE"],
         allow_headers=["Content-Type"],
     )
 
@@ -318,6 +330,34 @@ def create_app(
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         except (RuntimeError, ValueError) as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    @app.get("/api/automation/mv-equipment-comments")
+    def mv_equipment_comments() -> dict[str, list[dict[str, str]]]:
+        return {"comments": list_mv_equipment_comments(resolved_config.runtime_root)}
+
+    @app.post("/api/automation/mv-equipment-comments", status_code=201)
+    def add_mv_equipment_comment_endpoint(
+        request: MvEquipmentCommentRequest,
+    ) -> dict[str, dict[str, str]]:
+        annotation_id = request.annotation_id.strip()
+        text = request.text.strip()
+        if not annotation_id or not text:
+            raise HTTPException(status_code=422, detail="Annotation ID and comment text are required.")
+        return {
+            "comment": add_mv_equipment_comment(
+                resolved_config.runtime_root,
+                annotation_id,
+                text,
+            )
+        }
+
+    @app.delete("/api/automation/mv-equipment-comments/{comment_id}")
+    def delete_mv_equipment_comment_endpoint(comment_id: str) -> dict[str, str]:
+        if not comment_id or len(comment_id) > 100:
+            raise HTTPException(status_code=422, detail="Comment ID is invalid.")
+        if not delete_mv_equipment_comment(resolved_config.runtime_root, comment_id):
+            raise HTTPException(status_code=404, detail="Comment was not found.")
+        return {"comment_id": comment_id}
 
     return app
 

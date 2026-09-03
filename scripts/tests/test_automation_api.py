@@ -121,6 +121,39 @@ def test_mv_daily_report_round_trip_does_not_start_eps_wash(tmp_path: Path) -> N
     assert reports.json()[0]["report_name"] == "8-19.md"
 
 
+def test_mv_equipment_comments_are_persisted_locally(tmp_path: Path) -> None:
+    client, config, _ = make_client(tmp_path)
+    assert client.get("/api/automation/mv-equipment-comments").json() == {"comments": []}
+
+    saved = client.post(
+        "/api/automation/mv-equipment-comments",
+        json={"annotation_id": "equipment-1", "text": "Verify relay settings before energization."},
+    )
+    assert saved.status_code == 201
+    comment = saved.json()["comment"]
+    assert comment["annotation_id"] == "equipment-1"
+    assert comment["text"] == "Verify relay settings before energization."
+    assert comment["comment_id"]
+    assert comment["created_at"]
+    assert (config.runtime_root / "mv_equipment_comments.json").is_file()
+
+    loaded = client.get("/api/automation/mv-equipment-comments")
+    assert loaded.status_code == 200
+    assert loaded.json()["comments"] == [comment]
+
+    deleted = client.delete(f"/api/automation/mv-equipment-comments/{comment['comment_id']}")
+    assert deleted.status_code == 200
+    assert deleted.json() == {"comment_id": comment["comment_id"]}
+    assert client.get("/api/automation/mv-equipment-comments").json() == {"comments": []}
+    assert client.delete(f"/api/automation/mv-equipment-comments/{comment['comment_id']}").status_code == 404
+
+    invalid = client.post(
+        "/api/automation/mv-equipment-comments",
+        json={"annotation_id": " ", "text": " "},
+    )
+    assert invalid.status_code == 422
+
+
 def test_existing_daily_report_requires_overwrite_confirmation(tmp_path: Path) -> None:
     client, _, manager = make_client(tmp_path)
     payload = {

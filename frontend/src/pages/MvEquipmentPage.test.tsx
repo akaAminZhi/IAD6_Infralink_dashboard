@@ -1,13 +1,32 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { IssueAttachmentManifestProvider } from "../contexts/IssueAttachmentManifestContext";
 import { NetaReportManifestProvider } from "../contexts/NetaReportManifestContext";
 import { makeDashboardData } from "../test/fixtures";
 import { MvEquipmentPage } from "./MvEquipmentPage";
 
+const mvCommentsApi = vi.hoisted(() => ({
+  add: vi.fn(),
+  delete: vi.fn(),
+  get: vi.fn(),
+}));
+
+vi.mock("../utils/automationApi", () => ({
+  addMvEquipmentComment: mvCommentsApi.add,
+  deleteMvEquipmentComment: mvCommentsApi.delete,
+  getMvEquipmentComments: mvCommentsApi.get,
+}));
+
 describe("MvEquipmentPage", () => {
+  beforeEach(() => {
+    mvCommentsApi.add.mockReset();
+    mvCommentsApi.delete.mockReset();
+    mvCommentsApi.get.mockReset();
+    mvCommentsApi.get.mockResolvedValue({ comments: [] });
+  });
+
   it("combines PDF pages and draws all MV annotations on one canvas", async () => {
     const user = userEvent.setup();
     const data = makeDashboardData({
@@ -336,5 +355,89 @@ describe("MvEquipmentPage", () => {
     expect(
       screen.getByText("L3 status requires a downloaded Feeder Cable ATP PDF."),
     ).toBeInTheDocument();
+  });
+
+  it("shows saved comments beside the MV item and adds a new comment from its details", async () => {
+    const user = userEvent.setup();
+    const existingComment = {
+      comment_id: "comment-1",
+      annotation_id: "equipment-1",
+      text: "Coordinate protection settings with commissioning.",
+      created_at: "2026-09-03T14:30:00+00:00",
+    };
+    const newComment = {
+      comment_id: "comment-2",
+      annotation_id: "equipment-1",
+      text: "Relay settings confirmed.",
+      created_at: "2026-09-03T15:00:00+00:00",
+    };
+    mvCommentsApi.get.mockResolvedValue({ comments: [existingComment] });
+    mvCommentsApi.add.mockResolvedValue({ comment: newComment });
+    const data = makeDashboardData({
+      powerPlanManifest: {
+        pages: [
+          {
+            page_id: "electrical-iad6-mv-1",
+            document_name: "Electrical-IAD6-MV.pdf",
+            page_number: 1,
+            page_label: "Electrical-IAD6-MV / Page 1",
+            width: 900,
+            height: 500,
+            annotations: [
+              {
+                annotation_id: "equipment-1",
+                kind: "equipment",
+                annotation_type: "Square",
+                label: "TX6-01A",
+                rect: { x: 300, y: 180, width: 180, height: 90 },
+                center: { x: 390, y: 225 },
+                matched_equipment_id: "IAD06-TX6-01A",
+                system_element_status: "Installation Complete",
+                system_element_type: "Transformer - MV",
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    const { container } = render(
+      <IssueAttachmentManifestProvider manifest={null}>
+        <NetaReportManifestProvider manifest={null}>
+          <MvEquipmentPage data={data} />
+        </NetaReportManifestProvider>
+      </IssueAttachmentManifestProvider>,
+    );
+
+    await waitFor(() => {
+      expect(container.querySelectorAll("[data-mv-comment-indicator='true']")).toHaveLength(1);
+    });
+    expect(
+      container.querySelector("[aria-label='View 1 comment for TX6-01A']"),
+    ).toBeInTheDocument();
+    expect(
+      container.querySelector("[data-mv-comment-indicator='true'] animateTransform"),
+    ).toHaveAttribute("values", "0 0; 0 -5; 0 0");
+
+    await user.click(screen.getByRole("button", { name: "View 1 comment for TX6-01A" }));
+    expect(screen.getByText(existingComment.text)).toBeInTheDocument();
+    await user.type(screen.getByLabelText("Add comment"), newComment.text);
+    await user.click(screen.getByRole("button", { name: "Add comment" }));
+
+    expect(mvCommentsApi.add).toHaveBeenCalledWith({
+      annotation_id: "equipment-1",
+      text: newComment.text,
+    });
+    expect(await screen.findByText(newComment.text)).toBeInTheDocument();
+    expect(
+      container.querySelector("[aria-label='View 2 comments for TX6-01A']"),
+    ).toBeInTheDocument();
+
+    mvCommentsApi.delete.mockResolvedValue({ comment_id: newComment.comment_id });
+    await user.click(screen.getByRole("button", { name: `Delete comment: ${newComment.text}` }));
+    expect(mvCommentsApi.delete).toHaveBeenCalledWith(newComment.comment_id);
+    await waitFor(() => {
+      expect(screen.queryByText(newComment.text)).not.toBeInTheDocument();
+    });
   });
 });

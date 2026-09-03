@@ -7,6 +7,8 @@ import type {
   JobOptions,
   MvDailyReport,
   MvDailyReportValidation,
+  MvEquipmentComment,
+  MvEquipmentCommentsResponse,
   SavedDailyReport,
   SavedMvDailyReport,
 } from "../types/automation";
@@ -176,5 +178,26 @@ export function saveMvDailyReport(
       method: "PUT",
       body: JSON.stringify(payload),
     },
+  );
+}
+
+export function getMvEquipmentComments() {
+  return request<MvEquipmentCommentsResponse>("/mv-equipment-comments");
+}
+
+export function addMvEquipmentComment(payload: {
+  annotation_id: string;
+  text: string;
+}) {
+  return request<{ comment: MvEquipmentComment }>("/mv-equipment-comments", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteMvEquipmentComment(commentId: string) {
+  return request<{ comment_id: string }>(
+    `/mv-equipment-comments/${encodeURIComponent(commentId)}`,
+    { method: "DELETE" },
   );
 }

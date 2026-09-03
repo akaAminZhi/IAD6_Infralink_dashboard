@@ -132,3 +132,14 @@ export interface SavedMvDailyReport {
   report: MvDailyReport;
   validation: MvDailyReportValidation;
 }
+
+export interface MvEquipmentComment {
+  comment_id: string;
+  annotation_id: string;
+  text: string;
+  created_at: string;
+}
+
+export interface MvEquipmentCommentsResponse {
+  comments: MvEquipmentComment[];
+}

@@ -4,8 +4,7 @@
 
 The repository currently implements the React dashboard, Python ETL, local Data
 Operations service, EPS execution views, KPR reporting, power-plan interaction,
-and MV equipment/test evidence. The active branch is `master`; the latest commit
-observed during this documentation task is `329f0f8 filter battery and inv6`.
+and MV equipment/test evidence. The active branch is `master`;
 
 The worktree was already dirty before these documentation files were added. Do
 not reset or overwrite those changes.

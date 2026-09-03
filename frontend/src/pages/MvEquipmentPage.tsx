@@ -6,10 +6,13 @@ import {
   CircleDot,
   FileText,
   Maximize2,
+  MessageCircle,
   Minus,
   MousePointer2,
   Plus,
   RotateCcw,
+  Send,
+  Trash2,
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -23,11 +26,17 @@ import type {
   PowerPlanPageRecord,
   PowerPlanRect,
 } from "../types/data";
+import type { MvEquipmentComment } from "../types/automation";
 import {
   enrichIssuesWithPdmContext,
   isOpenIssue,
   type EnrichedIssue,
 } from "../utils/issueUtils";
+import {
+  addMvEquipmentComment,
+  deleteMvEquipmentComment,
+  getMvEquipmentComments,
+} from "../utils/automationApi";
 
 interface MvEquipmentPageProps {
   data: DashboardData;
@@ -367,6 +376,19 @@ function formatMvTestDate(value: string): string {
       });
 }
 
+function formatCommentTimestamp(value: string): string {
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.valueOf())
+    ? value
+    : parsed.toLocaleString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      });
+}
+
 function normalizeEquipmentReference(value: unknown): string {
   return String(value ?? "")
     .trim()
@@ -412,6 +434,140 @@ function getRelatedIssues(
           numeric: true,
         }),
     );
+}
+
+interface CommentIndicatorPosition {
+  anchorX: number;
+  anchorY: number;
+  x: number;
+  y: number;
+}
+
+function commentIndicatorPosition(annotation: PowerPlanAnnotation): CommentIndicatorPosition {
+  if (isConnection(annotation)) {
+    return {
+      anchorX: annotation.center.x,
+      anchorY: annotation.center.y,
+      x: annotation.center.x + 42,
+      y: annotation.center.y - 42,
+    };
+  }
+  if (isTermination(annotation)) {
+    return {
+      anchorX: annotation.center.x,
+      anchorY: annotation.center.y,
+      x: annotation.center.x + 46,
+      y: annotation.center.y + 8,
+    };
+  }
+  const anchorY = annotation.rect.y + Math.min(annotation.rect.height * 0.28, 28);
+  return {
+    anchorX: annotation.rect.x + annotation.rect.width,
+    anchorY,
+    x: annotation.rect.x + annotation.rect.width + 30,
+    y: anchorY,
+  };
+}
+
+function MvCommentIndicator({
+  annotation,
+  commentCount,
+  scale,
+  onSelect,
+}: {
+  annotation: PowerPlanAnnotation;
+  commentCount: number;
+  scale: number;
+  onSelect: () => void;
+}) {
+  const position = commentIndicatorPosition(annotation);
+  return (
+    <g
+      aria-label={`View ${commentCount} comment${commentCount === 1 ? "" : "s"} for ${annotation.label}`}
+      className="cursor-pointer outline-none"
+      data-mv-comment-indicator="true"
+      onClick={(event) => {
+        event.stopPropagation();
+        onSelect();
+      }}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onSelect();
+        }
+      }}
+      role="button"
+      tabIndex={0}
+    >
+      <title>{`${commentCount} comment${commentCount === 1 ? "" : "s"}`}</title>
+      <line
+        stroke="#8b5cf6"
+        strokeDasharray="4 4"
+        strokeLinecap="round"
+        strokeWidth="2"
+        x1={position.anchorX}
+        x2={position.x}
+        y1={position.anchorY}
+        y2={position.y}
+      />
+      <g transform={`translate(${position.x} ${position.y}) scale(${scale}) translate(${-position.x} ${-position.y})`}>
+        <animateTransform
+          attributeName="transform"
+          dur="1.8s"
+          repeatCount="indefinite"
+          type="translate"
+          values="0 0; 0 -5; 0 0"
+        />
+        <circle cx={position.x} cy={position.y} fill="#a78bfa" opacity="0.26" r="30">
+          <animate
+            attributeName="r"
+            dur="1.8s"
+            repeatCount="indefinite"
+            values="28; 36; 28"
+          />
+          <animate
+            attributeName="opacity"
+            dur="1.8s"
+            repeatCount="indefinite"
+            values="0.3; 0.06; 0.3"
+          />
+        </circle>
+        <circle
+          cx={position.x}
+          cy={position.y}
+          fill="#f5f3ff"
+          r="26"
+          stroke="#6d28d9"
+          strokeWidth="2.5"
+        />
+        <MessageCircle
+          color="#5b21b6"
+          fill="#ffffff"
+          height={36}
+          strokeWidth={2.5}
+          width={36}
+          x={position.x - 18}
+          y={position.y - 18}
+        />
+        {commentCount > 1 ? (
+          <g>
+            <circle cx={position.x + 20} cy={position.y - 20} fill="#6d28d9" r="12" />
+            <text
+              dominantBaseline="central"
+              fill="#ffffff"
+              fontSize="12"
+              fontWeight="800"
+              textAnchor="middle"
+              x={position.x + 20}
+              y={position.y - 20}
+            >
+              {commentCount}
+            </text>
+          </g>
+        ) : null}
+      </g>
+    </g>
+  );
 }
 
 function RelatedIssuesPanel({
@@ -492,6 +648,94 @@ function MvDailyTestPanel({ annotation }: { annotation: PowerPlanAnnotation }) {
           </article>
         ))}
       </div>
+    </section>
+  );
+}
+
+function MvCommentsPanel({
+  comments,
+  draft,
+  error,
+  loading,
+  saving,
+  deletingCommentId,
+  onDraftChange,
+  onDelete,
+  onSave,
+}: {
+  comments: MvEquipmentComment[];
+  draft: string;
+  error: string | null;
+  loading: boolean;
+  saving: boolean;
+  deletingCommentId: string | null;
+  onDraftChange: (value: string) => void;
+  onDelete: (commentId: string) => void;
+  onSave: () => void;
+}) {
+  return (
+    <section>
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="text-xs font-semibold uppercase text-muted-foreground">Comments</h3>
+        <span className="text-xs text-muted-foreground">
+          {comments.length} total
+        </span>
+      </div>
+      <div className="mt-2 space-y-2">
+        {loading ? (
+          <p className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
+            Loading comments…
+          </p>
+        ) : comments.length === 0 ? (
+          <p className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
+            No comments yet.
+          </p>
+        ) : (
+          comments.map((comment) => (
+            <article className="rounded-md border bg-background p-3" key={comment.comment_id}>
+              <p className="whitespace-pre-wrap break-words text-xs leading-5 text-foreground">
+                {comment.text}
+              </p>
+              <div className="mt-2 flex items-center justify-between gap-2">
+                <time className="text-[11px] text-muted-foreground" dateTime={comment.created_at}>
+                  {formatCommentTimestamp(comment.created_at)}
+                </time>
+                <button
+                  aria-label={`Delete comment: ${comment.text}`}
+                  className="inline-flex items-center gap-1 rounded px-1.5 py-1 text-[11px] font-medium text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={deletingCommentId === comment.comment_id}
+                  onClick={() => onDelete(comment.comment_id)}
+                  type="button"
+                >
+                  <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                  {deletingCommentId === comment.comment_id ? "Deleting…" : "Delete"}
+                </button>
+              </div>
+            </article>
+          ))
+        )}
+      </div>
+      <label className="mt-3 block text-xs font-medium text-slate-700" htmlFor="mv-equipment-comment">
+        Add comment
+      </label>
+      <textarea
+        className="mt-1 min-h-20 w-full resize-y rounded-md border bg-background p-2 text-xs leading-5 outline-none ring-offset-background placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+        id="mv-equipment-comment"
+        maxLength={4000}
+        onChange={(event) => onDraftChange(event.target.value)}
+        placeholder="Add a note for this MV item…"
+        value={draft}
+      />
+      {error ? <p className="mt-2 text-xs text-red-700" role="alert">{error}</p> : null}
+      <button
+        className="mt-2 inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+        disabled={!draft.trim() || saving}
+        onClick={onSave}
+        type="button"
+      >
+        <Send className="h-3.5 w-3.5" aria-hidden="true" />
+        {saving ? "Saving…" : "Add comment"}
+      </button>
     </section>
   );
 }
@@ -859,6 +1103,12 @@ export function MvEquipmentPage({ data }: MvEquipmentPageProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedIssue, setSelectedIssue] = useState<EnrichedIssue | null>(null);
   const [atpPreview, setAtpPreview] = useState<AtpPreview | null>(null);
+  const [comments, setComments] = useState<MvEquipmentComment[]>([]);
+  const [commentsLoading, setCommentsLoading] = useState(true);
+  const [commentsError, setCommentsError] = useState<string | null>(null);
+  const [commentDraft, setCommentDraft] = useState("");
+  const [commentSaving, setCommentSaving] = useState(false);
+  const [deletingCommentId, setDeletingCommentId] = useState<string | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
   const panRef = useRef<PanState | null>(null);
   const suppressClickRef = useRef(false);
@@ -866,6 +1116,13 @@ export function MvEquipmentPage({ data }: MvEquipmentPageProps) {
     () => enrichIssuesWithPdmContext(data.cases, data.pdms, data.equipment),
     [data.cases, data.equipment, data.pdms],
   );
+  const commentCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    comments.forEach((comment) => {
+      counts.set(comment.annotation_id, (counts.get(comment.annotation_id) ?? 0) + 1);
+    });
+    return counts;
+  }, [comments]);
 
   useEffect(() => {
     setViewport(fullViewport);
@@ -873,6 +1130,32 @@ export function MvEquipmentPage({ data }: MvEquipmentPageProps) {
     setSelectedIssue(null);
     setAtpPreview(null);
   }, [fullViewport]);
+
+  useEffect(() => {
+    let active = true;
+    setCommentsLoading(true);
+    void getMvEquipmentComments()
+      .then((response) => {
+        if (!active) return;
+        setComments(response.comments);
+        setCommentsError(null);
+      })
+      .catch(() => {
+        if (active) {
+          setCommentsError("Comments are unavailable. Start the local dashboard service to add or view them.");
+        }
+      })
+      .finally(() => {
+        if (active) setCommentsLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    setCommentDraft("");
+  }, [selectedId]);
 
   useEffect(() => {
     const svg = svgRef.current;
@@ -908,7 +1191,11 @@ export function MvEquipmentPage({ data }: MvEquipmentPageProps) {
   const selected = currentPage.annotations.find((annotation) => annotation.annotation_id === selectedId) ?? null;
   const selectedPalette = selected ? getSystemElementPalette(selected) : NEUTRAL_PALETTE;
   const relatedIssues = getRelatedIssues(selected, enrichedIssues);
+  const selectedComments = selected
+    ? comments.filter((comment) => comment.annotation_id === selected.annotation_id)
+    : [];
   const missingRequiredAtpCount = currentPage.annotations.filter(isRequiredAtpMissing).length;
+  const commentIndicatorScale = Math.max(1, viewport.width / fullViewport.width);
   const highlightCounts = currentPage.annotations.reduce<Record<MvStatusHighlight, number>>(
     (counts, annotation) => {
       if (["equipment", "termination", "connection"].includes(annotation.kind)) {
@@ -931,7 +1218,7 @@ export function MvEquipmentPage({ data }: MvEquipmentPageProps) {
     if (event.button !== 0) return;
     if (
       (event.target as Element).closest(
-        "[data-mv-equipment='true'], [data-mv-termination='true'], [data-mv-connection='true']",
+        "[data-mv-equipment='true'], [data-mv-termination='true'], [data-mv-connection='true'], [data-mv-comment-indicator='true']",
       )
     ) {
       return;
@@ -979,6 +1266,38 @@ export function MvEquipmentPage({ data }: MvEquipmentPageProps) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
     panRef.current = null;
+  }
+
+  async function handleSaveComment() {
+    if (!selected || !commentDraft.trim() || commentSaving) return;
+    setCommentSaving(true);
+    try {
+      const response = await addMvEquipmentComment({
+        annotation_id: selected.annotation_id,
+        text: commentDraft.trim(),
+      });
+      setComments((current) => [...current, response.comment]);
+      setCommentDraft("");
+      setCommentsError(null);
+    } catch {
+      setCommentsError("Comment could not be saved. Check that the local dashboard service is running.");
+    } finally {
+      setCommentSaving(false);
+    }
+  }
+
+  async function handleDeleteComment(commentId: string) {
+    if (deletingCommentId) return;
+    setDeletingCommentId(commentId);
+    try {
+      await deleteMvEquipmentComment(commentId);
+      setComments((current) => current.filter((comment) => comment.comment_id !== commentId));
+      setCommentsError(null);
+    } catch {
+      setCommentsError("Comment could not be deleted. Check that the local dashboard service is running.");
+    } finally {
+      setDeletingCommentId(null);
+    }
   }
 
   return (
@@ -1215,6 +1534,18 @@ export function MvEquipmentPage({ data }: MvEquipmentPageProps) {
                     selected={selectedId === annotation.annotation_id}
                   />
                 ))}
+                {currentPage.annotations.map((annotation) => {
+                  const commentCount = commentCounts.get(annotation.annotation_id) ?? 0;
+                  return commentCount > 0 ? (
+                    <MvCommentIndicator
+                      annotation={annotation}
+                      commentCount={commentCount}
+                      key={`${annotation.annotation_id}-comments`}
+                      onSelect={() => setSelectedId(annotation.annotation_id)}
+                      scale={commentIndicatorScale}
+                    />
+                  ) : null;
+                })}
               </svg>
             </div>
             <aside className="flex min-h-0 max-h-[680px] flex-col overflow-hidden border-t bg-card xl:h-[680px] xl:border-l xl:border-t-0">
@@ -1262,6 +1593,17 @@ export function MvEquipmentPage({ data }: MvEquipmentPageProps) {
                     </div>
                   </div>
                   <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-4 [overflow-anchor:none] [scrollbar-gutter:stable]">
+                    <MvCommentsPanel
+                      comments={selectedComments}
+                      deletingCommentId={deletingCommentId}
+                      draft={commentDraft}
+                      error={commentsError}
+                      loading={commentsLoading}
+                      onDelete={(commentId) => void handleDeleteComment(commentId)}
+                      onDraftChange={setCommentDraft}
+                      onSave={() => void handleSaveComment()}
+                      saving={commentSaving}
+                    />
                     <section>
                       <h3 className="text-xs font-semibold uppercase text-muted-foreground">
                         System Element

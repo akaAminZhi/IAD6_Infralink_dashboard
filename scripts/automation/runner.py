@@ -739,6 +739,11 @@ class TaskManager:
                 run = json.loads(path.read_text(encoding="utf-8"))
             except (OSError, json.JSONDecodeError):
                 continue
+            if not isinstance(run, dict) or not isinstance(run.get("run_id"), str):
+                # The local runtime directory can contain other state files,
+                # such as MV equipment comments. Only task-run records belong
+                # in the automation run history.
+                continue
             if run.get("status") in ACTIVE_STATUSES:
                 run["status"] = "interrupted"
                 run["finished_at"] = utc_now()

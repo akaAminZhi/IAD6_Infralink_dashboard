@@ -4,9 +4,12 @@ import {
   AutomationApiError,
   getAutomationHealth,
   getDailyReport,
+  getMvEquipmentComments,
   getMvDailyReport,
   getRunLogs,
   runAutomationJob,
+  addMvEquipmentComment,
+  deleteMvEquipmentComment,
   saveDailyReport,
   saveMvDailyReport,
 } from "./automationApi";
@@ -28,6 +31,8 @@ describe("automationApi", () => {
     await getRunLogs("run id", 12);
     await getDailyReport("7-30.md");
     await getMvDailyReport("7-30.md");
+    await getMvEquipmentComments();
+    await deleteMvEquipmentComment("comment id");
 
     expect(fetchMock.mock.calls[0][0]).toBe("http://127.0.0.1:8765/api/automation/health");
     expect(fetchMock.mock.calls[1][0]).toBe(
@@ -39,6 +44,13 @@ describe("automationApi", () => {
     expect(fetchMock.mock.calls[3][0]).toBe(
       "http://127.0.0.1:8765/api/automation/mv-daily-reports/7-30.md",
     );
+    expect(fetchMock.mock.calls[4][0]).toBe(
+      "http://127.0.0.1:8765/api/automation/mv-equipment-comments",
+    );
+    expect(fetchMock.mock.calls[5][0]).toBe(
+      "http://127.0.0.1:8765/api/automation/mv-equipment-comments/comment%20id",
+    );
+    expect(fetchMock.mock.calls[5][1]).toMatchObject({ method: "DELETE" });
   });
 
   it("sends JSON job and daily-report payloads", async () => {
@@ -63,6 +75,7 @@ describe("automationApi", () => {
       retested_and_passed: "MV-D",
       overwrite: false,
     });
+    await addMvEquipmentComment({ annotation_id: "equipment-1", text: "Check relay." });
 
     expect(fetchMock.mock.calls[0][1]).toMatchObject({
       method: "POST",
@@ -86,6 +99,10 @@ describe("automationApi", () => {
         retested_and_passed: "MV-D",
         overwrite: false,
       }),
+    });
+    expect(fetchMock.mock.calls[3][1]).toMatchObject({
+      method: "POST",
+      body: JSON.stringify({ annotation_id: "equipment-1", text: "Check relay." }),
     });
   });
 
