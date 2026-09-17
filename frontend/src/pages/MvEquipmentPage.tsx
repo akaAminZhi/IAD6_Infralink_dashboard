@@ -22,11 +22,14 @@ import { IssueDetailDrawer } from "../components/issues/IssueDetailDrawer";
 import { IssueStatusBadge } from "../components/issues/IssueStatusBadge";
 import type {
   DashboardData,
-  PowerPlanAnnotation,
+  PowerPlanAnnotation as BasePowerPlanAnnotation,
   PowerPlanPageRecord,
   PowerPlanRect,
 } from "../types/data";
 import type { MvEquipmentComment } from "../types/automation";
+import { enrichPowerPlanEquipment, POWER_PLAN_STATUS_COLORS } from "../utils/powerPlanUtils";
+import { formatDateTime } from "../utils/formatters";
+import { requiresEquipmentTestTracking } from "../utils/equipmentTrackingUtils";
 import {
   enrichIssuesWithPdmContext,
   isOpenIssue,
@@ -73,6 +76,13 @@ function isTransformer(annotation: PowerPlanAnnotation): boolean {
     !isTermination(annotation) &&
     annotation.label.toUpperCase().includes("TX")
   );
+}
+
+interface PowerPlanAnnotation extends BasePowerPlanAnnotation {
+  netaComplete?: boolean;
+  netaCompletedAt?: string | null;
+  trackingRequired?: boolean;
+  failedCount?: number;
 }
 
 interface AtpPreview {
@@ -217,8 +227,9 @@ interface MvStatusPalette {
 }
 
 type MvStatusHighlight =
+  | "netaComplete"
+  | "dailyPassedPendingNeta"
   | "failed"
-  | "tested"
   | "cableTestedAndUpdated"
   | "cableUpdatePending"
   | "shipToSite"
@@ -246,6 +257,12 @@ const INSTALLATION_COMPLETE_PALETTE: MvStatusPalette = {
 const TESTED_PALETTE: MvStatusPalette = {
   fill: "#dcfce7",
   stroke: "#16a34a",
+  text: "#166534",
+};
+
+const DAILY_PASSED_PENDING_NETA_PALETTE: MvStatusPalette = {
+  fill: "#f0fdf4",
+  stroke: "#86efac",
   text: "#166534",
 };
 
@@ -287,6 +304,7 @@ function isRequiredAtpMissing(annotation: PowerPlanAnnotation): boolean {
 }
 
 function getSystemStatusHighlight(annotation: PowerPlanAnnotation): MvStatusHighlight {
+  if (annotation.netaComplete) return "netaComplete";
   const status = normalizeStatus(annotation.system_element_status);
   if (isCableTestedAndInfralinkUpdated(annotation)) return "cableTestedAndUpdated";
   if (status.includes("SHIP TO SITE")) return "shipToSite";
@@ -300,17 +318,23 @@ function getSystemStatusHighlight(annotation: PowerPlanAnnotation): MvStatusHigh
 }
 
 function getStatusHighlight(annotation: PowerPlanAnnotation): MvStatusHighlight {
+  if (annotation.netaComplete) return "netaComplete";
   if (isMvDailyTestFailed(annotation)) return "failed";
   if (isCableTestedAndInfralinkUpdated(annotation)) return "cableTestedAndUpdated";
   if (isConnection(annotation) && isMvDailyTestPassed(annotation)) {
     return "cableUpdatePending";
   }
-  return isMvDailyTestPassed(annotation) ? "tested" : getSystemStatusHighlight(annotation);
+  if (!isConnection(annotation) && isMvDailyTestPassed(annotation)) {
+    return "dailyPassedPendingNeta";
+  }
+  return getSystemStatusHighlight(annotation);
 }
 
 function paletteForHighlight(highlight: MvStatusHighlight): MvStatusPalette {
+  if (highlight === "netaComplete") return POWER_PLAN_STATUS_COLORS.ready;
+  if (highlight === "dailyPassedPendingNeta") return DAILY_PASSED_PENDING_NETA_PALETTE;
   if (highlight === "failed") return FAILED_PALETTE;
-  if (highlight === "tested" || highlight === "cableTestedAndUpdated") return TESTED_PALETTE;
+  if (highlight === "cableTestedAndUpdated") return TESTED_PALETTE;
   if (highlight === "cableUpdatePending") return CABLE_UPDATE_PENDING_PALETTE;
   if (highlight === "shipToSite") return SHIP_TO_SITE_PALETTE;
   if (highlight === "installationComplete") return INSTALLATION_COMPLETE_PALETTE;
@@ -370,10 +394,10 @@ function formatMvTestDate(value: string): string {
   return Number.isNaN(parsed.valueOf())
     ? value
     : parsed.toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-      });
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
 }
 
 function formatCommentTimestamp(value: string): string {
@@ -381,12 +405,12 @@ function formatCommentTimestamp(value: string): string {
   return Number.isNaN(parsed.valueOf())
     ? value
     : parsed.toLocaleString("en-US", {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-        hour: "numeric",
-        minute: "2-digit",
-      });
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
 }
 
 function normalizeEquipmentReference(value: unknown): string {
@@ -1094,7 +1118,30 @@ export function MvEquipmentPage({ data }: MvEquipmentPageProps) {
         .sort((left, right) => left.page_number - right.page_number),
     [data.powerPlanManifest],
   );
-  const currentPage = useMemo(() => combineMvPages(pages), [pages]);
+  const currentPage = useMemo(() => {
+    const page = combineMvPages(pages);
+    if (!page) return null;
+    const rows = new Map(enrichPowerPlanEquipment(page.annotations, data).map(
+      (row) => [row.annotation.annotation_id, row],
+    ));
+    return {
+      ...page,
+      annotations: page.annotations.map((annotation): PowerPlanAnnotation => {
+        const row = rows.get(annotation.annotation_id);
+        return {
+          ...annotation,
+          netaComplete: row?.status === "ready",
+          netaCompletedAt: row?.equipment?.neta_completed_at,
+          trackingRequired: requiresEquipmentTestTracking({
+            ...row?.equipment,
+            equipment_id: row?.equipment?.equipment_id ?? annotation.matched_equipment_id,
+            source_equipment_label: annotation.label,
+          }),
+          failedCount: row?.failedCount || (isMvDailyTestFailed(annotation) ? 1 : 0),
+        };
+      }),
+    };
+  }, [pages, data]);
   const fullViewport = useMemo(
     () => currentPage ? annotationBounds(currentPage) : { x: 0, y: 0, width: 1, height: 1 },
     [currentPage],
@@ -1204,8 +1251,9 @@ export function MvEquipmentPage({ data }: MvEquipmentPageProps) {
       return counts;
     },
     {
+      netaComplete: 0,
+      dailyPassedPendingNeta: 0,
       failed: 0,
-      tested: 0,
       cableTestedAndUpdated: 0,
       cableUpdatePending: 0,
       shipToSite: 0,
@@ -1340,8 +1388,12 @@ export function MvEquipmentPage({ data }: MvEquipmentPageProps) {
             {`Cable Tested / Infralink Pending ${highlightCounts.cableUpdatePending}`}
           </span>
           <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-800">
-            <span className="h-3.5 w-3.5 rounded-[3px] border-2 border-green-600 bg-green-100" />
-            {`Other MV Daily Passed ${highlightCounts.tested}`}
+            <span className="h-3.5 w-3.5 rounded-[3px] border-2 border-emerald-600 bg-emerald-100" />
+            {`NETA Complete ${highlightCounts.netaComplete}`}
+          </span>
+          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-green-800">
+            <span className="h-3.5 w-3.5 rounded-[3px] border-2 border-green-300 bg-green-50" />
+            {`MV Daily Passed / NETA Pending ${highlightCounts.dailyPassedPendingNeta}`}
           </span>
           <span className="inline-flex items-center gap-1.5 text-xs font-medium text-red-800">
             <span className="h-3.5 w-3.5 rounded-[3px] border-2 border-red-800 bg-red-500" />
@@ -1534,6 +1586,21 @@ export function MvEquipmentPage({ data }: MvEquipmentPageProps) {
                     selected={selectedId === annotation.annotation_id}
                   />
                 ))}
+                {currentPage.annotations.filter((annotation) => (annotation.failedCount ?? 0) > 0).map((annotation) => (
+                  <g
+                    aria-label={`${annotation.label}: ${annotation.failedCount} failed test items`}
+                    key={`${annotation.annotation_id}-failed`}
+                    pointerEvents="none"
+                    transform={`translate(${annotation.rect.x + annotation.rect.width} ${annotation.rect.y})`}
+                  >
+                    <g className="animate-equipment-failed">
+                      <circle fill="#b91c1c" r="12" stroke="white" strokeWidth="2" />
+                      <text fill="white" fontSize="10" fontWeight="700" textAnchor="middle" y="3">
+                        {annotation.failedCount}
+                      </text>
+                    </g>
+                  </g>
+                ))}
                 {currentPage.annotations.map((annotation) => {
                   const commentCount = commentCounts.get(annotation.annotation_id) ?? 0;
                   return commentCount > 0 ? (
@@ -1621,6 +1688,22 @@ export function MvEquipmentPage({ data }: MvEquipmentPageProps) {
                             {selected.matched_equipment_id || "Not matched"}
                           </dd>
                         </div>
+                        {selected.kind === "equipment" ? (
+                          <>
+                            <div className="grid grid-cols-[92px_minmax(0,1fr)] gap-3 px-3 py-2.5 text-xs">
+                              <dt className="text-muted-foreground">Infralink NETA</dt>
+                              <dd className={selected.netaComplete ? "font-semibold text-emerald-700" : "font-medium"}>
+                                {selected.trackingRequired ? (selected.netaComplete ? "NETA Complete" : "Incomplete") : "Not Tracked"}
+                              </dd>
+                            </div>
+                            {selected.netaComplete ? (
+                              <div className="grid grid-cols-[92px_minmax(0,1fr)] gap-3 px-3 py-2.5 text-xs">
+                                <dt className="text-muted-foreground">NETA Completed</dt>
+                                <dd className="font-medium">{selected.netaCompletedAt ? formatDateTime(selected.netaCompletedAt) : "Completion date unavailable"}</dd>
+                              </div>
+                            ) : null}
+                          </>
+                        ) : null}
                         {isConnection(selected) ? (
                           <div className="grid grid-cols-[92px_minmax(0,1fr)] gap-3 px-3 py-2.5 text-xs">
                             <dt className="text-muted-foreground">Cable State</dt>

@@ -6,6 +6,8 @@ import {
   enrichPdmSchematicEquipment,
   enrichPowerPlanEquipment,
   getAnnotationBounds,
+  getPowerPlanAreaFamily,
+  getPowerPlanAreaName,
   isPowerPlanWaivedItem,
   normalizePowerPlanEquipmentKey,
 } from "./powerPlanUtils";
@@ -22,6 +24,22 @@ function annotation(label: string): PowerPlanAnnotation {
 }
 
 describe("powerPlanUtils", () => {
+  it.each([
+    ["IAD06-POD-E6-110-01", "E6-110", "E6-110-01"],
+    ["IAD06-POD-E6-110-02", "E6-110", "E6-110-02"],
+    ["IAD06-POD-E6-110-01R", "E6-110", "E6-110-01"],
+    [" iad06-pod-e6-110-01r ", "E6-110", "E6-110-01"],
+    ["IAD06-PDM-E6-110-01", "E6-110", "E6-110-01"],
+    ["IAD06-PDM-E6-110-02-ATS", "E6-110", "E6-110-02"],
+    ["IAD06-PDM-E6-110", "E6-110", "E6-110"],
+    ["IAD06-POD-E6-110-010", "E6-110", "E6-110"],
+    ["IAD06-OTHER-E6-110-01", "Other", "Other"],
+    [null, "Other", "Other"],
+  ])("groups %s into its area without changing the equipment group name", (name, family, area) => {
+    expect(getPowerPlanAreaFamily(name)).toBe(family);
+    expect(getPowerPlanAreaName(name)).toBe(area);
+  });
+
   it("normalizes equipment keys and bounds annotations", () => {
     expect(normalizePowerPlanEquipmentKey(" iad06-pdu6-01a-1 ")).toBe("PDU6-01A-1");
     expect(getAnnotationBounds([], 1000, 800)).toEqual({

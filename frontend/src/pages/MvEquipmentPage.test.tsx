@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { IssueAttachmentManifestProvider } from "../contexts/IssueAttachmentManifestContext";
 import { NetaReportManifestProvider } from "../contexts/NetaReportManifestContext";
 import { makeDashboardData } from "../test/fixtures";
+import { formatDateTime } from "../utils/formatters";
 import { MvEquipmentPage } from "./MvEquipmentPage";
 
 const mvCommentsApi = vi.hoisted(() => ({
@@ -25,6 +26,40 @@ describe("MvEquipmentPage", () => {
     mvCommentsApi.delete.mockReset();
     mvCommentsApi.get.mockReset();
     mvCommentsApi.get.mockResolvedValue({ comments: [] });
+  });
+
+  it.each(["TX6-01A", "UTILITY6-01"])("shows NETA completion and current failed items for %s", async (label) => {
+    const user = userEvent.setup();
+    const completedAt = "2026-09-10T14:30:00";
+    const data = makeDashboardData({
+      equipment: [{ equipment_id: `IAD06-${label}`, neta_complete: true, neta_completed_at: completedAt }],
+      epsTestItems: [
+        { module_equipment: label, item_status: "Failed", test_item: "Insulation" },
+        { module_equipment: label, item_status: "Failed - pending", test_item: "Resistance" },
+        { module_equipment: label, item_status: "Fixed", test_item: "Grounding" },
+        { module_equipment: "OTHER", item_status: "Failed" },
+      ],
+      powerPlanManifest: { pages: [{
+        page_id: "mv", page_label: "MV", document_name: "Electrical-IAD6-MV.pdf", page_number: 1,
+        width: 1000, height: 700,
+        annotations: [{ annotation_id: "mv-1", kind: "equipment", label,
+          matched_equipment_id: `IAD06-${label}`, system_element_status: "NETA Complete",
+          mv_daily_test_status: "failed",
+          rect: { x: 100, y: 100, width: 180, height: 90 }, center: { x: 190, y: 145 },
+        }],
+      }] },
+    });
+    const { container, rerender } = render(<MvEquipmentPage data={data} />);
+    expect(container.querySelectorAll("[data-mv-equipment='true'] rect")[1]).toHaveAttribute("fill", "#d1fae5");
+    expect(screen.getByLabelText(`${label}: 2 failed test items`)).toHaveTextContent("2");
+    expect(screen.getByText("NETA Complete 1")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: `${label}, MV ${label.startsWith("TX") ? "transformer" : "equipment"}` }));
+    expect(screen.getByText(formatDateTime(completedAt))).toBeInTheDocument();
+
+    rerender(<MvEquipmentPage data={{ ...data, equipment: [{ ...data.equipment[0], neta_completed_at: null }], epsTestItems: [] }} />);
+    await user.click(screen.getByRole("button", { name: `${label}, MV ${label.startsWith("TX") ? "transformer" : "equipment"}` }));
+    expect(screen.getByText("Completion date unavailable")).toBeInTheDocument();
+    expect(screen.getByLabelText(`${label}: 1 failed test items`)).toHaveTextContent("1");
   });
 
   it("combines PDF pages and draws all MV annotations on one canvas", async () => {
@@ -177,7 +212,7 @@ describe("MvEquipmentPage", () => {
     expect(container.querySelectorAll("[data-mv-connection='true']")).toHaveLength(1);
     expect(screen.getByText("Cable Tested + Infralink Updated 0")).toBeInTheDocument();
     expect(screen.getByText("Cable Tested / Infralink Pending 1")).toBeInTheDocument();
-    expect(screen.getByText("Other MV Daily Passed 1")).toBeInTheDocument();
+    expect(screen.getByText("MV Daily Passed / NETA Pending 1")).toBeInTheDocument();
     expect(screen.getByText("MV Daily Failed 1")).toBeInTheDocument();
     expect(screen.getByText("Ship to Site 1")).toBeInTheDocument();
     expect(
@@ -187,7 +222,8 @@ describe("MvEquipmentPage", () => {
     expect(screen.queryByRole("button", { name: "Page 1, 4 annotations" })).not.toBeInTheDocument();
 
     const transformerRects = container.querySelectorAll("[data-mv-transformer='true'] rect");
-    expect(transformerRects[1]).toHaveAttribute("stroke", "#16a34a");
+    expect(transformerRects[1]).toHaveAttribute("stroke", "#86efac");
+    expect(transformerRects[1]).toHaveAttribute("fill", "#f0fdf4");
     const terminationBody = container.querySelector("[data-mv-termination='true'] > circle");
     expect(terminationBody).toHaveAttribute("fill", "#fef3c7");
     expect(Number(terminationBody?.getAttribute("r"))).toBeGreaterThan(13);
