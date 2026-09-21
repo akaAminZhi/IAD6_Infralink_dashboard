@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   AutomationApiError,
+  clearNetaReportReviewCache,
   getAutomationHealth,
   getDailyReport,
   getMvEquipmentComments,
@@ -10,15 +11,43 @@ import {
   runAutomationJob,
   addMvEquipmentComment,
   deleteMvEquipmentComment,
+  getNetaReportReviews,
   saveDailyReport,
   saveMvDailyReport,
+  updateNetaReportReview,
 } from "./automationApi";
 
 afterEach(() => {
+  clearNetaReportReviewCache();
   vi.restoreAllMocks();
 });
 
 describe("automationApi", () => {
+  it("shares pending reads, caches for 30 seconds, and invalidates after saving", async () => {
+    const clock = vi.spyOn(Date, "now").mockReturnValue(1000);
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
+      new Response(JSON.stringify({ reports: [] }), { status: 200 }),
+    );
+    const first = getNetaReportReviews();
+    expect(getNetaReportReviews()).toBe(first);
+    const value = await first;
+    expect(await getNetaReportReviews()).toBe(value);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    clock.mockReturnValue(31001);
+    await getNetaReportReviews();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    await updateNetaReportReview("EQ/report.pdf", "PASSED");
+    await getNetaReportReviews();
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
+
+  it("retries failed reads instead of caching errors", async () => {
+    vi.spyOn(globalThis, "fetch")
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ reports: [] })));
+    await expect(getNetaReportReviews()).rejects.toThrow("offline");
+    expect(await getNetaReportReviews()).toEqual({ reports: [] });
+  });
   it("uses the local API and encodes path parameters", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
       return new Response(JSON.stringify({ status: "ok" }), {
@@ -33,6 +62,7 @@ describe("automationApi", () => {
     await getMvDailyReport("7-30.md");
     await getMvEquipmentComments();
     await deleteMvEquipmentComment("comment id");
+    await getNetaReportReviews();
 
     expect(fetchMock.mock.calls[0][0]).toBe("http://127.0.0.1:8765/api/automation/health");
     expect(fetchMock.mock.calls[1][0]).toBe(
@@ -51,6 +81,9 @@ describe("automationApi", () => {
       "http://127.0.0.1:8765/api/automation/mv-equipment-comments/comment%20id",
     );
     expect(fetchMock.mock.calls[5][1]).toMatchObject({ method: "DELETE" });
+    expect(fetchMock.mock.calls[6][0]).toBe(
+      "http://127.0.0.1:8765/api/automation/neta-report-reviews",
+    );
   });
 
   it("sends JSON job and daily-report payloads", async () => {
@@ -76,6 +109,7 @@ describe("automationApi", () => {
       overwrite: false,
     });
     await addMvEquipmentComment({ annotation_id: "equipment-1", text: "Check relay." });
+    await updateNetaReportReview("EQ-1/EQ-1.pdf", "PASSED");
 
     expect(fetchMock.mock.calls[0][1]).toMatchObject({
       method: "POST",
@@ -103,6 +137,10 @@ describe("automationApi", () => {
     expect(fetchMock.mock.calls[3][1]).toMatchObject({
       method: "POST",
       body: JSON.stringify({ annotation_id: "equipment-1", text: "Check relay." }),
+    });
+    expect(fetchMock.mock.calls[4][1]).toMatchObject({
+      method: "PUT",
+      body: JSON.stringify({ file: "EQ-1/EQ-1.pdf", status: "PASSED" }),
     });
   });
 

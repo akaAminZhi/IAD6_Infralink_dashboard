@@ -13,6 +13,8 @@ import {
 } from "../components/equipment/EquipmentSummaryCards";
 import { EquipmentTable } from "../components/equipment/EquipmentTable";
 import type { DashboardData } from "../types/data";
+import type { NetaReportReview, NetaReportReviewsResponse } from "../types/automation";
+import { getNetaReportReviews } from "../utils/automationApi";
 import {
   flattenEquipmentFromPdms,
   getCasesMissingIssueImageCount,
@@ -26,6 +28,7 @@ import {
   type FlattenedEquipmentRow,
 } from "../utils/equipmentUtils";
 import { matchesSearchQuery } from "../utils/searchUtils";
+import { getEquipmentNetaReviewState, type EquipmentNetaReviewState } from "../utils/netaReportReviews";
 
 interface EquipmentPageProps {
   data: DashboardData;
@@ -43,6 +46,8 @@ const defaultFilters: EquipmentFiltersState = {
   missingNetaReportOnly: false,
   newNetaCompleteOnly: false,
   cxalloyPendingOnly: false,
+  netaReportFailedOnly: false,
+  netaReportReviewRequiredOnly: false,
 };
 
 function normalizeFilterValue(value: unknown): string {
@@ -53,6 +58,7 @@ function filterEquipmentRows(
   rows: FlattenedEquipmentRow[],
   filters: EquipmentFiltersState,
   newNetaCompleteIds: Set<string>,
+  reviewStates: Map<string, EquipmentNetaReviewState | null>,
 ): FlattenedEquipmentRow[] {
   const equipmentSearch = filters.equipmentSearch.trim();
   const pdmSearch = filters.pdmSearch.trim();
@@ -99,6 +105,13 @@ function filterEquipmentRows(
       return false;
     }
     if (filters.cxalloyPendingOnly && !hasPendingCxalloyReport(row)) {
+      return false;
+    }
+    const reviewState = reviewStates.get(row.row_id);
+    if (filters.netaReportFailedOnly && reviewState !== "failed") {
+      return false;
+    }
+    if (filters.netaReportReviewRequiredOnly && reviewState !== "review_required") {
       return false;
     }
     if (
@@ -150,6 +163,12 @@ function getActiveQuickFilter(filters: EquipmentFiltersState): EquipmentQuickFil
   if (filters.cxalloyPendingOnly) {
     return "cxalloyPending";
   }
+  if (filters.netaReportFailedOnly) {
+    return "netaReportFailed";
+  }
+  if (filters.netaReportReviewRequiredOnly) {
+    return "netaReportReviewRequired";
+  }
 
   return null;
 }
@@ -172,6 +191,12 @@ function getFiltersForQuickFilter(filter: string | null): EquipmentFiltersState 
   }
   if (filter === "cxalloyPending") {
     return { ...defaultFilters, cxalloyPendingOnly: true };
+  }
+  if (filter === "netaReportFailed") {
+    return { ...defaultFilters, netaReportFailedOnly: true };
+  }
+  if (filter === "netaReportReviewRequired") {
+    return { ...defaultFilters, netaReportReviewRequiredOnly: true };
   }
 
   return defaultFilters;
@@ -260,7 +285,25 @@ export function EquipmentPage({ data }: EquipmentPageProps) {
       : getFiltersForQuickFilter(quickFilterParam),
   );
   const [selectedEquipment, setSelectedEquipment] = useState<FlattenedEquipmentRow | null>(null);
+  const [netaReportReviews, setNetaReportReviews] =
+    useState<NetaReportReviewsResponse | null>(null);
   const deferredFilters = useDeferredValue(filters);
+
+  useEffect(() => {
+    let cancelled = false;
+    getNetaReportReviews()
+      .then((response) => {
+        if (!cancelled) {
+          setNetaReportReviews(response);
+        }
+      })
+      .catch(() => {
+        // The Equipment page remains usable when the loopback automation API is offline.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const equipmentRows = useMemo(
     () =>
@@ -297,14 +340,45 @@ export function EquipmentPage({ data }: EquipmentPageProps) {
     }),
     [equipmentRows],
   );
+  const reviewStates = useMemo(() => new Map(
+    equipmentRows.map((row) => [
+      row.row_id,
+      getEquipmentNetaReviewState(row.neta_test_report, netaReportReviews, data.netaReportManifest),
+    ]),
+  ), [equipmentRows, netaReportReviews, data.netaReportManifest]);
+  const netaReviewCounts = useMemo(() => {
+    const failed = new Set<string>();
+    const reviewRequired = new Set<string>();
+    for (const row of equipmentRows) {
+      const state = reviewStates.get(row.row_id);
+      const equipmentKey = normalizeEquipmentKey(row.display_equipment_id);
+      if (state === "failed") {
+        failed.add(equipmentKey);
+      } else if (state === "review_required") {
+        reviewRequired.add(equipmentKey);
+      }
+    }
+    return { failed: failed.size, reviewRequired: reviewRequired.size };
+  }, [equipmentRows, reviewStates]);
   const filteredRows = useMemo(() => {
-    const rows = filterEquipmentRows(equipmentRows, deferredFilters, newNetaCompleteIds);
+    const rows = filterEquipmentRows(
+      equipmentRows,
+      deferredFilters,
+      newNetaCompleteIds,
+      reviewStates,
+    );
     return sortEquipmentRows(
       kprEquipmentFilterIds === null
         ? rows
         : rows.filter((row) => equipmentRowMatchesIds(row, kprEquipmentFilterIds)),
     );
-  }, [deferredFilters, equipmentRows, kprEquipmentFilterIds, newNetaCompleteIds]);
+  }, [
+    deferredFilters,
+    equipmentRows,
+    kprEquipmentFilterIds,
+    reviewStates,
+    newNetaCompleteIds,
+  ]);
   const selectedGroup = useMemo(() => {
     if (!selectedEquipment) {
       return [];
@@ -339,6 +413,22 @@ export function EquipmentPage({ data }: EquipmentPageProps) {
       newNetaCompleteOnly: filter === "recentNetaComplete",
       neta: filter === "netaComplete" ? "complete" : "",
       openCasesOnly: filter === "openCases",
+      netaReportFailedOnly: filter === "netaReportFailed",
+      netaReportReviewRequiredOnly: filter === "netaReportReviewRequired",
+    });
+  }
+
+  function handleNetaReportReviewUpdated(updated: NetaReportReview) {
+    setNetaReportReviews((current) => {
+      if (!current) {
+        return current;
+      }
+      return {
+        ...current,
+        reports: current.reports.map((report) =>
+          report.file === updated.file ? updated : report,
+        ),
+      };
     });
   }
 
@@ -358,6 +448,9 @@ export function EquipmentPage({ data }: EquipmentPageProps) {
         historyComparison={data.historyComparison}
         metrics={summaryMetrics}
         newNetaCompleteCount={newNetaCompleteCount}
+        netaReportFailedCount={netaReviewCounts.failed}
+        netaReportReviewRequiredCount={netaReviewCounts.reviewRequired}
+        netaReportReviewsAvailable={netaReportReviews !== null}
         onSelectFilter={handleQuickFilter}
       />
 
@@ -379,7 +472,9 @@ export function EquipmentPage({ data }: EquipmentPageProps) {
       <EquipmentDetailDrawer
         associatedRows={selectedGroup}
         equipment={selectedEquipment}
+        netaReportReviews={netaReportReviews}
         onClose={() => setSelectedEquipment(null)}
+        onNetaReportReviewUpdated={handleNetaReportReviewUpdated}
       />
     </div>
   );

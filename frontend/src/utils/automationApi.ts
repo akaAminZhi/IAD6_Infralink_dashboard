@@ -9,6 +9,7 @@ import type {
   MvDailyReportValidation,
   MvEquipmentComment,
   MvEquipmentCommentsResponse,
+  NetaReportReviewsResponse,
   SavedDailyReport,
   SavedMvDailyReport,
 } from "../types/automation";
@@ -200,4 +201,46 @@ export function deleteMvEquipmentComment(commentId: string) {
     `/mv-equipment-comments/${encodeURIComponent(commentId)}`,
     { method: "DELETE" },
   );
+}
+
+let reviewCache: { value: NetaReportReviewsResponse; expires: number } | null = null;
+let reviewRequest: Promise<NetaReportReviewsResponse> | null = null;
+
+export function clearNetaReportReviewCache() {
+  reviewCache = null;
+  reviewRequest = null;
+}
+
+export function getNetaReportReviews(): Promise<NetaReportReviewsResponse> {
+  if (reviewCache && Date.now() < reviewCache.expires) {
+    return Promise.resolve(reviewCache.value);
+  }
+  if (reviewRequest) return reviewRequest;
+  const pending = request<NetaReportReviewsResponse>("/neta-report-reviews")
+    .then((value) => {
+      if (reviewRequest === pending) {
+        reviewCache = { value, expires: Date.now() + 30_000 };
+      }
+      return value;
+    })
+    .finally(() => {
+      if (reviewRequest === pending) reviewRequest = null;
+    });
+  reviewRequest = pending;
+  return pending;
+}
+
+export async function updateNetaReportReview(
+  file: string,
+  status: "PASSED" | "FAILED",
+) {
+  const response = await request<{ report: NetaReportReviewsResponse["reports"][number] }>(
+    "/neta-report-reviews",
+    {
+      method: "PUT",
+      body: JSON.stringify({ file, status }),
+    },
+  );
+  clearNetaReportReviewCache();
+  return response;
 }

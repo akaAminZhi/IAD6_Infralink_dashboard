@@ -143,3 +143,28 @@ export interface MvEquipmentComment {
 export interface MvEquipmentCommentsResponse {
   comments: MvEquipmentComment[];
 }
+
+export type NetaReportReviewStatus =
+  | "PASSED"
+  | "FAILED"
+  | "REVIEW_REQUIRED"
+  | "ERROR";
+
+export interface NetaReportReview {
+  file: string;
+  status: NetaReportReviewStatus;
+  is_passed: boolean | null;
+  evidence?: string[];
+  manual_review?: {
+    status?: "PASSED" | "FAILED";
+    reviewed_at?: string;
+  } | null;
+}
+
+export interface NetaReportReviewsResponse {
+  generated_at?: string | null;
+  last_reviewed_at?: string | null;
+  total_reports: number;
+  summary: Record<NetaReportReviewStatus, number>;
+  reports: NetaReportReview[];
+}

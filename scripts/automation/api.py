@@ -26,6 +26,10 @@ from scripts.automation.mv_comments import (
     delete_mv_equipment_comment,
     list_mv_equipment_comments,
 )
+from scripts.automation.neta_report_reviews import (
+    list_neta_report_reviews,
+    update_neta_report_review,
+)
 from scripts.automation.runner import AutomationConfig, TaskManager
 
 
@@ -78,6 +82,13 @@ class MvEquipmentCommentRequest(BaseModel):
 
     annotation_id: str = Field(min_length=1, max_length=300)
     text: str = Field(min_length=1, max_length=4_000)
+
+
+class NetaReportReviewRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    file: str = Field(min_length=1, max_length=500)
+    status: str = Field(pattern=r"^(PASSED|FAILED)$")
 
 
 def _file_status(path: Path) -> dict[str, Any]:
@@ -334,6 +345,32 @@ def create_app(
     @app.get("/api/automation/mv-equipment-comments")
     def mv_equipment_comments() -> dict[str, list[dict[str, str]]]:
         return {"comments": list_mv_equipment_comments(resolved_config.runtime_root)}
+
+    @app.get("/api/automation/neta-report-reviews")
+    def neta_report_reviews() -> dict[str, Any]:
+        try:
+            return list_neta_report_reviews(resolved_config.neta_report_results_path)
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    @app.put("/api/automation/neta-report-reviews")
+    def save_neta_report_review(request: NetaReportReviewRequest) -> dict[str, Any]:
+        try:
+            return {
+                "report": update_neta_report_review(
+                    resolved_config.neta_report_results_path,
+                    request.file,
+                    request.status,
+                )
+            }
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (OSError, ValueError) as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     @app.post("/api/automation/mv-equipment-comments", status_code=201)
     def add_mv_equipment_comment_endpoint(

@@ -2,8 +2,10 @@ import {
   AlertTriangle,
   CheckCircle2,
   CloudUpload,
+  ClipboardCheck,
   FileWarning,
   ImageOff,
+  ShieldAlert,
   TrendingUp,
 } from "lucide-react";
 
@@ -20,13 +22,18 @@ export type EquipmentQuickFilter =
   | "missingIssueImages"
   | "netaComplete"
   | "recentNetaComplete"
-  | "cxalloyPending";
+  | "cxalloyPending"
+  | "netaReportFailed"
+  | "netaReportReviewRequired";
 
 interface EquipmentSummaryCardsProps {
   activeFilter: EquipmentQuickFilter | null;
   historyComparison: HistoryComparison | null;
   metrics: EquipmentSummaryMetrics;
   newNetaCompleteCount: number;
+  netaReportFailedCount: number;
+  netaReportReviewRequiredCount: number;
+  netaReportReviewsAvailable: boolean;
   onSelectFilter: (filter: EquipmentQuickFilter) => void;
 }
 
@@ -48,12 +55,35 @@ export function EquipmentSummaryCards({
   historyComparison,
   metrics,
   newNetaCompleteCount,
+  netaReportFailedCount,
+  netaReportReviewRequiredCount,
+  netaReportReviewsAvailable,
   onSelectFilter,
 }: EquipmentSummaryCardsProps) {
   const netaHistory = historyComparison?.neta_complete ?? null;
   const baselineDate = formatSnapshotDate(netaHistory?.baseline_date);
 
   const exceptions = [
+    {
+      description: "Equipment with at least one failed NETA report.",
+      filter: "netaReportFailed" as const,
+      icon: ShieldAlert,
+      label: "Failed NETA Reports",
+      value: netaReportFailedCount,
+      activeClass: "text-red-700",
+      alertClass: "text-red-700",
+      available: netaReportReviewsAvailable,
+    },
+    {
+      description: "Equipment with a NETA report awaiting manual review.",
+      filter: "netaReportReviewRequired" as const,
+      icon: ClipboardCheck,
+      label: "NETA Review Required",
+      value: netaReportReviewRequiredCount,
+      activeClass: "text-orange-700",
+      alertClass: "text-orange-700",
+      available: netaReportReviewsAvailable,
+    },
     {
       description: "GC report packages not confirmed as uploaded.",
       filter: "cxalloyPending" as const,
@@ -62,6 +92,7 @@ export function EquipmentSummaryCards({
       value: metrics.cxalloyPendingEquipment,
       activeClass: "text-blue-700",
       alertClass: "text-blue-700",
+      available: true,
     },
     {
       description: "NETA complete equipment missing report evidence.",
@@ -71,6 +102,7 @@ export function EquipmentSummaryCards({
       value: metrics.missingNetaReports,
       activeClass: "text-red-700",
       alertClass: "text-red-700",
+      available: true,
     },
     {
       description: "Related cases without issue image references.",
@@ -80,6 +112,7 @@ export function EquipmentSummaryCards({
       value: metrics.casesMissingIssueImage,
       activeClass: "text-amber-700",
       alertClass: "text-amber-700",
+      available: true,
     },
   ];
 
@@ -168,20 +201,21 @@ export function EquipmentSummaryCards({
           </button>
         </div>
 
-        <div className="grid border-t lg:grid-cols-3">
+        <div className="grid border-t md:grid-cols-2 xl:grid-cols-5">
           {exceptions.map((item, index) => {
             const Icon = item.icon;
             const isActive = activeFilter === item.filter;
-            const hasException = item.value > 0;
+            const hasException = item.available && item.value > 0;
             return (
               <button
                 aria-pressed={isActive}
                 className={cn(
                   "flex min-h-24 items-center gap-3 px-5 py-4 text-left transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
-                  index < exceptions.length - 1 ? "border-b lg:border-b-0 lg:border-r" : "",
+                  index < exceptions.length - 1 ? "border-b xl:border-b-0 xl:border-r" : "",
                   isActive ? "bg-blue-50/70" : "bg-background",
                 )}
                 key={item.filter}
+                disabled={!item.available}
                 onClick={() => onSelectFilter(item.filter)}
                 type="button"
               >
@@ -202,10 +236,14 @@ export function EquipmentSummaryCards({
                       hasException ? item.activeClass : "text-slate-700",
                     )}
                   >
-                    {formatNumber(item.value)}
+                    {item.available ? formatNumber(item.value) : "--"}
                   </div>
                   <div className="text-xs text-muted-foreground">
-                    {hasException ? item.description : "No current exception"}
+                    {item.available
+                      ? hasException
+                        ? item.description
+                        : "No current exception"
+                      : "Start the local dashboard service to load review results."}
                   </div>
                 </div>
               </button>

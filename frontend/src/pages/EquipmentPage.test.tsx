@@ -1,7 +1,8 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { clearNetaReportReviewCache } from "../utils/automationApi";
 
 import { NetaReportManifestProvider } from "../contexts/NetaReportManifestContext";
 import { makeDashboardData } from "../test/fixtures";
@@ -9,6 +10,7 @@ import type { KprSummary } from "../types/data";
 import { EquipmentPage } from "./EquipmentPage";
 
 describe("EquipmentPage", () => {
+  beforeEach(() => clearNetaReportReviewCache());
   it("shows current columns, excludes resolved cases from open count, and opens asset details", async () => {
     const user = userEvent.setup();
     const data = makeDashboardData({
@@ -138,6 +140,111 @@ describe("EquipmentPage", () => {
 
     expect(screen.getByText("IAD06-EQ-MOVED")).toBeInTheDocument();
     expect(screen.queryByText("IAD06-EQ-OTHER")).not.toBeInTheDocument();
+  });
+
+  it("filters failed and review-required NETA reports and saves a manual review", async () => {
+    const user = userEvent.setup();
+    const reviews = {
+      total_reports: 2,
+      summary: { PASSED: 0, FAILED: 1, REVIEW_REQUIRED: 1, ERROR: 0 },
+      reports: [
+        { file: "IAD06-EQ-FAILED/IAD06-EQ-FAILED.pdf", status: "FAILED", is_passed: false },
+        {
+          file: "IAD06-EQ-REVIEW/IAD06-EQ-REVIEW.pdf",
+          status: "REVIEW_REQUIRED",
+          is_passed: null,
+          evidence: ["Page 2: Verify breaker settings."],
+        },
+      ],
+    };
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
+      if (init?.method === "PUT") {
+        return new Response(
+          JSON.stringify({
+            report: {
+              file: "IAD06-EQ-REVIEW/IAD06-EQ-REVIEW.pdf",
+              status: "PASSED",
+              is_passed: true,
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      return new Response(JSON.stringify(reviews), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+    const data = makeDashboardData({
+      pdms: [
+        {
+          pdm_name: "PDM-A",
+          equipment: [
+            {
+              equipment_id: "IAD06-EQ-FAILED",
+              neta_complete: true,
+              neta_test_report: "IAD06-EQ-FAILED - NETA Test Report-01.pdf",
+            },
+            {
+              equipment_id: "IAD06-EQ-REVIEW",
+              neta_complete: true,
+              neta_test_report: "IAD06-EQ-REVIEW - NETA Test Report-01.pdf",
+            },
+          ],
+        },
+      ],
+      netaReportManifest: {
+        records: [
+          {
+            source_key: "gc",
+            report_name: "IAD06-EQ-FAILED.pdf",
+            source_report_name: "IAD06-EQ-FAILED - NETA Test Report-01.pdf",
+            relative_path: "IAD06-EQ-FAILED/IAD06-EQ-FAILED.pdf",
+          },
+          {
+            source_key: "gc",
+            report_name: "IAD06-EQ-REVIEW.pdf",
+            source_report_name: "IAD06-EQ-REVIEW - NETA Test Report-01.pdf",
+            relative_path: "IAD06-EQ-REVIEW/IAD06-EQ-REVIEW.pdf",
+          },
+        ],
+      },
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/equipment"]}>
+        <NetaReportManifestProvider manifest={data.netaReportManifest}>
+          <EquipmentPage data={data} />
+        </NetaReportManifestProvider>
+      </MemoryRouter>,
+    );
+
+    const failedCard = (await screen.findByText("Failed NETA Reports")).closest("button");
+    expect(failedCard).not.toBeNull();
+    await waitFor(() => expect(failedCard).toHaveTextContent("1"));
+    await user.click(failedCard!);
+    expect(screen.getByText("IAD06-EQ-FAILED")).toBeInTheDocument();
+    expect(screen.queryByText("IAD06-EQ-REVIEW")).not.toBeInTheDocument();
+
+    await user.click(failedCard!);
+    await user.click(screen.getByRole("cell", { name: "IAD06-EQ-REVIEW" }));
+    expect(document.querySelector('[data-review-status="REVIEW_REQUIRED"]')).not.toBeNull();
+    expect(screen.getByText("Page 2: Verify breaker settings.")).toBeInTheDocument();
+    await user.selectOptions(
+      screen.getByLabelText(
+        "Review result for IAD06-EQ-REVIEW - NETA Test Report-01.pdf",
+      ),
+      "PASSED",
+    );
+    await waitFor(() =>
+      expect(document.querySelector('[data-review-status="PASSED"]')).not.toBeNull(),
+    );
+    expect(screen.queryByText("Page 2: Verify breaker settings.")).not.toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://127.0.0.1:8765/api/automation/neta-report-reviews",
+      expect.objectContaining({ method: "PUT" }),
+    );
+    fetchMock.mockRestore();
   });
 
 });

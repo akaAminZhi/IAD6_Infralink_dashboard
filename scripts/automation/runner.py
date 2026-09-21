@@ -63,6 +63,10 @@ class AutomationConfig:
     def mv_report_dir(self) -> Path:
         return self.eps_root / "MV_Daily_test_report"
 
+    @property
+    def neta_report_results_path(self) -> Path:
+        return self.eps_root / "NETA_eport_To_GC" / "test_reports_result.json"
+
 
 @dataclass(frozen=True)
 class JobDefinition:

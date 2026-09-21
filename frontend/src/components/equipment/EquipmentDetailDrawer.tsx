@@ -2,7 +2,13 @@ import { Repeat2, X } from "lucide-react";
 import { useState } from "react";
 
 import { useNetaReportManifest } from "../../contexts/NetaReportManifestContext";
+import type {
+  NetaReportReview,
+  NetaReportReviewsResponse,
+} from "../../types/automation";
 import type { CaseIssue } from "../../types/data";
+import { updateNetaReportReview } from "../../utils/automationApi";
+import { cn } from "../../utils/cn";
 import { formatDateTime, formatNumber } from "../../utils/formatters";
 import { requiresEquipmentTestTracking } from "../../utils/equipmentTrackingUtils";
 import {
@@ -16,6 +22,7 @@ import {
   hasGcNetaReportLinks,
   type NetaReportNameMode,
 } from "../../utils/netaReports";
+import { getNetaReviewsForReport } from "../../utils/netaReportReviews";
 import { EpsTestItemsPanel } from "../common/EpsTestItemsPanel";
 import { NetaReportChips } from "../common/NetaReportChips";
 import { Button } from "../ui/button";
@@ -28,7 +35,9 @@ import { EquipmentPdmAssociations } from "./EquipmentPdmAssociations";
 interface EquipmentDetailDrawerProps {
   equipment: FlattenedEquipmentRow | null;
   associatedRows: FlattenedEquipmentRow[];
+  netaReportReviews: NetaReportReviewsResponse | null;
   onClose: () => void;
+  onNetaReportReviewUpdated: (review: NetaReportReview) => void;
 }
 
 function valueOrDash(value: string | number | boolean | null | undefined): string {
@@ -62,11 +71,63 @@ function mergeCases(rows: FlattenedEquipmentRow[]): CaseIssue[] {
   return merged;
 }
 
-function NetaReportNames({ value }: { value: string | null }) {
+function reviewTone(status: NetaReportReview["status"] | null) {
+  if (status === "FAILED") {
+    return {
+      container: "border-red-300 bg-red-50",
+      label: "text-red-800",
+      text: "Failed",
+    };
+  }
+  if (status === "REVIEW_REQUIRED" || status === "ERROR") {
+    return {
+      container: "border-orange-300 bg-orange-50",
+      label: "text-orange-800",
+      text: status === "ERROR" ? "Review required (scan error)" : "Review required",
+    };
+  }
+  if (status === "PASSED") {
+    return {
+      container: "border-green-300 bg-green-50",
+      label: "text-green-800",
+      text: "Passed",
+    };
+  }
+  return {
+    container: "border-slate-200 bg-slate-50",
+    label: "text-slate-600",
+    text: "Not checked",
+  };
+}
+
+function NetaReportNames({
+  value,
+  reviews,
+  onReviewUpdated,
+}: {
+  value: string | null;
+  reviews: NetaReportReviewsResponse | null;
+  onReviewUpdated: (review: NetaReportReview) => void;
+}) {
   const manifest = useNetaReportManifest();
   const [nameMode, setNameMode] = useState<NetaReportNameMode>("original");
+  const [savingFile, setSavingFile] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const reportNames = getNetaReportNames(value);
   const canShowGcNames = hasGcNetaReportLinks(reportNames, manifest);
+
+  async function handleStatusChange(file: string, status: "PASSED" | "FAILED") {
+    setSavingFile(file);
+    setSaveError(null);
+    try {
+      const response = await updateNetaReportReview(file, status);
+      onReviewUpdated(response.report);
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : "Unable to update the review result.");
+    } finally {
+      setSavingFile(null);
+    }
+  }
 
   return (
     <div>
@@ -87,12 +148,94 @@ function NetaReportNames({ value }: { value: string | null }) {
           </button>
         ) : null}
       </div>
-      <NetaReportChips
-        className="mt-2"
-        compactNameMode={nameMode}
-        reports={reportNames}
-        showLinkedFileNames
-      />
+      <div className="mt-2 grid gap-2 lg:grid-cols-2">
+        {reportNames.map((reportName) => {
+          const matchedReviews = getNetaReviewsForReport(reportName, reviews, manifest);
+          const primaryStatus = matchedReviews.some((review) => review.status === "FAILED")
+            ? "FAILED"
+            : matchedReviews.some(
+                  (review) => review.status === "REVIEW_REQUIRED" || review.status === "ERROR",
+                )
+              ? "REVIEW_REQUIRED"
+              : matchedReviews.some((review) => review.status === "PASSED")
+                ? "PASSED"
+                : null;
+          const tone = reviews
+            ? reviewTone(primaryStatus)
+            : {
+                container: "border-slate-200 bg-slate-50",
+                label: "text-slate-600",
+                text: "Review data unavailable",
+              };
+          return (
+            <div
+              className={cn("min-w-0 rounded-md border p-2", tone.container)}
+              data-review-status={primaryStatus ?? "NOT_CHECKED"}
+              key={reportName}
+            >
+              <div className="mb-2 flex items-start justify-between gap-2">
+                <span className={cn("pt-1 text-xs font-bold uppercase", tone.label)}>
+                  {tone.text}
+                </span>
+                <div className="ml-auto flex flex-wrap justify-end gap-2">
+              {matchedReviews.map((review) => (
+                <label className="flex items-center gap-1.5 text-xs" key={review.file}>
+                  <span className="min-w-0 truncate text-muted-foreground" title={review.file}>
+                    Result
+                  </span>
+                  <select
+                    aria-label={`Review result for ${reportName}`}
+                    className="h-8 rounded-md border bg-white px-2 font-semibold outline-none focus:ring-2 focus:ring-ring"
+                    disabled={savingFile !== null}
+                    onChange={(event) =>
+                      void handleStatusChange(
+                        review.file,
+                        event.target.value as "PASSED" | "FAILED",
+                      )
+                    }
+                    value={review.status === "PASSED" || review.status === "FAILED" ? review.status : ""}
+                  >
+                    <option disabled value="">
+                      Review required
+                    </option>
+                    <option value="PASSED">PASS</option>
+                    <option value="FAILED">FAILED</option>
+                  </select>
+                </label>
+              ))}
+                </div>
+              </div>
+              <NetaReportChips
+                className="lg:grid-cols-1"
+                compactNameMode={nameMode}
+                reports={[reportName]}
+                showLinkedFileNames
+              />
+              {matchedReviews.filter((review) => review.status !== "PASSED").map((review) => (
+                <div className={cn("mt-2 border-t border-current/15 pt-2 text-xs", tone.label)} key={review.file}>
+                  <div className="font-semibold">Evidence</div>
+                  {matchedReviews.length > 1 ? (
+                    <div className="break-all font-medium">{review.file}</div>
+                  ) : null}
+                  {review.evidence?.length ? review.evidence.map((line, index) => (
+                    <p className="mt-1 whitespace-pre-wrap break-words" key={index}>{line}</p>
+                  )) : (
+                    <p className="mt-1">No evidence provided in the check results.</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          );
+        })}
+      </div>
+      {reportNames.length === 0 ? (
+        <div className="mt-2 text-sm text-muted-foreground">--</div>
+      ) : null}
+      {saveError ? (
+        <div className="mt-2 rounded-md border border-red-200 bg-red-50 p-2 text-sm text-red-800">
+          {saveError}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -100,7 +243,9 @@ function NetaReportNames({ value }: { value: string | null }) {
 export function EquipmentDetailDrawer({
   equipment,
   associatedRows,
+  netaReportReviews,
   onClose,
+  onNetaReportReviewUpdated,
 }: EquipmentDetailDrawerProps) {
   if (!equipment) {
     return null;
@@ -172,7 +317,11 @@ export function EquipmentDetailDrawer({
                   <Field label="Cases Missing Issue Image" value={formatNumber(missingImageCount)} />
                 </div>
                 {trackingRequired ? <div>
-                  <NetaReportNames value={equipment.neta_test_report} />
+                  <NetaReportNames
+                    onReviewUpdated={onNetaReportReviewUpdated}
+                    reviews={netaReportReviews}
+                    value={equipment.neta_test_report}
+                  />
                 </div> : null}
                 {trackingRequired && equipment.cxalloy_upload_status ? (
                   <div className="space-y-3 border-t pt-4">

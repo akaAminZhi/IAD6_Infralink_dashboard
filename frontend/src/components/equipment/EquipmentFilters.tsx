@@ -21,6 +21,8 @@ export interface EquipmentFiltersState {
   missingNetaReportOnly: boolean;
   newNetaCompleteOnly: boolean;
   cxalloyPendingOnly: boolean;
+  netaReportFailedOnly: boolean;
+  netaReportReviewRequiredOnly: boolean;
 }
 
 interface EquipmentFiltersProps {
@@ -109,6 +111,8 @@ export function EquipmentFilters({
     filters.missingNetaReportOnly,
     filters.newNetaCompleteOnly,
     filters.cxalloyPendingOnly,
+    filters.netaReportFailedOnly,
+    filters.netaReportReviewRequiredOnly,
   ].filter(Boolean).length;
 
   return (
@@ -209,6 +213,20 @@ export function EquipmentFilters({
             onClick={() => update({ cxalloyPendingOnly: !filters.cxalloyPendingOnly })}
           >
             Pending CxAlloy upload
+          </ToggleButton>
+          <ToggleButton
+            active={filters.netaReportFailedOnly}
+            onClick={() => update({ netaReportFailedOnly: !filters.netaReportFailedOnly })}
+          >
+            Failed NETA reports
+          </ToggleButton>
+          <ToggleButton
+            active={filters.netaReportReviewRequiredOnly}
+            onClick={() =>
+              update({ netaReportReviewRequiredOnly: !filters.netaReportReviewRequiredOnly })
+            }
+          >
+            NETA reports requiring review
           </ToggleButton>
         </div>
     </CollapsibleFilterCard>

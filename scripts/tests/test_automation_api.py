@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 import time
 
@@ -186,3 +187,65 @@ def test_api_rejects_unknown_jobs_and_unconfirmed_upload(tmp_path: Path) -> None
         json={"options": {}, "confirmed": False},
     )
     assert upload.status_code == 403
+
+
+def test_neta_report_review_round_trip_updates_source_json(tmp_path: Path) -> None:
+    client, config, _ = make_client(tmp_path)
+    results_path = config.neta_report_results_path
+    results_path.parent.mkdir(parents=True)
+    results_path.write_text(
+        """{
+  "generated_at": "2026-09-18T09:11:06-04:00",
+  "summary": {"PASSED": 0, "FAILED": 0, "REVIEW_REQUIRED": 1, "ERROR": 0},
+  "all_reports_passed": false,
+  "reports": [
+    {
+      "file": "IAD06-EQ-1/IAD06-EQ-1.pdf",
+      "status": "REVIEW_REQUIRED",
+      "is_passed": null,
+      "pages": [{"page": 1, "review_notes": ["Verify values."]}]
+    }
+  ]
+}
+""",
+        encoding="utf-8",
+    )
+
+    listed = client.get("/api/automation/neta-report-reviews")
+    assert listed.status_code == 200
+    assert listed.json()["reports"] == [
+        {
+            "file": "IAD06-EQ-1/IAD06-EQ-1.pdf",
+            "status": "REVIEW_REQUIRED",
+            "is_passed": None,
+            "manual_review": None,
+            "evidence": ["Page 1: Verify values."],
+        }
+    ]
+
+    saved = client.put(
+        "/api/automation/neta-report-reviews",
+        json={"file": "IAD06-EQ-1/IAD06-EQ-1.pdf", "status": "PASSED"},
+    )
+    assert saved.status_code == 200
+    assert saved.json()["report"]["status"] == "PASSED"
+
+    persisted = json.loads(results_path.read_text(encoding="utf-8"))
+    assert persisted["summary"] == {
+        "PASSED": 1,
+        "FAILED": 0,
+        "REVIEW_REQUIRED": 0,
+        "ERROR": 0,
+    }
+    assert persisted["all_reports_passed"] is True
+    assert persisted["reports"][0]["is_passed"] is True
+    assert persisted["reports"][0]["pages"] == [
+        {"page": 1, "review_notes": ["Verify values."]}
+    ]
+    assert persisted["reports"][0]["manual_review"]["status"] == "PASSED"
+
+    missing = client.put(
+        "/api/automation/neta-report-reviews",
+        json={"file": "missing.pdf", "status": "FAILED"},
+    )
+    assert missing.status_code == 404
