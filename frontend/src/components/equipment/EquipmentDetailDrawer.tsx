@@ -36,6 +36,7 @@ interface EquipmentDetailDrawerProps {
   equipment: FlattenedEquipmentRow | null;
   associatedRows: FlattenedEquipmentRow[];
   netaReportReviews: NetaReportReviewsResponse | null;
+  netaReviewsEditable?: boolean;
   onClose: () => void;
   onNetaReportReviewUpdated: (review: NetaReportReview) => void;
 }
@@ -104,10 +105,12 @@ function NetaReportNames({
   value,
   reviews,
   onReviewUpdated,
+  editable,
 }: {
   value: string | null;
   reviews: NetaReportReviewsResponse | null;
   onReviewUpdated: (review: NetaReportReview) => void;
+  editable: boolean;
 }) {
   const manifest = useNetaReportManifest();
   const [nameMode, setNameMode] = useState<NetaReportNameMode>("original");
@@ -117,6 +120,7 @@ function NetaReportNames({
   const canShowGcNames = hasGcNetaReportLinks(reportNames, manifest);
 
   async function handleStatusChange(file: string, status: "PASSED" | "FAILED") {
+    if (!editable) return;
     setSavingFile(file);
     setSaveError(null);
     try {
@@ -178,7 +182,10 @@ function NetaReportNames({
                   {tone.text}
                 </span>
                 <div className="ml-auto flex flex-wrap justify-end gap-2">
-              {matchedReviews.map((review) => (
+              {!editable && matchedReviews.length > 0 ? (
+                <span className="pt-1 text-xs text-muted-foreground">Read only</span>
+              ) : null}
+              {editable && matchedReviews.map((review) => (
                 <label className="flex items-center gap-1.5 text-xs" key={review.file}>
                   <span className="min-w-0 truncate text-muted-foreground" title={review.file}>
                     Result
@@ -244,6 +251,7 @@ export function EquipmentDetailDrawer({
   equipment,
   associatedRows,
   netaReportReviews,
+  netaReviewsEditable = false,
   onClose,
   onNetaReportReviewUpdated,
 }: EquipmentDetailDrawerProps) {
@@ -318,6 +326,7 @@ export function EquipmentDetailDrawer({
                 </div>
                 {trackingRequired ? <div>
                   <NetaReportNames
+                    editable={netaReviewsEditable}
                     onReviewUpdated={onNetaReportReviewUpdated}
                     reviews={netaReportReviews}
                     value={equipment.neta_test_report}

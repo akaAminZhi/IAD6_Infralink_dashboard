@@ -243,7 +243,7 @@ export function EquipmentSummaryCards({
                       ? hasException
                         ? item.description
                         : "No current exception"
-                      : "Start the local dashboard service to load review results."}
+                      : "Review results are unavailable. Refresh after the next data publication."}
                   </div>
                 </div>
               </button>

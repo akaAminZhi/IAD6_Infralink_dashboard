@@ -2,12 +2,9 @@
 
 ## Current Status
 
-The NETA report-review feature requested for `/equipment` is implemented and
-verified. The changes are uncommitted on branch `master`.
-
-The worktree was clean except for a pre-existing user change in `prompt.md` at
-the start of this work. That file was not modified by this task and must be
-preserved.
+NETA report review viewing now supports remote/static hosting with cached
+published data. Editing remains local. The worktree was clean at the start of
+the 2026-09-21 remote-view follow-up; previous feature work was already committed.
 
 ## Current Implementation
 
@@ -16,6 +13,13 @@ preserved.
 - `/equipment` loads compact NETA review results on mount using a 30-second
   in-memory API cache shared across route visits. Concurrent reads share one
   request; errors are not cached, and successful edits invalidate the cache.
+- The local API is attempted only on loopback hostnames. Remote hosts load
+  same-origin `/data/neta_report_reviews.json` directly; local API failures fall
+  back to that snapshot in read-only mode.
+- Published snapshots use a five-minute in-memory cache with request
+  deduplication. The next load after expiry revalidates HTTP cache; browser
+  reload also revalidates. Snapshot errors are not cached. This cache does not
+  poll while the page remains open.
 - Report matching uses WeakMap-cached alias/review indexes instead of scanning
   all manifest and review records per report. New immutable response/manifest
   objects rebuild the corresponding index. Equipment states are memoized and
@@ -30,9 +34,10 @@ preserved.
   card filters the equipment table to the corresponding equipment cohort;
   clicking the active card again clears the filter.
 - Equivalent toggles are available in the Equipment filter panel.
-- If the local API is unavailable, the two cards show `--` and are disabled
-  rather than incorrectly reporting zero exceptions. Existing Equipment
-  behavior remains available.
+- If neither the applicable API nor published snapshot is available, the two
+  cards show `--` and are disabled rather than reporting zero exceptions.
+- Published snapshots display publication time and a read-only notice; report
+  selectors are hidden while evidence, status colors and filters remain usable.
 
 ### Equipment detail review status
 
@@ -90,6 +95,12 @@ preserved.
 
 Backend:
 
+- `scripts/etl/build_neta_report_reviews.py` generates a compact static snapshot
+  using the same evidence extraction as the API; honors `IAD6_EPS_TRACKER_ROOT`.
+  Registered in `scripts/etl/run_etl.py` and ETL output metadata. A missing source
+  replaces stale snapshots with an explicit unavailable marker.
+- `scripts/tests/test_build_neta_report_reviews.py` covers publication,
+  evidence, missing sources, environment override and ETL registration.
 - `scripts/automation/neta_report_reviews.py` — validation, compact reads,
   serialized atomic updates, and summary recalculation.
 - `scripts/automation/api.py` — NETA review GET/PUT endpoints and request model.
@@ -98,6 +109,9 @@ Backend:
 
 Frontend:
 
+- `frontend/src/utils/loadNetaReportReviews.ts` and its test implement local vs
+  remote routing, static cache and read-only fallback. See `frontend/README.md`
+  for publication instructions.
 - `frontend/src/pages/EquipmentPage.tsx` — loading, counts, filtering, and local
   state updates.
 - `frontend/src/components/equipment/EquipmentSummaryCards.tsx` — two new
@@ -116,8 +130,10 @@ Frontend:
 
 ## Known Issues and Limitations
 
-- Editing requires `python scripts/start_dashboard.py`; a frontend-only/static
-  deployment cannot read or update the sibling tracker file.
+- Editing requires the local service on a loopback-hosted page. Remote/static
+  viewing uses a published snapshot, not the live sibling tracker file.
+- After local review edits, regenerate the review snapshot and republish data
+  to update remote readers. This does not expose the local API externally.
 - A future rerun of the external report-checking script may rewrite
   `test_reports_result.json` and discard manual-review overrides unless that
   script is changed to preserve `manual_review` values.
@@ -132,6 +148,8 @@ Frontend:
 ## Remaining Work
 
 - No code work remains for the requested behavior.
+- Publish the rebuilt frontend and generated review snapshot using the existing
+  hosting workflow; no remote deployment was performed in this task.
 - Recommended manual smoke test: start the combined local service, open
   `/equipment`, exercise both cards, open one review-required item, and confirm
   a deliberately chosen PASS/FAILED edit after backing up the sibling JSON.
@@ -139,6 +157,22 @@ Frontend:
   to merge/preserve manual review overrides.
 
 ## Tests Actually Performed
+
+Remote/static viewing follow-up (2026-09-21):
+
+- `C:\anaconda3\python.exe -m pytest scripts/tests/test_build_neta_report_reviews.py scripts/tests/test_neta_report_review_cache.py scripts/tests/test_automation_api.py -q`:
+  10 passed (dependency deprecation warnings only).
+- `npm test -- src/utils/loadNetaReportReviews.test.ts src/pages/EquipmentPage.test.tsx src/utils/netaReportReviews.test.ts src/utils/automationApi.test.ts --maxWorkers=1`:
+  17 passed across 4 files. Includes read-only filtering/evidence, no update
+  controls in snapshot mode, local edits, remote same-origin-only requests,
+  cache expiry/deduplication and unavailable-data retry. EquipmentPage tests
+  previously blocked by worker startup timeouts now pass.
+- `npm run build`: passed with existing large-chunk warnings.
+- Ran the standalone review builder: 1,318 reports, 347,786-byte published
+  snapshot vs 7,960,272-byte source JSON. The snapshot in `frontend/dist/data/`
+  has the same SHA256 as `frontend/public/data/`.
+- `git diff --check`: passed. No full ETL, browser visual test or remote
+  deployment was performed.
 
 Evidence display follow-up:
 

@@ -162,6 +162,8 @@ export interface NetaReportReview {
 }
 
 export interface NetaReportReviewsResponse {
+  available?: boolean;
+  published_at?: string;
   generated_at?: string | null;
   last_reviewed_at?: string | null;
   total_reports: number;

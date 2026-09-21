@@ -1,8 +1,9 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { clearNetaReportReviewCache } from "../utils/automationApi";
+import { clearPublishedNetaReviewCache } from "../utils/loadNetaReportReviews";
 
 import { NetaReportManifestProvider } from "../contexts/NetaReportManifestContext";
 import { makeDashboardData } from "../test/fixtures";
@@ -10,7 +11,11 @@ import type { KprSummary } from "../types/data";
 import { EquipmentPage } from "./EquipmentPage";
 
 describe("EquipmentPage", () => {
-  beforeEach(() => clearNetaReportReviewCache());
+  beforeEach(() => {
+    clearNetaReportReviewCache();
+    clearPublishedNetaReviewCache();
+  });
+  afterEach(() => vi.restoreAllMocks());
   it("shows current columns, excludes resolved cases from open count, and opens asset details", async () => {
     const user = userEvent.setup();
     const data = makeDashboardData({
@@ -142,7 +147,7 @@ describe("EquipmentPage", () => {
     expect(screen.queryByText("IAD06-EQ-OTHER")).not.toBeInTheDocument();
   });
 
-  it("filters failed and review-required NETA reports and saves a manual review", async () => {
+  it.each([false, true])("filters and shows evidence (published read-only: %s)", async (readOnly) => {
     const user = userEvent.setup();
     const reviews = {
       total_reports: 2,
@@ -157,7 +162,10 @@ describe("EquipmentPage", () => {
         },
       ],
     };
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (readOnly && String(input).startsWith("http://127.0.0.1")) {
+        throw new Error("Local service unavailable");
+      }
       if (init?.method === "PUT") {
         return new Response(
           JSON.stringify({
@@ -230,6 +238,18 @@ describe("EquipmentPage", () => {
     await user.click(screen.getByRole("cell", { name: "IAD06-EQ-REVIEW" }));
     expect(document.querySelector('[data-review-status="REVIEW_REQUIRED"]')).not.toBeNull();
     expect(screen.getByText("Page 2: Verify breaker settings.")).toBeInTheDocument();
+    if (readOnly) {
+      expect(screen.getByText("Read only")).toBeInTheDocument();
+      expect(screen.queryByLabelText(
+        "Review result for IAD06-EQ-REVIEW - NETA Test Report-01.pdf",
+      )).not.toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "Close equipment detail" }));
+      await user.click(screen.getByText("NETA Review Required").closest("button")!);
+      expect(screen.getByRole("cell", { name: "IAD06-EQ-REVIEW" })).toBeInTheDocument();
+      expect(screen.queryByRole("cell", { name: "IAD06-EQ-FAILED" })).not.toBeInTheDocument();
+      expect(fetchMock.mock.calls.some(([, init]) => init?.method === "PUT")).toBe(false);
+      return;
+    }
     await user.selectOptions(
       screen.getByLabelText(
         "Review result for IAD06-EQ-REVIEW - NETA Test Report-01.pdf",

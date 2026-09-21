@@ -14,7 +14,7 @@ import {
 import { EquipmentTable } from "../components/equipment/EquipmentTable";
 import type { DashboardData } from "../types/data";
 import type { NetaReportReview, NetaReportReviewsResponse } from "../types/automation";
-import { getNetaReportReviews } from "../utils/automationApi";
+import { loadNetaReportReviews } from "../utils/loadNetaReportReviews";
 import {
   flattenEquipmentFromPdms,
   getCasesMissingIssueImageCount,
@@ -287,14 +287,16 @@ export function EquipmentPage({ data }: EquipmentPageProps) {
   const [selectedEquipment, setSelectedEquipment] = useState<FlattenedEquipmentRow | null>(null);
   const [netaReportReviews, setNetaReportReviews] =
     useState<NetaReportReviewsResponse | null>(null);
+  const [netaReviewsEditable, setNetaReviewsEditable] = useState(false);
   const deferredFilters = useDeferredValue(filters);
 
   useEffect(() => {
     let cancelled = false;
-    getNetaReportReviews()
+    loadNetaReportReviews()
       .then((response) => {
         if (!cancelled) {
-          setNetaReportReviews(response);
+          setNetaReportReviews(response.data);
+          setNetaReviewsEditable(response.editable);
         }
       })
       .catch(() => {
@@ -454,6 +456,15 @@ export function EquipmentPage({ data }: EquipmentPageProps) {
         onSelectFilter={handleQuickFilter}
       />
 
+      {netaReportReviews && !netaReviewsEditable ? (
+        <p className="text-xs text-muted-foreground">
+          NETA review results: read-only published snapshot
+          {netaReportReviews.published_at
+            ? ` · Published ${new Date(netaReportReviews.published_at).toLocaleString()}`
+            : ""}. Changes are made locally and appear after the next data publication.
+        </p>
+      ) : null}
+
       <EquipmentFilters
         equipmentTypes={filterOptions.equipmentTypes}
         filters={filters}
@@ -473,6 +484,7 @@ export function EquipmentPage({ data }: EquipmentPageProps) {
         associatedRows={selectedGroup}
         equipment={selectedEquipment}
         netaReportReviews={netaReportReviews}
+        netaReviewsEditable={netaReviewsEditable}
         onClose={() => setSelectedEquipment(null)}
         onNetaReportReviewUpdated={handleNetaReportReviewUpdated}
       />

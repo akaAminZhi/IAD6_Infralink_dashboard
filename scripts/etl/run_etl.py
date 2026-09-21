@@ -22,6 +22,7 @@ try:
     from . import build_issue_attachment_manifest
     from . import build_kpr_summary
     from . import build_neta_report_manifest
+    from . import build_neta_report_reviews
     from . import build_pdm_dataset
     from . import build_power_plan
     from . import build_summary
@@ -46,6 +47,7 @@ except ImportError:
     import build_issue_attachment_manifest
     import build_kpr_summary
     import build_neta_report_manifest
+    import build_neta_report_reviews
     import build_pdm_dataset
     import build_power_plan
     import build_summary
@@ -86,6 +88,7 @@ OUTPUT_FILES = {
     "eps_not_found_items": DATA_DIR / "eps_not_found_items.json",
     "issue_attachment_manifest": DATA_DIR / "issue_attachment_manifest.json",
     "neta_report_manifest": DATA_DIR / "neta_report_manifest.json",
+    "neta_report_reviews": DATA_DIR / "neta_report_reviews.json",
     "cxalloy_report_status": DATA_DIR / "cxalloy_report_status.json",
     "power_plan": DATA_DIR / "power_plan.json",
     "kpr_summary": DATA_DIR / "kpr_summary.json",
@@ -129,6 +132,7 @@ def build_pipeline_steps(input_files: dict[str, str]) -> list[tuple[str, Callabl
         ("build_eps_test_execution.py", lambda: build_eps_test_execution.run_build(input_files)),
         ("build_kpr_summary.py", lambda: build_kpr_summary.run_build(input_files)),
         ("build_neta_report_manifest.py", build_neta_report_manifest.main),
+        ("build_neta_report_reviews.py", build_neta_report_reviews.main),
         ("build_cxalloy_report_status.py", build_cxalloy_report_status.main),
         ("build_issue_attachment_manifest.py", build_issue_attachment_manifest.main),
         ("build_power_plan.py", build_power_plan.main),
