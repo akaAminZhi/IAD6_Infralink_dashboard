@@ -62,6 +62,37 @@ describe("MvEquipmentPage", () => {
     expect(screen.getByLabelText(`${label}: 1 failed test items`)).toHaveTextContent("1");
   });
 
+  it("shows open-issue equipment in red until NETA is complete and badges the issue count", () => {
+    const data = makeDashboardData({
+      equipment: [{ equipment_id: "IAD06-TX6-02A", neta_complete: false }],
+      cases: [
+        { case_id: "CASE-OPEN-1", equipment_id: "IAD06-TX6-02A", status: "Open" },
+        { case_id: "CASE-OPEN-2", equipment_id: "IAD06-TX6-02A", status: "Acknowledged" },
+        { case_id: "CASE-CLOSED", equipment_id: "IAD06-TX6-02A", status: "Closed" },
+      ],
+      powerPlanManifest: { pages: [{
+        page_id: "mv", page_label: "MV", document_name: "Electrical-IAD6-MV.pdf", page_number: 1,
+        width: 1000, height: 700,
+        annotations: [{ annotation_id: "mv-open-issue", kind: "equipment", label: "TX6-02A",
+          matched_equipment_id: "IAD06-TX6-02A", system_element_status: "Ship to Site",
+          rect: { x: 100, y: 100, width: 180, height: 90 }, center: { x: 190, y: 145 },
+        }],
+      }] },
+    });
+    const { container, rerender } = render(<MvEquipmentPage data={data} />);
+
+    expect(container.querySelectorAll("[data-mv-equipment='true'] rect")[1]).toHaveAttribute("fill", "#fee2e2");
+    expect(screen.getByLabelText("TX6-02A: 2 open issues")).toHaveTextContent("2");
+
+    rerender(<MvEquipmentPage data={{
+      ...data,
+      equipment: [{ ...data.equipment[0], neta_complete: true }],
+    }} />);
+
+    expect(container.querySelectorAll("[data-mv-equipment='true'] rect")[1]).toHaveAttribute("fill", "#d1fae5");
+    expect(screen.getByLabelText("TX6-02A: 2 open issues")).toHaveTextContent("2");
+  });
+
   it("combines PDF pages and draws all MV annotations on one canvas", async () => {
     const user = userEvent.setup();
     const data = makeDashboardData({

@@ -83,6 +83,7 @@ interface PowerPlanAnnotation extends BasePowerPlanAnnotation {
   netaCompletedAt?: string | null;
   trackingRequired?: boolean;
   failedCount?: number;
+  openIssueCount?: number;
 }
 
 interface AtpPreview {
@@ -228,6 +229,7 @@ interface MvStatusPalette {
 
 type MvStatusHighlight =
   | "netaComplete"
+  | "openIssue"
   | "dailyPassedPendingNeta"
   | "failed"
   | "cableTestedAndUpdated"
@@ -319,6 +321,7 @@ function getSystemStatusHighlight(annotation: PowerPlanAnnotation): MvStatusHigh
 
 function getStatusHighlight(annotation: PowerPlanAnnotation): MvStatusHighlight {
   if (annotation.netaComplete) return "netaComplete";
+  if ((annotation.openIssueCount ?? 0) > 0) return "openIssue";
   if (isMvDailyTestFailed(annotation)) return "failed";
   if (isCableTestedAndInfralinkUpdated(annotation)) return "cableTestedAndUpdated";
   if (isConnection(annotation) && isMvDailyTestPassed(annotation)) {
@@ -332,6 +335,7 @@ function getStatusHighlight(annotation: PowerPlanAnnotation): MvStatusHighlight 
 
 function paletteForHighlight(highlight: MvStatusHighlight): MvStatusPalette {
   if (highlight === "netaComplete") return POWER_PLAN_STATUS_COLORS.ready;
+  if (highlight === "openIssue") return POWER_PLAN_STATUS_COLORS.action;
   if (highlight === "dailyPassedPendingNeta") return DAILY_PASSED_PENDING_NETA_PALETTE;
   if (highlight === "failed") return FAILED_PALETTE;
   if (highlight === "cableTestedAndUpdated") return TESTED_PALETTE;
@@ -1138,6 +1142,7 @@ export function MvEquipmentPage({ data }: MvEquipmentPageProps) {
             source_equipment_label: annotation.label,
           }),
           failedCount: row?.failedCount || (isMvDailyTestFailed(annotation) ? 1 : 0),
+          openIssueCount: row?.openIssues.length ?? 0,
         };
       }),
     };
@@ -1252,6 +1257,7 @@ export function MvEquipmentPage({ data }: MvEquipmentPageProps) {
     },
     {
       netaComplete: 0,
+      openIssue: 0,
       dailyPassedPendingNeta: 0,
       failed: 0,
       cableTestedAndUpdated: 0,
@@ -1586,12 +1592,27 @@ export function MvEquipmentPage({ data }: MvEquipmentPageProps) {
                     selected={selectedId === annotation.annotation_id}
                   />
                 ))}
+                {currentPage.annotations.filter((annotation) => (annotation.openIssueCount ?? 0) > 0).map((annotation) => (
+                  <g
+                    aria-label={`${annotation.label}: ${annotation.openIssueCount} open issues`}
+                    key={`${annotation.annotation_id}-open-issues`}
+                    pointerEvents="none"
+                    transform={`translate(${annotation.rect.x + annotation.rect.width} ${annotation.rect.y})`}
+                  >
+                    <g className="animate-equipment-failed">
+                      <circle fill="#b91c1c" r="12" stroke="white" strokeWidth="2" />
+                      <text fill="white" fontSize="10" fontWeight="700" textAnchor="middle" y="3">
+                        {annotation.openIssueCount}
+                      </text>
+                    </g>
+                  </g>
+                ))}
                 {currentPage.annotations.filter((annotation) => (annotation.failedCount ?? 0) > 0).map((annotation) => (
                   <g
                     aria-label={`${annotation.label}: ${annotation.failedCount} failed test items`}
                     key={`${annotation.annotation_id}-failed`}
                     pointerEvents="none"
-                    transform={`translate(${annotation.rect.x + annotation.rect.width} ${annotation.rect.y})`}
+                    transform={`translate(${annotation.rect.x + annotation.rect.width - ((annotation.openIssueCount ?? 0) > 0 ? 28 : 0)} ${annotation.rect.y})`}
                   >
                     <g className="animate-equipment-failed">
                       <circle fill="#b91c1c" r="12" stroke="white" strokeWidth="2" />
