@@ -5,6 +5,8 @@ import hashlib
 import json
 from pathlib import Path
 
+import pytest
+
 from scripts.etl.build_cxalloy_report_status import build_cxalloy_report_status
 
 
@@ -186,3 +188,71 @@ def test_prior_status_preserves_uploaded_hash_across_machines(tmp_path: Path) ->
         prior_status_manifest=prior_status,
     )
     assert changed["records"][0]["upload_status"] == "pending"
+
+
+@pytest.mark.parametrize(
+    "change, expected",
+    [
+        ("renamed", "uploaded"),
+        ("skipped_existing_on_site", "uploaded"),
+        ("content", "pending"),
+        ("added", "pending"),
+        ("removed", "pending"),
+        ("duplicate_source", "pending"),
+        ("missing_source", "pending"),
+        ("incomplete_paths", "pending"),
+        ("failed", "pending"),
+        ("other_target", "pending"),
+        ("missing_pdf", "missing_pdf"),
+    ],
+)
+def test_uploaded_reports_survive_renaming_only(
+    tmp_path: Path, change: str, expected: str,
+) -> None:
+    first = tmp_path / "first.pdf"
+    second = tmp_path / "second.pdf"
+    first.write_bytes(b"first report")
+    second.write_bytes(b"second report")
+    uploaded_hash = uploader_group_hash([first, second])
+    first.rename(tmp_path / "first__2.pdf")
+    second.rename(tmp_path / "second__9.pdf")
+    # Current manifest order differs from the uploaded package order.
+    rows = [
+        {"device_name": "IAD06-PDU6-03D-4", "source_path": "downloads/02.pdf",
+         "output_path": "second__9.pdf", "status": "copied"},
+        {"device_name": "IAD06-PDU6-03D-4", "source_path": "downloads/01.pdf",
+         "output_path": "first__2.pdf", "status": "skipped_existing"},
+    ]
+    upload = {
+        "target_equipment": "PDU6-03D-4", "sha256": uploaded_hash,
+        "source_path": r"downloads\01.pdf; downloads\02.pdf",
+        "pdf_path": r"C:\remote\first.pdf; C:\remote\second.pdf",
+        "status": "uploaded",
+    }
+    if change == "content":
+        (tmp_path / "first__2.pdf").write_bytes(b"changed report")
+    elif change == "added":
+        (tmp_path / "extra.pdf").write_bytes(b"extra")
+        rows.append({**rows[0], "source_path": "downloads/03.pdf", "output_path": "extra.pdf"})
+    elif change == "removed":
+        rows.pop()
+    elif change == "duplicate_source":
+        rows[1]["source_path"] = rows[0]["source_path"]
+    elif change == "missing_source":
+        rows[1]["source_path"] = ""
+    elif change == "incomplete_paths":
+        upload["pdf_path"] = r"C:\remote\first.pdf"
+    elif change == "failed":
+        upload["status"] = "upload_failed"
+    elif change == "other_target":
+        upload["target_equipment"] = "PDU6-03D-6"
+    elif change == "skipped_existing_on_site":
+        upload["status"] = change
+    elif change == "missing_pdf":
+        (tmp_path / "first__2.pdf").unlink()
+    rename_manifest = tmp_path / "rename.csv"
+    upload_manifest = tmp_path / "upload.csv"
+    write_csv(rename_manifest, list(rows[0]), rows)
+    write_csv(upload_manifest, list(upload), [upload])
+    payload = build_cxalloy_report_status(rename_manifest, upload_manifest, tmp_path)
+    assert payload["records"][0]["upload_status"] == expected

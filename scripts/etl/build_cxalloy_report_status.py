@@ -129,6 +129,45 @@ def completed_status_keys(payload: dict[str, Any]) -> set[tuple[str, str]]:
     return keys
 
 
+def matches_renamed_upload(
+    rows: list[dict[str, str]],
+    files: list[tuple[Path, str]],
+    uploads: Iterable[dict[str, str]],
+) -> bool:
+    """Verify unchanged PDFs using source identities and the uploaded filenames.
+
+    Never trust status alone: reconstruct the uploader's package digest using
+    current file contents. Require a complete, unambiguous source mapping.
+    """
+    sources = [clean(row.get("source_path")).replace("\\", "/") for row in rows]
+    if len(files) != len(rows) or not all(sources) or len(set(sources)) != len(sources):
+        return False
+    hashes = dict(zip(sources, (digest for _, digest in files)))
+    for upload in uploads:
+        if clean(upload.get("status")).casefold() not in COMPLETED_UPLOAD_STATUSES:
+            continue
+        uploaded_sources = [
+            clean(value).replace("\\", "/")
+            for value in clean(upload.get("source_path")).split(";")
+        ]
+        uploaded_paths = [clean(value) for value in clean(upload.get("pdf_path")).split(";")]
+        if (
+            len(uploaded_sources) != len(sources)
+            or len(uploaded_paths) != len(sources)
+            or set(uploaded_sources) != set(sources)
+            or not all(uploaded_paths)
+        ):
+            continue
+        # Parse Windows paths even when ETL runs on a different operating system.
+        original_files = [
+            (Path(path.replace("\\", "/").rsplit("/", 1)[-1]), hashes[source])
+            for source, path in zip(uploaded_sources, uploaded_paths)
+        ]
+        if combined_sha256(original_files) == clean(upload.get("sha256")):
+            return True
+    return False
+
+
 def prior_attempts_by_target(payload: dict[str, Any]) -> dict[str, dict[str, str]]:
     attempts: dict[str, dict[str, str]] = {}
     for record in payload.get("records") or []:
@@ -163,6 +202,10 @@ def build_cxalloy_report_status(
             grouped_rows[device_name].append(row)
 
     upload_rows = read_csv_rows(upload_manifest)
+    uploads_by_target: dict[str, list[dict[str, str]]] = defaultdict(list)
+    for row in upload_rows:
+        target = target_equipment(row.get("target_equipment") or row.get("device_name"))
+        uploads_by_target[target.casefold()].append(row)
     prior_payload = read_status_payload(prior_status_manifest)
     completed_keys = completed_upload_keys(upload_rows) | completed_status_keys(
         prior_payload
@@ -191,7 +234,13 @@ def build_cxalloy_report_status(
         uploaded = bool(
             current_hash
             and not missing_report_names
-            and (target.casefold(), current_hash) in completed_keys
+            and (
+                (target.casefold(), current_hash) in completed_keys
+                or matches_renamed_upload(
+                    grouped_rows[device_name], existing_files,
+                    uploads_by_target[target.casefold()],
+                )
+            )
         )
         local_attempt = latest_attempts.get(target.casefold(), {})
         prior_attempt = prior_attempts.get(target.casefold(), {})
