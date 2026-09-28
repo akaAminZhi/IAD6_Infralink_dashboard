@@ -692,14 +692,17 @@ def load_tracker_records(path: Path) -> tuple[dict[str, list[TrackerRecord]], se
     min_col, header_row, max_col, max_row = worksheet_table_bounds(worksheet)
     headers = header_map(worksheet, header_row, min_col, max_col)
 
-    required_headers = ["EQUIPMENT NAME", "SUBSTATION"]
-    missing_headers = [name for name in required_headers if name not in headers]
+    equipment_col = headers.get("EQUIPMENT NAME") or headers.get("EQUIPMENT")
+    missing_headers = []
+    if equipment_col is None:
+        missing_headers.append("EQUIPMENT NAME or EQUIPMENT")
+    if "SUBSTATION" not in headers:
+        missing_headers.append("SUBSTATION")
     if missing_headers:
         raise ValueError(
             f"Tracker is missing required columns: {', '.join(missing_headers)}"
         )
 
-    equipment_col = headers["EQUIPMENT NAME"]
     substation_col = headers["SUBSTATION"]
     type_col = headers.get("TYPE")
     equipment_type_col = headers.get("EQUIPMENT TYPE")

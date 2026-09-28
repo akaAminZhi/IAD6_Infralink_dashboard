@@ -3,6 +3,9 @@ from __future__ import annotations
 from datetime import date
 from pathlib import Path
 
+import pytest
+from openpyxl import Workbook
+
 from scripts.etl.build_eps_test_execution import (
     TrackerRecord,
     build_module_link_index,
@@ -17,6 +20,7 @@ from scripts.etl.build_eps_test_execution import (
     date_tested_indicates_tested,
     find_module_link_for_tracker_record,
     is_one_day_snapshot_diff,
+    load_tracker_records,
     not_found_item_record,
     parse_daily_tested_equipment,
     record_is_failed,
@@ -26,6 +30,24 @@ from scripts.etl.build_eps_test_execution import (
     tracker_match_keys,
     unmatched_input_equipment_keys,
 )
+
+
+@pytest.mark.parametrize("equipment_header", ["EQUIPMENT NAME", "EQUIPMENT"])
+def test_load_tracker_records_accepts_equipment_header_alias(
+    tmp_path: Path, equipment_header: str
+) -> None:
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "TRACKER"
+    sheet.append([equipment_header, "SUBSTATION", "TYPE "])
+    sheet.append(["ATS6-01A-1", "ATS6-01A-1", "ATS"])
+    path = tmp_path / "tracker.xlsx"
+    workbook.save(path)
+
+    records, equipment_keys = load_tracker_records(path)
+
+    assert equipment_keys == {"ATS6-01A-1"}
+    assert records["ATS6-01A-1"][0].test_type == "ATS"
 
 
 def make_tracker_record(
