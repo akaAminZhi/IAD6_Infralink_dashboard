@@ -19,6 +19,7 @@ from scripts.etl.build_eps_test_execution import (
     compare_snapshots,
     date_tested_indicates_tested,
     find_module_link_for_tracker_record,
+    fill_missing_daily_test_dates,
     is_one_day_snapshot_diff,
     load_tracker_records,
     not_found_item_record,
@@ -30,6 +31,35 @@ from scripts.etl.build_eps_test_execution import (
     tracker_match_keys,
     unmatched_input_equipment_keys,
 )
+
+
+def test_missing_tracker_dates_use_daily_status_events(tmp_path: Path) -> None:
+    daily = tmp_path / "daily.md"
+    daily.write_text(
+        "# Tested Equipment\n## 9-28\n- CDS6-03R-1-MCB1\n"
+        "- PDU6-03F-2-FB1\n# Failed Equipment\n## 9-29\n- CDS6-03R-2-MCB1\n",
+        encoding="utf-8",
+    )
+    passed, failed = cumulative_daily_equipment_dates(
+        parse_daily_tested_equipment(daily, date(2026, 9, 30)), date(2026, 9, 30)
+    )
+    records = [
+        {"equipment_key": "CDS6-03R-1-MCB1", "item_status": "Passed", "date_tested": ""},
+        {"equipment_key": "CDS6-03R-1-MCB1", "item_status": "Passed", "date_tested": "2026-09-15 00:00:00"},
+        {"equipment_key": "CDS6-03R-2-MCB1", "item_status": "Failed", "date_tested": "N/T"},
+        {"equipment_key": "PDU6-03F-2-FB5", "item_status": "Passed", "date_tested": ""},
+        {"equipment_key": "CDS6-03R-1-MCB1", "item_status": "Not Tested", "date_tested": ""},
+        {"equipment_key": "CDS6-03R-1-FB7", "item_status": "Passed", "date_tested": ""},
+    ]
+    filled = fill_missing_daily_test_dates(
+        records, passed, failed, {record["equipment_key"] for record in records}
+    )
+    assert [record["date_tested"] for record in filled] == [
+        "2026-09-28T00:00:00", "2026-09-15 00:00:00", "2026-09-29T00:00:00",
+        "2026-09-28T00:00:00", "", "",
+    ]
+    assert records[0]["date_tested"] == ""
+    assert [record["item_status"] for record in filled] == [record["item_status"] for record in records]
 
 
 @pytest.mark.parametrize("equipment_header", ["EQUIPMENT NAME", "EQUIPMENT"])

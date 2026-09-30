@@ -2123,6 +2123,44 @@ def build_summary(
     }
 
 
+def fill_missing_daily_test_dates(
+    records: list[dict[str, Any]],
+    passed_dates: dict[str, date],
+    failed_dates: dict[str, date],
+    tracker_equipment_keys: set[str],
+) -> list[dict[str, Any]]:
+    """Fill display dates from matching daily events without changing status logic."""
+    def matched_dates(input_dates: dict[str, date]) -> dict[str, date]:
+        result: dict[str, date] = {}
+        for equipment_key, tested_at in input_dates.items():
+            matched_key, _ = tracker_key_for_equipment(
+                equipment_key, tracker_equipment_keys
+            )
+            matched_key = matched_key or equipment_key
+            result[matched_key] = max(result.get(matched_key, tested_at), tested_at)
+        return result
+
+    passed = matched_dates(passed_dates)
+    failed = matched_dates(failed_dates)
+    result = []
+    for record in records:
+        record = dict(record)
+        status = record.get("item_status")
+        dates = (
+            passed
+            if status in {
+                ITEM_STATUS_PASSED, ITEM_STATUS_FIXED,
+                ITEM_STATUS_PASSED_NOT_IN_TRACKER, ITEM_STATUS_FIXED_NOT_IN_TRACKER,
+            }
+            else failed if status == STATUS_FAILED else {}
+        )
+        tested_at = dates.get(record.get("equipment_key"))
+        if tested_at and not date_tested_indicates_tested(record.get("date_tested") or ""):
+            record["date_tested"] = f"{tested_at.isoformat()}T00:00:00"
+        result.append(record)
+    return result
+
+
 def records_envelope(records: list[dict[str, Any]]) -> dict[str, Any]:
     return {
         "generated_at": datetime.now().astimezone().isoformat(),
@@ -2245,6 +2283,12 @@ def build_eps_test_execution(
         fixed_equipment_dates,
     )
     test_items.extend(not_found_records)
+    test_items, failed_items, incomplete_items = [
+        fill_missing_daily_test_dates(
+            records, passed_input_dates, failed_input_dates, tracker_equipment_keys
+        )
+        for records in (test_items, failed_items, incomplete_items)
+    ]
     pdm_records = build_pdm_execution_records(module_records)
 
     current_snapshot = make_snapshot(
