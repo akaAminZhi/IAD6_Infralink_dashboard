@@ -1,213 +1,105 @@
-# Codex Handoff
+﻿# Codex Handoff
 
-## Current Status
+## Current Status (2026-10-01)
 
-NETA report review viewing now supports remote/static hosting with cached
-published data. Editing remains local. The worktree was clean at the start of
-the 2026-09-21 remote-view follow-up; previous feature work was already committed.
+This turn updated only this handoff. The requested PDM energisation feature is
+not implemented in the current checkout. No earlier implementation or test run
+for that feature is available in this conversation; do not treat the requirements
+below as completed work.
+
+The explicit documentation-only instruction takes precedence for this turn.
+The existing user modification to `prompt.md` was preserved. No git commit was
+created.
+
+## Requested Feature / Remaining Work
+
+Source, relative to the project root:
+`../IAD6_EPS_Testing_Tracker/Excel/skid_shipping_testing_energisation_tracker.xlsx`
+
+- Bring the workbook's PDM/skid energisation records into dashboard data.
+- Add Offsite Energize and Onsite Energize filtering to the PDMs page.
+- Display a yellow lightning marker above Energised Offsite skids on Power plan,
+  with a breathing/pulsing animation.
+- Expose a color setting/prop so future onsite energisation can use red.
+- Preserve existing readiness, testing, issue, and power-plan behavior.
+
+The source workbook exists locally. Its sheets, headers, values, and PDM matching
+rules were not inspected in this turn. Inspect those before choosing a schema;
+onsite status availability and offsite/onsite precedence remain undecided.
 
 ## Current Implementation
 
-### Equipment filters and summary cards
+- `scripts/etl/build_pdm_dataset.py` builds `pdms.json` and `pdms.csv` from
+  equipment, module links, and cases; `scripts/etl/run_etl.py` orchestrates it.
+- `frontend/src/hooks/useDashboardData.ts` loads PDM and power-plan datasets;
+  PDM records use the existing `unwrapRecords` envelope handling.
+- `frontend/src/pages/PdmPage.tsx` owns PDM filter state and filtering.
+  `frontend/src/components/pdms/PdmFilters.tsx` exposes search, readiness,
+  quick filters, and issue/NETA exception toggles. There is no energisation
+  filter in that state.
+- `frontend/src/pages/PowerPlanPage.tsx` uses shared power-plan enrichment,
+  status colors, and status icons. There is no offsite energisation marker.
+- Searching `frontend/src`, `scripts`, and `config` for energisation spellings
+  and the source workbook name found no feature integration; the only match
+  was unrelated energization wording in an automation API test.
 
-- `/equipment` loads compact NETA review results on mount using a 30-second
-  in-memory API cache shared across route visits. Concurrent reads share one
-  request; errors are not cached, and successful edits invalidate the cache.
-- The local API is attempted only on loopback hostnames. Remote hosts load
-  same-origin `/data/neta_report_reviews.json` directly; local API failures fall
-  back to that snapshot in read-only mode.
-- Published snapshots use a five-minute in-memory cache with request
-  deduplication. The next load after expiry revalidates HTTP cache; browser
-  reload also revalidates. Snapshot errors are not cached. This cache does not
-  poll while the page remains open.
-- Report matching uses WeakMap-cached alias/review indexes instead of scanning
-  all manifest and review records per report. New immutable response/manifest
-  objects rebuild the corresponding index. Equipment states are memoized and
-  shared by counts and filters.
-- The backend caches compact results by resolved path, modification/change
-  timestamps and file size (up to four entries). External file changes and API
-  edits invalidate cached results; missing files still report an error.
-- Two cards were added to Equipment Readiness & Exceptions:
-  - `Failed NETA Reports`
-  - `NETA Review Required`
-- Card counts are unique equipment counts, not raw report counts. Clicking a
-  card filters the equipment table to the corresponding equipment cohort;
-  clicking the active card again clears the filter.
-- Equivalent toggles are available in the Equipment filter panel.
-- If neither the applicable API nor published snapshot is available, the two
-  cards show `--` and are disabled rather than reporting zero exceptions.
-- Published snapshots display publication time and a read-only notice; report
-  selectors are hidden while evidence, status colors and filters remain usable.
+## Implementation Constraints
 
-### Equipment detail review status
+- Keep the PDM -> equipment -> cases hierarchy and existing tracking rules.
+  Energisation must not be inferred from EPS/NETA completion alone.
+- Reuse existing PDM matching and JSON envelope helpers. Preserve unmatched or
+  ambiguous records for diagnosis, and distinguish missing source data from
+  confirmed status when designing the import.
+- Update Python builders/schemas, TypeScript contracts/loaders, and targeted
+  tests together if the data contract changes. Regenerate local outputs during
+  implementation, but do not commit the workbook or generated datasets.
+- Use the existing Lucide icon and shared styling patterns. The requested color
+  interface has not yet been designed or added.
 
-- Each NETA report in the equipment detail drawer shows its review result at a
-  glance:
-  - failed: red
-  - review required or scan error: orange
-  - passed: green
-  - no matching result: neutral
-- Each matched report has a review-result selector. `REVIEW_REQUIRED`,
-  `FAILED`, or `PASSED` records can be set directly to `PASS` or `FAILED`.
-- A successful edit updates the detail color, card totals, and active Equipment
-  filters immediately without a page reload.
-- Original and GC report-name display modes and PDF preview behavior are
-  preserved.
-- Result selectors sit at the top right beside each report's status. Failed,
-  review-required and error reports display an Evidence section at the bottom,
-  with page numbers, source evidence, review notes and exception numeric-check
-  values/limits. Duplicate lines are removed; missing evidence is explicit.
-- Changing a report to PASS hides its Evidence section; source page evidence
-  remains preserved in JSON.
+## Relevant Files for Follow-up
 
-### Review-result API and persistence
+Data pipeline and contracts:
 
-- Source file:
-  `../IAD6_EPS_Testing_Tracker/NETA_eport_To_GC/test_reports_result.json`
-- `GET /api/automation/neta-report-reviews` returns the report path, status,
-  pass flag, manual-review metadata, compact exception evidence, and recalculated
-  summary. Passing numeric-check details are omitted. Evidence uses the same
-  cached response and does not require additional per-report requests.
-- `PUT /api/automation/neta-report-reviews` accepts an exact report path and a
-  status of only `PASSED` or `FAILED`.
-- Updates preserve all existing report/page evidence, update `status` and
-  `is_passed`, add `manual_review.status` and `manual_review.reviewed_at`, and
-  recalculate the top-level summary, total, and `all_reports_passed` fields.
-- Writes are serialized in-process and use a temporary file plus atomic replace
-  so concurrent local requests cannot lose an update or leave partial JSON.
-- Missing files/reports and malformed requests return explicit HTTP errors.
+- `scripts/etl/build_pdm_dataset.py`
+- `scripts/etl/build_power_plan.py`
+- `scripts/etl/run_etl.py`
+- `scripts/etl/schemas.py`
+- `frontend/src/types/data.ts`
+- `frontend/src/hooks/useDashboardData.ts`
 
-## Important Decisions
+UI and shared calculations:
 
-- Equipment data normally contains original NETA report names while the review
-  JSON uses GC-renamed relative paths. Matching therefore uses the existing
-  `neta_report_manifest.json` mapping rather than guessing equipment IDs from
-  filenames.
-- An equipment review state uses severity precedence: any `FAILED` report makes
-  the equipment failed; otherwise any `REVIEW_REQUIRED` or `ERROR` report makes
-  it require review; otherwise matched `PASSED` reports make it passed.
-- `ERROR` is treated as requiring manual review and is shown in orange.
-- The source JSON remains the persistence layer; no generated dashboard dataset
-  or database was added.
-- The API remains loopback-only under the existing local automation service.
+- `frontend/src/pages/PdmPage.tsx`
+- `frontend/src/components/pdms/PdmFilters.tsx`
+- `frontend/src/utils/pdmUtils.ts`
+- `frontend/src/pages/PowerPlanPage.tsx`
+- `frontend/src/utils/powerPlanUtils.ts`
 
-## Relevant Files
+Existing tests to extend or run as appropriate during implementation:
 
-Backend:
+- `scripts/tests/test_build_pdm_dataset.py`
+- `scripts/tests/test_build_power_plan.py`
+- `scripts/tests/test_run_etl.py`
+- `scripts/tests/test_schemas.py`
+- `frontend/src/utils/pdmUtils.test.ts`
+- `frontend/src/utils/powerPlanUtils.test.ts`
+- `frontend/src/pages/PowerPlanPage.test.tsx`
+- `frontend/src/hooks/useDashboardData.test.ts`
 
-- `scripts/etl/build_neta_report_reviews.py` generates a compact static snapshot
-  using the same evidence extraction as the API; honors `IAD6_EPS_TRACKER_ROOT`.
-  Registered in `scripts/etl/run_etl.py` and ETL output metadata. A missing source
-  replaces stale snapshots with an explicit unavailable marker.
-- `scripts/tests/test_build_neta_report_reviews.py` covers publication,
-  evidence, missing sources, environment override and ETL registration.
-- `scripts/automation/neta_report_reviews.py` — validation, compact reads,
-  serialized atomic updates, and summary recalculation.
-- `scripts/automation/api.py` — NETA review GET/PUT endpoints and request model.
-- `scripts/automation/runner.py` — configured review-results path.
-- `scripts/tests/test_automation_api.py` — API round-trip and persistence test.
+## Verification Actually Performed This Turn
 
-Frontend:
+- Read `AGENTS.md`, the previous handoff, both READMEs, and `ARCHITECTURE.md`.
+- Inspected git status, relevant PDM/power-plan source, contract/loader references,
+  and ETL registration; confirmed the input path exists with `Test-Path`.
+- No pytest, Vitest, build, ETL, workbook parsing, or browser checks were run.
+  This was a documentation-only update and does not validate the requested UI.
+- `git diff --check -- CODEX_HANDOFF.md` passed. The repository-wide check
+  reported an existing extra blank line at EOF in user-modified `prompt.md`;
+  that file was left unchanged.
+- Historical NETA review test results and the previous unrelated completion
+  statement were removed from this current-work handoff; they are not evidence
+  of energisation feature completion.
 
-- `frontend/src/utils/loadNetaReportReviews.ts` and its test implement local vs
-  remote routing, static cache and read-only fallback. See `frontend/README.md`
-  for publication instructions.
-- `frontend/src/pages/EquipmentPage.tsx` — loading, counts, filtering, and local
-  state updates.
-- `frontend/src/components/equipment/EquipmentSummaryCards.tsx` — two new
-  clickable cards and API-unavailable state.
-- `frontend/src/components/equipment/EquipmentFilters.tsx` — matching filter
-  toggles.
-- `frontend/src/components/equipment/EquipmentDetailDrawer.tsx` — colored
-  per-report status and editable review selector.
-- `frontend/src/utils/netaReportReviews.ts` — original-name/GC-path matching and
-  equipment-level status aggregation.
-- `frontend/src/types/automation.ts` and
-  `frontend/src/utils/automationApi.ts` — frontend contracts and API client.
-- `frontend/src/pages/EquipmentPage.test.tsx`,
-  `frontend/src/utils/netaReportReviews.test.ts`, and
-  `frontend/src/utils/automationApi.test.ts` — targeted frontend coverage.
+## Suggested Commit Message
 
-## Known Issues and Limitations
-
-- Editing requires the local service on a loopback-hosted page. Remote/static
-  viewing uses a published snapshot, not the live sibling tracker file.
-- After local review edits, regenerate the review snapshot and republish data
-  to update remote readers. This does not expose the local API externally.
-- A future rerun of the external report-checking script may rewrite
-  `test_reports_result.json` and discard manual-review overrides unless that
-  script is changed to preserve `manual_review` values.
-- Manual review metadata records a timestamp but not a reviewer identity. The
-  dashboard has no authentication or user model.
-- Only review records connected to Equipment NETA report fields through the
-  current manifest are surfaced in Equipment. As of 2026-09-18, all 1,315
-  review-result paths match a GC manifest record, with zero missing paths.
-- The real sibling JSON was read only during verification; no production review
-  status was changed by the tests in this task.
-
-## Remaining Work
-
-- No code work remains for the requested behavior.
-- Publish the rebuilt frontend and generated review snapshot using the existing
-  hosting workflow; no remote deployment was performed in this task.
-- Recommended manual smoke test: start the combined local service, open
-  `/equipment`, exercise both cards, open one review-required item, and confirm
-  a deliberately chosen PASS/FAILED edit after backing up the sibling JSON.
-- If automated report scanning is rerun regularly, update that external scanner
-  to merge/preserve manual review overrides.
-
-## Tests Actually Performed
-
-Remote/static viewing follow-up (2026-09-21):
-
-- `C:\anaconda3\python.exe -m pytest scripts/tests/test_build_neta_report_reviews.py scripts/tests/test_neta_report_review_cache.py scripts/tests/test_automation_api.py -q`:
-  10 passed (dependency deprecation warnings only).
-- `npm test -- src/utils/loadNetaReportReviews.test.ts src/pages/EquipmentPage.test.tsx src/utils/netaReportReviews.test.ts src/utils/automationApi.test.ts --maxWorkers=1`:
-  17 passed across 4 files. Includes read-only filtering/evidence, no update
-  controls in snapshot mode, local edits, remote same-origin-only requests,
-  cache expiry/deduplication and unavailable-data retry. EquipmentPage tests
-  previously blocked by worker startup timeouts now pass.
-- `npm run build`: passed with existing large-chunk warnings.
-- Ran the standalone review builder: 1,318 reports, 347,786-byte published
-  snapshot vs 7,960,272-byte source JSON. The snapshot in `frontend/dist/data/`
-  has the same SHA256 as `frontend/public/data/`.
-- `git diff --check`: passed. No full ETL, browser visual test or remote
-  deployment was performed.
-
-Evidence display follow-up:
-
-- Anaconda targeted Python API/cache/evidence tests: 8 passed on rerun. The
-  initial run had one existing daily-report subprocess wait exceed 5 seconds.
-- `npm run build`: passed with existing large-chunk warnings.
-- Default frontend run failed to start fork workers. Retrying with
-  `--pool=threads --maxWorkers=1` passed the two utility files (8 tests), but
-  the EquipmentPage worker still timed out before executing tests. The new
-  evidence rendering/hide-after-PASS assertions therefore remain unverified.
-- `git diff --check`: passed. No browser visual validation was performed.
-
-Performance follow-up:
-
-- Anaconda Python: `C:\anaconda3\python.exe -m pytest scripts/tests/test_automation_api.py scripts/tests/test_neta_report_review_cache.py -q`:
-  7 passed. Default Python lacked FastAPI, so its initial collection attempt
-  failed; the existing Anaconda environment completed the tests.
-- Targeted frontend command below: 12 passed after adding cache isolation
-  between page tests. Coverage includes request deduplication, TTL expiry,
-  retry after failure, invalidation on edits, and rebuilt matching indexes.
-- `npm run build`: passed with large-chunk warnings.
-- Read-only backend timing on 1,315 real reports: cold read 43.59 ms; average
-  of 20 cached reads 0.14 ms. This is not an end-to-end browser timing.
-
-Original feature verification:
-
-- `python -m pytest scripts/tests/test_automation_api.py -q`: 6 passed; one
-  Starlette/httpx deprecation warning.
-- `npm test -- src/utils/netaReportReviews.test.ts src/utils/automationApi.test.ts src/pages/EquipmentPage.test.tsx`:
-  3 files passed, 9 tests passed.
-- `python -m py_compile scripts/automation/api.py scripts/automation/neta_report_reviews.py scripts/automation/runner.py`:
-  passed.
-- `npm run build`: passed. Vite reported the existing large-chunk warning.
-- `git diff --check`: passed; Git printed only LF-to-CRLF working-copy warnings.
-- Read-only real-data validation: all 1,315 review report paths matched the
-  current GC NETA manifest; 0 were missing.
-
-No lint command was run because this repository does not define one.
+`docs: update handoff with energisation requirements and verified implementation gaps`
