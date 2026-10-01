@@ -22,10 +22,10 @@ export function EnergisationMarker({
     <g transform={`translate(${x}, ${y})`} role="img" aria-label={label}>
       <title>{label}</title>
       <Zap
-        x={-12}
-        y={-12}
-        width={24}
-        height={24}
+        x={-40}
+        y={-40}
+        width={80}
+        height={80}
         color={color}
         fill={color}
         className="animate-energisation-breathe"
