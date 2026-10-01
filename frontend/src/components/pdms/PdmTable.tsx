@@ -16,6 +16,7 @@ import { EmptyState } from "../common/EmptyState";
 import { StatusBadge } from "../common/StatusBadge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
 import { PdmReadinessBadge } from "./PdmReadinessBadge";
+import { getEnergisationLabel, getEnergisationStage } from "../../utils/energisation";
 
 interface PdmTableProps {
   rows: PdmTableRow[];
@@ -70,6 +71,14 @@ export function PdmTable({ rows, selectedPdmName, onSelectPdm }: PdmTableProps) 
         accessorKey: "pdmName",
         header: "PDM Name",
         cell: ({ row }) => <span className="font-medium">{row.original.pdmName}</span>,
+      },
+      {
+        id: "energisation",
+        header: "Energisation",
+        accessorFn: (row) => {
+          const stage = getEnergisationStage(row.pdm);
+          return stage ? getEnergisationLabel(stage) : "No energisation recorded";
+        },
       },
       {
         accessorKey: "netaCompleteCount",

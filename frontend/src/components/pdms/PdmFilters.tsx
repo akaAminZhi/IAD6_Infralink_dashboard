@@ -18,6 +18,7 @@ export interface PdmFiltersState {
   search: string;
   readiness: "" | PdmReadinessLevel;
   quickFilter: PdmQuickFilter;
+  energisation: "" | "offsite" | "onsite";
   openCasesOnly: boolean;
   netaIncompleteOnly: boolean;
   missingReportsOnly: boolean;
@@ -60,6 +61,7 @@ export function PdmFilters({ filters, onChange, onReset }: PdmFiltersProps) {
     filters.search.trim(),
     filters.readiness,
     filters.quickFilter,
+    filters.energisation,
     filters.openCasesOnly,
     filters.netaIncompleteOnly,
     filters.missingReportsOnly,
@@ -68,7 +70,7 @@ export function PdmFilters({ filters, onChange, onReset }: PdmFiltersProps) {
 
   return (
     <CollapsibleFilterCard activeCount={activeFilterCount}>
-        <div className="grid gap-3 lg:grid-cols-[minmax(260px,1.4fr)_minmax(180px,0.8fr)_auto]">
+        <div className="grid gap-3 lg:grid-cols-[minmax(220px,1.4fr)_minmax(160px,0.8fr)_minmax(180px,0.8fr)_auto]">
           <label className="flex min-w-0 flex-col gap-1 text-sm font-medium">
             Search by PDM Name or Equipment ID
             <span className="relative">
@@ -98,6 +100,21 @@ export function PdmFilters({ filters, onChange, onReset }: PdmFiltersProps) {
               <option value="Watch">Watch</option>
               <option value="Attention">Attention</option>
               <option value="Critical">Critical</option>
+            </select>
+          </label>
+
+          <label className="flex flex-col gap-1 text-sm font-medium">
+            Energisation
+            <select
+              className="h-9 rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+              value={filters.energisation}
+              onChange={(event) =>
+                update({ energisation: event.target.value as PdmFiltersState["energisation"] })
+              }
+            >
+              <option value="">All energisation records</option>
+              <option value="offsite">Energised Offsite</option>
+              <option value="onsite">Energised Onsite</option>
             </select>
           </label>
 

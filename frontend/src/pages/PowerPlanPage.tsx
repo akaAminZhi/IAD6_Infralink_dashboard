@@ -22,9 +22,12 @@ import {
   Search,
   Trash2,
   X,
+  Zap,
 } from "lucide-react";
 
 import { EmptyState } from "../components/common/EmptyState";
+import { EnergisationMarker } from "../components/pdms/EnergisationMarker";
+import { ENERGISATION_COLORS, getEnergisationLabel, getEnergisationStage } from "../utils/energisation";
 import { StatusBadge } from "../components/common/StatusBadge";
 import { IssueDetailDrawer } from "../components/issues/IssueDetailDrawer";
 import { Button } from "../components/ui/button";
@@ -1241,6 +1244,10 @@ function PdmOverview({
 }
 
 export function PowerPlanPage({ data }: PowerPlanPageProps) {
+  const energisationByPdm = useMemo(
+    () => new Map(data.pdms.map((pdm) => [pdm.pdm_name?.trim(), getEnergisationStage(pdm)])),
+    [data.pdms],
+  );
   const allRows = useMemo(() => enrichPdmSchematicEquipment(data), [data]);
   const areaFamilies = useMemo(
     () =>
@@ -1913,6 +1920,12 @@ export function PowerPlanPage({ data }: PowerPlanPageProps) {
                 </span>
                 Open Issues
               </span>
+              {(["offsite", "onsite"] as const).map((stage) => (
+                <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground" key={stage}>
+                  <Zap className="h-4 w-4" color={ENERGISATION_COLORS[stage]} fill={ENERGISATION_COLORS[stage]} aria-hidden="true" />
+                  {getEnergisationLabel(stage)}
+                </span>
+              ))}
               <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
                 <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-600 px-1 text-[9px] font-bold text-white">
                   n
@@ -2004,6 +2017,7 @@ export function PowerPlanPage({ data }: PowerPlanPageProps) {
 
               {layout.pdmRegions.map((region) => {
                 const isSelected = selectedPdmName === region.label;
+                const energisationStage = energisationByPdm.get(region.label);
                 const palette =
                   region.kind === "unassigned"
                     ? { fill: "#fffbeb", stroke: "#d97706", text: "#92400e" }
@@ -2081,6 +2095,13 @@ export function PowerPlanPage({ data }: PowerPlanPageProps) {
                     >
                       {region.equipmentCount}
                     </text>
+                    {energisationStage && (
+                      <EnergisationMarker
+                        stage={energisationStage}
+                        x={region.x + region.width / 2}
+                        y={region.y - 15}
+                      />
+                    )}
                   </g>
                 );
               })}

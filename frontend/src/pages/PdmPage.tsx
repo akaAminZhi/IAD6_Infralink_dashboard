@@ -30,6 +30,7 @@ const defaultFilters: PdmFiltersState = {
   search: "",
   readiness: "",
   quickFilter: "",
+  energisation: "",
   openCasesOnly: false,
   netaIncompleteOnly: false,
   missingReportsOnly: false,
@@ -67,6 +68,12 @@ function filterRows(rows: PdmTableRow[], filters: PdmFiltersState): PdmTableRow[
   const search = filters.search.trim();
 
   return rows.filter((row) => {
+    if (filters.energisation === "offsite" && row.pdm.energised_offsite !== true) {
+      return false;
+    }
+    if (filters.energisation === "onsite" && row.pdm.energised_onsite !== true) {
+      return false;
+    }
     if (filters.quickFilter === "testingStarted" && !row.testingStarted) {
       return false;
     }

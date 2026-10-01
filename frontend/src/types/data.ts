@@ -96,6 +96,8 @@ export interface PdmEquipmentRecord {
 
 export interface PdmRecord {
   pdm_name?: string | null;
+  energised_offsite?: boolean | null;
+  energised_onsite?: boolean | null;
   module_type?: string | null;
   length?: string | number | null;
   width?: string | number | null;

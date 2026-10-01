@@ -88,10 +88,17 @@
     animation-delay: 0.35s;
   }
 
+  .animate-energisation-breathe {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: equipment-status-breathe 2.2s ease-in-out infinite;
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .animate-trend-rise,
     .animate-trend-fall,
     .animate-equipment-failed,
+    .animate-energisation-breathe,
     .animate-equipment-incomplete {
       animation: none;
     }

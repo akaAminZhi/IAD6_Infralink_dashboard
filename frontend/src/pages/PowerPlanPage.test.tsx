@@ -23,6 +23,26 @@ beforeEach(() => {
 });
 
 describe("PowerPlanPage", () => {
+  it("marks energised skids and gives onsite priority without changing equipment status", () => {
+    const pdms = [
+      { pdm_name: "IAD06-PDM-E6-110-01-PRIMARY-CDS", energised_offsite: true,
+        equipment: [{ equipment_id: "IAD06-PDU6-01A-1" }] },
+      { pdm_name: "IAD06-PDM-E6-110-02-PRIMARY-CDS", energised_offsite: true, energised_onsite: true,
+        equipment: [{ equipment_id: "IAD06-PDU6-01B-1" }] },
+      { pdm_name: "IAD06-PDM-E6-110-03-PRIMARY-CDS",
+        equipment: [{ equipment_id: "IAD06-PDU6-01C-1" }] },
+    ];
+    render(<PowerPlanPage data={makeDashboardData({ pdms })} />);
+    const offsite = screen.getByRole("img", { name: "Energised Offsite" });
+    const onsite = screen.getByRole("img", { name: "Energised Onsite" });
+    expect(offsite.querySelector("svg")).toHaveAttribute("fill", "#eab308");
+    expect(onsite.querySelector("svg")).toHaveAttribute("fill", "#ef4444");
+    expect(screen.getAllByRole("img", { name: /Energised/ })).toHaveLength(2);
+    expect(screen.getByRole("button", {
+      name: "IAD06-PDU6-01A-1: No EPS Data; 0 open issues",
+    })).toBeInTheDocument();
+  });
+
   it("opens PDM and equipment summaries with asset information", async () => {
     const user = userEvent.setup();
     const pdmName = "IAD06-PDM-E6-110-01-PRIMARY-CDS";

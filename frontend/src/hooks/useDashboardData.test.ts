@@ -53,6 +53,17 @@ afterEach(() => {
 });
 
 describe("useDashboardData", () => {
+  it("preserves energisation flags from the PDM record envelope", async () => {
+    fetchJsonMock.mockImplementation(async (path) => path === "/data/pdms.json"
+      ? { records: [{ pdm_name: "PDM-A", energised_offsite: true, energised_onsite: null }] }
+      : defaultPayload(path));
+    const { result } = renderHook(() => useDashboardData());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.pdms[0]).toMatchObject({
+      energised_offsite: true, energised_onsite: null,
+    });
+  });
+
   it("loads the core and optional overview datasets", async () => {
     fetchJsonMock.mockImplementation(async (path) => defaultPayload(path));
 

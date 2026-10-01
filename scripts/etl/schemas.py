@@ -99,6 +99,8 @@ class CaseIssue(SchemaRecord):
 @dataclass(slots=True)
 class PdmRecord(SchemaRecord):
     pdm_name: str | None = None
+    energised_offsite: bool | None = None
+    energised_onsite: bool | None = None
     module_type: str | None = None
     length: float | str | None = None
     width: float | str | None = None

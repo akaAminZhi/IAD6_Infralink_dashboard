@@ -15,6 +15,7 @@ try:
         write_json as write_json_payload,
     )
     from .pdm_assignment import choose_effective_pdm_name
+    from .pdm_energisation import attach_energisation
     from .tracking_rules import requires_equipment_test_tracking
 except ImportError:
     from file_discovery import get_input_files
@@ -24,6 +25,7 @@ except ImportError:
         write_json as write_json_payload,
     )
     from pdm_assignment import choose_effective_pdm_name
+    from pdm_energisation import attach_energisation
     from tracking_rules import requires_equipment_test_tracking
 
 
@@ -36,6 +38,7 @@ CASES_PATH = DATA_DIR / "cases.json"
 
 PDMS_OUTPUT_PATH = DATA_DIR / "pdms.json"
 PDMS_CSV_OUTPUT_PATH = DATA_DIR / "pdms.csv"
+ENERGISATION_OUTPUT_PATH = DATA_DIR / "pdm_energisation.json"
 
 CLOSED_CASE_STATUSES = {
     "closed",
@@ -72,6 +75,8 @@ PDM_FIELDS = [
 
 CSV_FIELDS = [
     "pdm_name",
+    "energised_offsite",
+    "energised_onsite",
     "module_type",
     "length",
     "width",
@@ -362,6 +367,8 @@ def write_pdm_csv(pdms: list[dict[str, Any]], path: Path) -> None:
                 writer.writerow(
                     {
                         "pdm_name": pdm.get("pdm_name"),
+                        "energised_offsite": pdm.get("energised_offsite"),
+                        "energised_onsite": pdm.get("energised_onsite"),
                         "module_type": pdm.get("module_type"),
                         "length": pdm.get("length"),
                         "width": pdm.get("width"),
@@ -410,6 +417,13 @@ def run_build(input_files: dict[str, str] | None = None) -> list[dict[str, Any]]
     cases = load_records_json(CASES_PATH)
 
     pdms = build_pdm_dataset(equipment_records, module_links, cases)
+    energisation = attach_energisation(pdms)
+    write_json_payload(ENERGISATION_OUTPUT_PATH, energisation)
+    if energisation["available"]:
+        selected_input_files = {
+            **selected_input_files,
+            "skid_energisation": energisation["source_file"]["path"],
+        }
     write_records_json(pdms, PDMS_OUTPUT_PATH, selected_input_files)
     write_pdm_csv(pdms, PDMS_CSV_OUTPUT_PATH)
     return pdms

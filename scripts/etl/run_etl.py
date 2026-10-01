@@ -76,6 +76,7 @@ OUTPUT_FILES = {
     "unmatched_cases": DATA_DIR / "unmatched_cases.json",
     "pdms": DATA_DIR / "pdms.json",
     "pdms_csv": DATA_DIR / "pdms.csv",
+    "pdm_energisation": DATA_DIR / "pdm_energisation.json",
     "summary": DATA_DIR / "summary.json",
     "data_quality_report": DATA_DIR / "data_quality_report.json",
     "history_comparison": DATA_DIR / "history_comparison.json",
