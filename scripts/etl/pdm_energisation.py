@@ -19,7 +19,7 @@ except ImportError:
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-WORKBOOK_NAME = "skid_shipping_testing_energisation_tracker.xlsx"
+WORKBOOK_NAME = "Offsite Energisation SKID tracker.xlsx"
 HEADERS = {
     "pdm_name": "Skid Name",
     "energised_offsite": "Energised Offsite? (Yes/No)",
@@ -29,9 +29,11 @@ STATUS_FIELDS = ("energised_offsite", "energised_onsite")
 
 
 def tracker_workbook_path() -> Path:
-    root = Path(os.environ.get(
-        "IAD6_EPS_TRACKER_ROOT", PROJECT_ROOT.parent / "IAD6_EPS_Testing_Tracker"
-    ))
+    root = Path(
+        os.environ.get(
+            "IAD6_EPS_TRACKER_ROOT", PROJECT_ROOT.parent / "IAD6_EPS_Testing_Tracker"
+        )
+    )
     return root / "Excel" / WORKBOOK_NAME
 
 
@@ -44,7 +46,8 @@ def cds_alias(value: Any) -> str:
     # Restrict this alias to complete numbered CDS skid names, retaining -R.
     return re.sub(
         r"^(IAD06-PDM-[A-Z]+\d+-\d{3}-\d{2})-PRIMARY-CDS(-R)?$",
-        r"\1-CDS\2", pdm_key(value),
+        r"\1-CDS\2",
+        pdm_key(value),
     )
 
 
@@ -55,27 +58,47 @@ def read_records(path: Path) -> list[dict[str, Any]]:
     try:
         for sheet in workbook:
             columns: dict[str, int] | None = None
-            for row_number, row in enumerate(sheet.iter_rows(values_only=True), start=1):
+            for row_number, row in enumerate(
+                sheet.iter_rows(values_only=True), start=1
+            ):
                 if columns is None:
-                    header = {normalize_header(str(value)): i for i, value in enumerate(row)
-                              if value is not None}
-                    if all(normalize_header(value) in header for value in HEADERS.values()):
-                        columns = {key: header[normalize_header(value)] for key, value in HEADERS.items()}
+                    header = {
+                        normalize_header(str(value)): i
+                        for i, value in enumerate(row)
+                        if value is not None
+                    }
+                    if all(
+                        normalize_header(value) in header for value in HEADERS.values()
+                    ):
+                        columns = {
+                            key: header[normalize_header(value)]
+                            for key, value in HEADERS.items()
+                        }
                         found_header = True
                     elif row_number >= 30:
                         break
                     continue
                 raw = {key: row[index] for key, index in columns.items()}
-                if all(value is None or str(value).strip() == "" for value in raw.values()):
+                if all(
+                    value is None or str(value).strip() == "" for value in raw.values()
+                ):
                     continue
                 record: dict[str, Any] = {
-                    "sheet": sheet.title, "row": row_number,
+                    "sheet": sheet.title,
+                    "row": row_number,
                     "pdm_name": str(raw["pdm_name"] or "").strip(),
-                    "raw_values": {key: None if value is None else str(value) for key, value in raw.items()},
+                    "raw_values": {
+                        key: None if value is None else str(value)
+                        for key, value in raw.items()
+                    },
                     "invalid_fields": [],
                 }
                 for field in STATUS_FIELDS:
-                    value = str(raw[field] if raw[field] is not None else "").strip().casefold()
+                    value = (
+                        str(raw[field] if raw[field] is not None else "")
+                        .strip()
+                        .casefold()
+                    )
                     record[field] = {"yes": True, "no": False}.get(value)
                     if value not in {"", "yes", "no"}:
                         record["invalid_fields"].append(field)
@@ -88,14 +111,20 @@ def read_records(path: Path) -> list[dict[str, Any]]:
 
 
 def attach_energisation(
-    pdms: list[dict[str, Any]], path: Path | None = None,
+    pdms: list[dict[str, Any]],
+    path: Path | None = None,
 ) -> dict[str, Any]:
     source = path if path is not None else tracker_workbook_path()
     for pdm in pdms:
         for field in STATUS_FIELDS:
             pdm[field] = None
     if not source.is_file():
-        return {"available": False, "source_file": None, "source_path": str(source), "records": []}
+        return {
+            "available": False,
+            "source_file": None,
+            "source_path": str(source),
+            "records": [],
+        }
 
     records = read_records(source)
     exact: dict[str, list[int]] = defaultdict(list)
@@ -106,7 +135,9 @@ def attach_energisation(
     assignments: dict[int, list[dict[str, Any]]] = defaultdict(list)
     for record in records:
         key = pdm_key(record["pdm_name"])
-        candidates = (exact.get(key, []) or aliases.get(cds_alias(key), [])) if key else []
+        candidates = (
+            (exact.get(key, []) or aliases.get(cds_alias(key), [])) if key else []
+        )
         record["candidate_pdms"] = [pdms[index]["pdm_name"] for index in candidates]
         record["match_status"] = "unmatched" if not candidates else "ambiguous"
         if len(candidates) == 1:
