@@ -159,6 +159,19 @@ Keep ngrok pointed at **5173**, and keep the backend bound to loopback. Remove
 any old `VITE_AUTOMATION_API_URL` override to use this automatic routing.
 Set both bypass switches to `false` and restart to require Clerk locally too.
 
+### VM white screen with "Invalid hook call"
+
+If the browser reports `Invalid hook call` / `useContext` in `ClerkProvider`,
+check React resolution and the VM's dependency installation before changing
+Clerk authorization settings. Both Vite configs deduplicate `react` and
+`react-dom` to the frontend root. On the VM, stop the dashboard, sync the updated
+configs and lockfile, run `npm ci` from `frontend/`, then restart the normal
+launcher and hard-refresh the browser. `npm ci` replaces the installed dependency
+tree and old Vite cache with the lockfile's versions. If the error remains, run
+`npm ls react react-dom @clerk/react` on the VM and inspect the actual browser
+Console error. Local bypass may hide a Clerk initialization problem because it
+does not mount ClerkProvider; always check the ngrok route as well.
+
 The current JC2 SystemElements view URL is stored in the sibling tracker at
 `config/jc2_system_elements_url.txt`. Paste the latest DeviceList URL into that
 file when the JC2 view changes; Excel, NETA, and Feeder Cable ATP download jobs

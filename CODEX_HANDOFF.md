@@ -2,6 +2,15 @@
 
 ## Current Status (2026-10-09)
 
+Latest VM troubleshooting: browser Console reported Invalid hook call and
+`useContext` failing inside ClerkProvider, causing a white screen. Added
+`resolve.dedupe: ['react', 'react-dom']` to both Vite configs. Local dependency
+inspection shows React/ReactDOM 18.3.1, shared Clerk/application React path, and
+active dedupe in the JS config; production build passed. The VM dependency tree
+and cache were not accessible or reproduced locally. Sync the configs and
+lockfile, stop the VM services, run `npm ci` in frontend, restart and hard-refresh;
+if it persists inspect `npm ls` on that VM. README includes these recovery steps.
+
 Implemented a first Clerk authentication version for Data Operations using the
 free-plan invitation workflow. It is ready for user configuration, not a live
 Clerk rollout. No Clerk application, keys, invitations or user IDs were provided,

@@ -70,6 +70,7 @@ function feederCableAtpPlugin() {
 }
 
 export default defineConfig({
+    resolve: { dedupe: ['react', 'react-dom'] },
     plugins: [react(), feederCableAtpPlugin()],
     preview: {
         proxy: { '/api/automation': { target: 'http://127.0.0.1:8765', changeOrigin: true, headers: { 'X-IAD6-Proxied': '1' } } },
