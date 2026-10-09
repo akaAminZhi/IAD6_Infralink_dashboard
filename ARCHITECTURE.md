@@ -153,12 +153,23 @@ is marked dangerous and requires confirmation.
 
 ## Authentication and Authorization
 
-- The dashboard itself has no login, user model, roles, or authorization layer.
+- Dashboard viewing is public. Data Operations is gated by Clerk sign-in and
+  server-side operator authorization. The free-plan setup uses Restricted access
+  and invitations; `CLERK_ALLOWED_USER_IDS` independently controls API access.
+- The backend validates Clerk RS256 session signatures using the configured
+  issuer's JWKS, time claims, session status, and exact authorized frontend
+  origins. Missing Clerk configuration denies remote operations. An opt-in local
+  bypass permits only direct loopback requests with local host/origin and no
+  proxy/forwarding headers; Vite marks every proxy request to prevent bypass.
+  MV comment and NETA review GET endpoints remain public for viewing; their
+  writes and all other automation endpoints require an authorized operator.
 - The automation service is started on `127.0.0.1:8765`; CORS permits only
   localhost/loopback origins.
 - JC2 and CxAlloy authentication is delegated to Playwright-driven sibling
   scripts. Browser state is stored outside the repository under local app data.
-- Data Operations is not suitable for external exposure in its current form.
+- Vite proxies `/api/automation` to the loopback backend, allowing an HTTPS ngrok
+  tunnel to frontend port 5173 to serve authenticated operations. Clerk login
+  does not replace the host's JC2/CxAlloy browser sessions.
 - Vite's Feeder Cable ATP middleware only serves `.pdf` files resolved inside
   the configured ATP directory.
 
@@ -179,6 +190,13 @@ No integration credentials or endpoints belong in this repository.
 - `IAD6_EPS_TRACKER_ROOT`: overrides the sibling tracker root for automation,
   CxAlloy status, power-plan/MV processing, and Vite ATP serving where supported.
 - `VITE_AUTOMATION_API_URL`: overrides the frontend automation API base URL.
+- `VITE_CLERK_PUBLISHABLE_KEY`: frontend Clerk instance key.
+- `VITE_LOCAL_OPERATIONS_BYPASS`, `AUTOMATION_LOCAL_AUTH_BYPASS`: opt-in frontend
+  and backend localhost access without Clerk. Local mode calls the loopback API
+  directly; remote clients always use the marked Vite proxy and require auth.
+- `CLERK_ISSUER`, `CLERK_AUTHORIZED_PARTIES`, `CLERK_ALLOWED_USER_IDS`: backend
+  session validation and operator authorization. The local launcher loads these
+  from root `.env.local`; Vite loads its own `frontend/.env.local`.
 - `LOCALAPPDATA`: used indirectly to locate local browser auth-state files.
 - `config/equipment_lifecycle.json`: lifecycle order, labels, status aliases,
   and colors used by KPR.
@@ -249,6 +267,7 @@ filesystem access. No database service is required.
   path while other components honor `IAD6_EPS_TRACKER_ROOT`.
 - **Needs verification:** Decide whether missing required dashboard JSON should
   fail loudly; the shared fetch helper currently returns `null` after logging.
-- **TODO:** Add authentication/authorization and a supported deployment design
-  before allowing remote access to Data Operations.
+- **Needs configuration:** Clerk invite-only access, authorized operator IDs,
+  and exact frontend origins before using Data Operations. A permanent
+  deployment design remains separate from the local ngrok trial.
 - **TODO:** Define a lint tool and command if lint enforcement is required.

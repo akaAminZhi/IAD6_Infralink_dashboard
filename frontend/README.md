@@ -12,7 +12,11 @@ python scripts/start_dashboard.py
 ```
 
 The dashboard is available at `http://127.0.0.1:5173`. Data Operations uses the
-local API at `http://127.0.0.1:8765`.
+same-origin `/api/automation` proxy, forwarded to `http://127.0.0.1:8765`.
+Data Operations requires Clerk sign-in and a backend-authorized operator ID;
+see the root README's Clerk setup instructions. Missing Clerk configuration leaves
+remote operations locked. Optional localhost access without sign-in is enabled
+in the newly created local env files; restart the launcher to use it.
 
 To run only the frontend:
 

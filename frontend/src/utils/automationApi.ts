@@ -13,10 +13,22 @@ import type {
   SavedDailyReport,
   SavedMvDailyReport,
 } from "../types/automation";
+import { isLocalOperationsMode } from "./localOperations";
 
 const API_BASE =
   import.meta.env.VITE_AUTOMATION_API_URL?.replace(/\/$/, "") ??
-  "http://127.0.0.1:8765/api/automation";
+  (isLocalOperationsMode() ? "http://127.0.0.1:8765/api/automation" : "/api/automation");
+
+let tokenGetter: (() => Promise<string | null>) | null = null;
+
+export function setAutomationTokenGetter(getter: (() => Promise<string | null>) | null) {
+  tokenGetter = getter;
+  clearNetaReportReviewCache();
+}
+
+export function getAutomationAccess() {
+  return request<{ user_id: string }>("/access");
+}
 
 export class AutomationApiError extends Error {
   status: number;
@@ -29,12 +41,13 @@ export class AutomationApiError extends Error {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = await tokenGetter?.();
+  const headers = new Headers(init?.headers);
+  headers.set("Content-Type", "application/json");
+  if (token) headers.set("Authorization", `Bearer ${token}`);
   const response = await fetch(`${API_BASE}${path}`, {
     ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...init?.headers,
-    },
+    headers,
   });
   if (!response.ok) {
     let message = `Automation request failed (${response.status}).`;

@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -31,6 +31,7 @@ from scripts.automation.neta_report_reviews import (
     update_neta_report_review,
 )
 from scripts.automation.runner import AutomationConfig, TaskManager
+from scripts.automation.auth import require_operator
 
 
 class JobOptionsRequest(BaseModel):
@@ -121,7 +122,8 @@ def create_app(
 ) -> FastAPI:
     resolved_config = config or AutomationConfig.discover()
     task_manager = manager or TaskManager(resolved_config)
-    app = FastAPI(title="IAD6 Dashboard Automation", version="1.0.0")
+    app = FastAPI(title="IAD6 Dashboard Automation", version="1.0.0",
+                  dependencies=[Depends(require_operator)])
     app.state.automation_config = resolved_config
     app.state.task_manager = task_manager
     app.add_middleware(
@@ -129,8 +131,12 @@ def create_app(
         allow_origin_regex=r"^https?://(?:localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$",
         allow_credentials=False,
         allow_methods=["GET", "POST", "PUT", "DELETE"],
-        allow_headers=["Content-Type"],
+        allow_headers=["Content-Type", "Authorization"],
     )
+
+    @app.get("/api/automation/access")
+    def access(user_id: str = Depends(require_operator)) -> dict[str, str]:
+        return {"user_id": user_id}
 
     @app.get("/api/automation/health")
     def health() -> dict[str, Any]:

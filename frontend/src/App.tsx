@@ -10,6 +10,7 @@ import { NetaReportManifestProvider } from "./contexts/NetaReportManifestContext
 import { useDashboardData } from "./hooks/useDashboardData";
 import { DataQualityPage } from "./pages/DataQualityPage";
 import { DataOperationsPage } from "./pages/DataOperationsPage";
+import { OperationsAuthGate } from "./components/dataOperations/OperationsAuth";
 import { EquipmentPage } from "./pages/EquipmentPage";
 import { EpsTestExecutionPage } from "./pages/EpsTestExecutionPage";
 import { IssuesPage } from "./pages/IssuesPage";
@@ -113,7 +114,7 @@ function App() {
                 <Route element={<MvEquipmentPage data={dashboardData} />} path="/mv-equipment" />
                 <Route element={<DataQualityPage data={dashboardData} />} path="/data-quality" />
                 <Route
-                  element={<DataOperationsPage onDashboardReload={dashboardData.reload} />}
+                  element={<OperationsAuthGate><DataOperationsPage onDashboardReload={dashboardData.reload} /></OperationsAuthGate>}
                   path="/data-operations"
                 />
                 <Route element={<Navigate replace to="/overview" />} path="*" />

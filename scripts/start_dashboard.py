@@ -31,6 +31,9 @@ def terminate(process: subprocess.Popen[bytes] | None) -> None:
 
 
 def main() -> int:
+    from dotenv import load_dotenv
+
+    load_dotenv(PROJECT_ROOT / ".env.local")
     npm = shutil.which("npm.cmd" if os.name == "nt" else "npm")
     if npm is None:
         print("npm was not found. Install Node.js before starting the dashboard.")

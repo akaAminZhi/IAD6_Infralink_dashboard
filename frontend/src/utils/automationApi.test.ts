@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   AutomationApiError,
+  setAutomationTokenGetter,
   clearNetaReportReviewCache,
   getAutomationHealth,
   getDailyReport,
@@ -18,11 +19,26 @@ import {
 } from "./automationApi";
 
 afterEach(() => {
+  setAutomationTokenGetter(null);
   clearNetaReportReviewCache();
   vi.restoreAllMocks();
 });
 
 describe("automationApi", () => {
+  it("gets a fresh Clerk token for requests and removes it after sign-out", async () => {
+    const getter = vi.fn().mockResolvedValueOnce("token-one").mockResolvedValueOnce("token-two");
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
+      new Response(JSON.stringify({ status: "ok" })),
+    );
+    setAutomationTokenGetter(getter);
+    await getAutomationHealth();
+    await getAutomationHealth();
+    expect(new Headers(fetchMock.mock.calls[0][1]?.headers).get("Authorization")).toBe("Bearer token-one");
+    expect(new Headers(fetchMock.mock.calls[1][1]?.headers).get("Authorization")).toBe("Bearer token-two");
+    setAutomationTokenGetter(null);
+    await getAutomationHealth();
+    expect(new Headers(fetchMock.mock.calls[2][1]?.headers).has("Authorization")).toBe(false);
+  });
   it("shares pending reads, caches for 30 seconds, and invalidates after saving", async () => {
     const clock = vi.spyOn(Date, "now").mockReturnValue(1000);
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
@@ -48,7 +64,7 @@ describe("automationApi", () => {
     await expect(getNetaReportReviews()).rejects.toThrow("offline");
     expect(await getNetaReportReviews()).toEqual({ reports: [] });
   });
-  it("uses the local API and encodes path parameters", async () => {
+  it("uses the same-origin API and encodes path parameters", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
       return new Response(JSON.stringify({ status: "ok" }), {
         status: 200,
@@ -64,25 +80,25 @@ describe("automationApi", () => {
     await deleteMvEquipmentComment("comment id");
     await getNetaReportReviews();
 
-    expect(fetchMock.mock.calls[0][0]).toBe("http://127.0.0.1:8765/api/automation/health");
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/automation/health");
     expect(fetchMock.mock.calls[1][0]).toBe(
-      "http://127.0.0.1:8765/api/automation/runs/run%20id/logs?after=12",
+      "/api/automation/runs/run%20id/logs?after=12",
     );
     expect(fetchMock.mock.calls[2][0]).toBe(
-      "http://127.0.0.1:8765/api/automation/daily-reports/7-30.md",
+      "/api/automation/daily-reports/7-30.md",
     );
     expect(fetchMock.mock.calls[3][0]).toBe(
-      "http://127.0.0.1:8765/api/automation/mv-daily-reports/7-30.md",
+      "/api/automation/mv-daily-reports/7-30.md",
     );
     expect(fetchMock.mock.calls[4][0]).toBe(
-      "http://127.0.0.1:8765/api/automation/mv-equipment-comments",
+      "/api/automation/mv-equipment-comments",
     );
     expect(fetchMock.mock.calls[5][0]).toBe(
-      "http://127.0.0.1:8765/api/automation/mv-equipment-comments/comment%20id",
+      "/api/automation/mv-equipment-comments/comment%20id",
     );
     expect(fetchMock.mock.calls[5][1]).toMatchObject({ method: "DELETE" });
     expect(fetchMock.mock.calls[6][0]).toBe(
-      "http://127.0.0.1:8765/api/automation/neta-report-reviews",
+      "/api/automation/neta-report-reviews",
     );
   });
 

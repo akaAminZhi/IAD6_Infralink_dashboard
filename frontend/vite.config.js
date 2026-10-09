@@ -71,7 +71,12 @@ function feederCableAtpPlugin() {
 
 export default defineConfig({
     plugins: [react(), feederCableAtpPlugin()],
+    preview: {
+        proxy: { '/api/automation': { target: 'http://127.0.0.1:8765', changeOrigin: true, headers: { 'X-IAD6-Proxied': '1' } } },
+        allowedHosts: ['.ngrok-free.app', '.trycloudflare.com'],
+    },
     server: {
+        proxy: { '/api/automation': { target: 'http://127.0.0.1:8765', changeOrigin: true, headers: { 'X-IAD6-Proxied': '1' } } },
         host: '0.0.0.0',
         allowedHosts: [
             '.ngrok-free.app',

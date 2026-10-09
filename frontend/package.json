@@ -11,6 +11,7 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
+    "@clerk/react": "^6.17.7",
     "@nivo/pie": "^0.99.0",
     "@tanstack/react-table": "^8.21.3",
     "class-variance-authority": "^0.7.1",

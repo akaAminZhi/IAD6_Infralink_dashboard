@@ -4,6 +4,7 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   plugins: [react()],
   test: {
+    env: { VITE_LOCAL_OPERATIONS_BYPASS: "false" },
     environment: "jsdom",
     setupFiles: ["./src/test/setup.ts"],
     coverage: {

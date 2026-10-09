@@ -163,7 +163,7 @@ describe("EquipmentPage", () => {
       ],
     };
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
-      if (readOnly && String(input).startsWith("http://127.0.0.1")) {
+      if (readOnly && String(input).startsWith("/api/automation")) {
         throw new Error("Local service unavailable");
       }
       if (init?.method === "PUT") {
@@ -261,7 +261,7 @@ describe("EquipmentPage", () => {
     );
     expect(screen.queryByText("Page 2: Verify breaker settings.")).not.toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://127.0.0.1:8765/api/automation/neta-report-reviews",
+      "/api/automation/neta-report-reviews",
       expect.objectContaining({ method: "PUT" }),
     );
     fetchMock.mockRestore();

@@ -7,6 +7,7 @@ import time
 from fastapi.testclient import TestClient
 
 from scripts.automation.api import create_app
+from scripts.automation.auth import require_operator
 from scripts.automation.runner import AutomationConfig, TaskManager
 
 
@@ -26,7 +27,9 @@ def make_client(tmp_path: Path) -> tuple[TestClient, AutomationConfig, TaskManag
         cxalloy_auth_state=tmp_path / "cx.json",
     )
     manager = TaskManager(config)
-    return TestClient(create_app(config, manager)), config, manager
+    app = create_app(config, manager)
+    app.dependency_overrides[require_operator] = lambda: "user_test_operator"
+    return TestClient(app), config, manager
 
 
 def wait_until_idle(manager: TaskManager) -> None:

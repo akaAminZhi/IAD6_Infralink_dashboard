@@ -4,5 +4,7 @@ fastapi>=0.115.0
 uvicorn>=0.34.0
 playwright>=1.51.0
 httpx>=0.28.0
+PyJWT[crypto]>=2.10,<3
+python-dotenv>=1.0,<2
 pytest>=8.0.0
 pytest-cov>=7.0.0
