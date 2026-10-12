@@ -1,6 +1,71 @@
 ﻿# Codex Handoff
 
-## Current Status (2026-10-09)
+## Current Status (2026-10-12)
+
+Latest Equipment report-preview fix: reproduced a real report URL returning
+200 text/html (dashboard SPA) in compiled preview when the PDF existed in the
+live public junction but not dist. Locally, live report counts were 1666 original
+and 1871 GC PDFs versus 1613/1810 built copies. Added `liveReportsPlugin.js` in
+both Vite configs to serve PDF-only reads from the two live report roots, support
+HEAD/byte ranges, and block missing reports with 404 before SPA fallback. Root
+junctions are supported; path/realpath checks prevent escaping their configured
+targets. Existing file/link data and equipment UI were not modified.
+
+16 Node file-service tests passed (8 live-data + 8 report/attachment tests), including actual
+preview, junctions, encoded names, hot file changes, stale/missing files, ranges,
+methods and traversal. Real report smoke after the fix returned 206,
+application/pdf and `%PDF-` for the same missing-in-dist report; a nonexistent
+PDF returned 404. Report files were read only; fixtures/temporary servers cleaned
+up. Sync the new plugin/declaration/configs to the host and restart preview.
+This requires live report files/junctions on that host; git does not carry them.
+Issue images and reference drawings are also served live from their existing
+public roots. Preview launcher builds set `IAD6_PREVIEW_BUILD=1` for the build
+subprocess to omit public-file copying; regular npm builds retain copying for
+static publication. The ordinary full build was stopped after prolonged local
+public-file copying. A temporary code-only build passed, then the actual
+preview-mode `npm run build` passed in 2.41s (including TypeScript). Compiled dist
+was regenerated successfully; existing size warning remains. No raw reports,
+datasets or user services were changed/restarted.
+Final actual-config smoke verified ordinary builds still copy public files,
+preview builds omit them, compiled entry and live summary return 200, and a real
+live PDF range returns 206 with `%PDF-`. Launcher CLI help and diff check passed.
+
+Latest compiled-preview live-data change: new `frontend/liveDataPlugin.js` is
+registered in both Vite configs. It intercepts `/data/` JSON/CSV reads before
+static/SPA middleware and streams current `frontend/public/data/` files with
+`Cache-Control: no-store`. Compiled application JS/CSS are still served from
+dist. Missing live files return 404 rather than stale dist copies; method,
+extension, path and realpath containment checks limit access. `fetchJson` uses
+`cache: no-cache` to revalidate any previously cached data. Data Operations'
+existing successful-ETL detection invokes dashboard reload, so updated JSON
+appears without restarting or rebuilding preview. Other open browser sessions
+need their own refresh; this does not add a broadcast/background refresh system.
+
+Verification: 8 Node HTTP tests passed, including actual Vite preview with live
+file replacement while retaining compiled assets, missing-live/stale-dist
+behavior, HEAD/CSV, methods, traversal, and escaping directory links. Loader
+tests passed all 5. Data Operations' worker timed out before starting in the
+combined run; an isolated retry passed all 4 tests, including successful-ETL
+dashboard reload (9 targeted frontend tests total). Build passed with the same ~338 KB
+entry and existing size/timing warnings. No real ETL or user service restart was
+performed; fixture files/temporary servers were cleaned up. Re-run the normal
+`--preview` launcher once to load the new plugin; future ETL refreshes need no
+code build. Source/frontend env changes still require restart/rebuild.
+
+Latest first-load optimization: all route pages now use React.lazy with a shared
+Suspense boundary; simultaneous `fetchJson` reads of one URL share a pending
+request (settled results are not cached). Added launcher `--preview` to build
+once before serving compiled frontend assets on the existing port 5173, retaining
+the Vite API proxy and Clerk settings. Ordinary launch remains development mode.
+Local build entry fell from 972.23 KB to 338.39 KB; this is bundle-size evidence,
+not a measured VM page-load speedup. Initial JSON loading remains unchanged:
+16 datasets total 14,875,986 bytes locally. Further route-specific data loading
+would need careful handling of Overview's PDM drawers and summary metrics.
+Build and compiled-preview HTTP smoke passed (HTML/entry 200, API proxy retained).
+Data loader tests: 5 passed; App route/loading tests: 9 passed. The data-hook
+worker timed out before starting in the combined run; the isolated retry passed
+all 6 tests (20 targeted frontend tests passed across the runs).
+README documents preview use; no running user services were restarted.
 
 Latest VM troubleshooting: browser Console reported Invalid hook call and
 `useContext` failing inside ClerkProvider, causing a white screen. Added

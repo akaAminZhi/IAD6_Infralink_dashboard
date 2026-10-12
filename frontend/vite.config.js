@@ -5,6 +5,8 @@ import { fileURLToPath } from "node:url";
 
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
+import { liveDataPlugin } from "./liveDataPlugin.js";
+import { liveReportsPlugin } from "./liveReportsPlugin.js";
 
 const frontendRoot = path.dirname(fileURLToPath(import.meta.url));
 const epsTrackerRoot = path.resolve(
@@ -70,8 +72,9 @@ function feederCableAtpPlugin() {
 }
 
 export default defineConfig({
+    build: { copyPublicDir: process.env.IAD6_PREVIEW_BUILD !== '1' },
     resolve: { dedupe: ['react', 'react-dom'] },
-    plugins: [react(), feederCableAtpPlugin()],
+    plugins: [react(), liveDataPlugin(), liveReportsPlugin(), feederCableAtpPlugin()],
     preview: {
         proxy: { '/api/automation': { target: 'http://127.0.0.1:8765', changeOrigin: true, headers: { 'X-IAD6-Proxied': '1' } } },
         allowedHosts: ['.ngrok-free.app', '.trycloudflare.com'],

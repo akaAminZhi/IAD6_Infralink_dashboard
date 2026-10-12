@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import argparse
 from pathlib import Path
 import shutil
 import signal
@@ -31,6 +32,10 @@ def terminate(process: subprocess.Popen[bytes] | None) -> None:
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser(description="Start the dashboard and local automation API.")
+    parser.add_argument("--preview", action="store_true",
+                        help="Build once and serve compiled frontend assets on port 5173.")
+    args = parser.parse_args()
     from dotenv import load_dotenv
 
     load_dotenv(PROJECT_ROOT / ".env.local")
@@ -45,6 +50,15 @@ def main() -> int:
     except ImportError:
         print("Automation dependencies are missing. Run: pip install -r requirements.txt")
         return 1
+
+    if args.preview:
+        print("Building frontend assets for preview...")
+        build = subprocess.run(
+            [npm, "run", "build"], cwd=FRONTEND_ROOT, check=False,
+            env={**os.environ, "IAD6_PREVIEW_BUILD": "1"},
+        )
+        if build.returncode:
+            return build.returncode
 
     api_process: subprocess.Popen[bytes] | None = None
     frontend_process: subprocess.Popen[bytes] | None = None
@@ -66,9 +80,10 @@ def main() -> int:
             ],
             cwd=PROJECT_ROOT,
         )
-        print("Starting dashboard at http://127.0.0.1:5173")
+        frontend_mode = "preview" if args.preview else "dev"
+        print(f"Starting dashboard ({frontend_mode}) at http://127.0.0.1:5173")
         frontend_process = subprocess.Popen(
-            [npm, "run", "dev", "--", "--host", "127.0.0.1", "--port", "5173", "--strictPort"],
+            [npm, "run", frontend_mode, "--", "--host", "127.0.0.1", "--port", "5173", "--strictPort"],
             cwd=FRONTEND_ROOT,
         )
 

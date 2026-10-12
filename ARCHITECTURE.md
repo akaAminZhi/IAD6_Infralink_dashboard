@@ -38,7 +38,7 @@ flowchart LR
 - Current routes: `/overview`, `/kpr`, `/pdms`, `/equipment`, `/issues`,
   `/eps-test-execution`, `/power-plan`, `/mv-equipment`, `/data-quality`, and
   `/data-operations`.
-- `KprPage` is lazy-loaded; other pages are statically imported.
+- All route pages load their code on demand inside a shared Suspense boundary.
 
 ### Data loading
 
@@ -48,6 +48,20 @@ flowchart LR
   power-plan data, CxAlloy status, history, and KPR summary.
 - Deferred detail data: equipment, cases, module links, and data-quality report,
   loaded only for routes that need them.
+- Concurrent requests for the same JSON URL share one pending request, avoiding
+  duplicate fetch/parse work under development StrictMode. Settled results are
+  not cached, preserving later reloads of updated files.
+- Dev and compiled preview intercept `/data/` JSON/CSV requests and stream live
+  files from `frontend/public/data/` with `no-store`. Preview retains built JS/CSS
+  but reflects successful ETL outputs without a frontend rebuild. Missing live
+  files return 404; path containment, real paths and extensions restrict serving.
+- NETA PDF requests under `/neta-reports/` and `/neta-reports-gc/` also use live
+  public directories/junctions in dev and preview. Missing reports return 404
+  rather than SPA HTML; byte ranges support browser PDF viewers. Files remain
+  constrained to each configured report root after realpath resolution.
+  Issue attachments and reference drawings also use their live public roots.
+  Compiled-preview startup omits public-file copying; ordinary static builds
+  retain it.
 
 The loader distinguishes initial and detail error states, but `fetchJson`
 currently converts HTTP/network/parse failures to `null` plus a console warning;

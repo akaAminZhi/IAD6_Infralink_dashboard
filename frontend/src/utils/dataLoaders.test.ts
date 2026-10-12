@@ -7,6 +7,32 @@ afterEach(() => {
 });
 
 describe("dataLoaders", () => {
+  it("shares concurrent requests but fetches again after completion", async () => {
+    let release!: (response: Response) => void;
+    const fetchMock = vi.fn().mockImplementationOnce(() => new Promise<Response>(resolve => {
+      release = resolve;
+    })).mockResolvedValueOnce(new Response(JSON.stringify({ version: 2 })));
+    vi.stubGlobal("fetch", fetchMock);
+    const first = fetchJson("/data/shared.json");
+    expect(fetchJson("/data/shared.json")).toBe(first);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    release(new Response(JSON.stringify({ version: 1 })));
+    expect(await first).toEqual({ version: 1 });
+    expect(await fetchJson("/data/shared.json")).toEqual({ version: 2 });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("allows a retry after a shared failed request", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const fetchMock = vi.fn().mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValueOnce(new Response(JSON.stringify([1])));
+    vi.stubGlobal("fetch", fetchMock);
+    const first = fetchJson("/data/retry.json");
+    expect(fetchJson("/data/retry.json")).toBe(first);
+    expect(await first).toBeNull();
+    expect(await fetchJson("/data/retry.json")).toEqual([1]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
   it("unwraps arrays and records envelopes", () => {
     expect(unwrapRecords<number>([1, 2])).toEqual([1, 2]);
     expect(unwrapRecords<number>({ records: [3, 4] })).toEqual([3, 4]);

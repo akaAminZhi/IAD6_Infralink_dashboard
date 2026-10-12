@@ -74,6 +74,34 @@ Run logs are stored under `runtime/automation/` and are not committed.
 
 ## Clerk sign-in for Data Operations (free plan)
 
+For VM trials with less browser startup work, use
+`python scripts/start_dashboard.py --preview`. This builds the frontend once
+before starting services without copying runtime datasets/reports, then serves
+compiled assets on the same port 5173
+with the same API proxy and Clerk settings. Re-run the command after changes to
+source or frontend env values. JSON/CSV requests under `/data/` read the current
+`frontend/public/data/` files directly, with caching disabled. A successful ETL
+in Data Operations triggers the existing dashboard reload and shows updated data
+without restarting preview or rebuilding code. Missing live files return 404
+instead of falling back to stale copies in `dist/`. The normal command retains
+the Vite development server. Preview is a local trial mode, not a permanent
+production deployment setup. Application routes load their code on demand;
+concurrent reads of the same JSON share one request without caching completed
+results, so reloads can fetch updated data.
+
+NETA report PDFs also read live from `frontend/public/neta-reports/` and
+`frontend/public/neta-reports-gc/`, including their tracker junction targets.
+The report middleware supports browser PDF byte-range requests. Missing reports
+return 404 instead of falling through to dashboard HTML or stale built copies.
+The report files and junctions must exist on the machine hosting the dashboard;
+they are not committed to git. Report-manifest generation creates the configured
+public links when its source directories are available. After syncing report
+middleware changes, restart preview once. Later downloads do not require rebuild.
+Issue attachments and reference drawings are likewise served live from
+`frontend/public/issue-case-images/` and `frontend/public/references/`. This avoids
+copying large report/attachment collections during preview startup. Regular
+`npm run build` retains public-file copying for standalone static publication.
+
 Data Operations now requires a Clerk session and an authorized operator ID.
 Without Clerk configuration remote operations are locked. The local env files
 enable optional localhost use without sign-in (described below). Other dashboard

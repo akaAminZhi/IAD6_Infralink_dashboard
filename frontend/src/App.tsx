@@ -8,16 +8,35 @@ import { AppLayout } from "./components/layout/AppLayout";
 import { IssueAttachmentManifestProvider } from "./contexts/IssueAttachmentManifestContext";
 import { NetaReportManifestProvider } from "./contexts/NetaReportManifestContext";
 import { useDashboardData } from "./hooks/useDashboardData";
-import { DataQualityPage } from "./pages/DataQualityPage";
-import { DataOperationsPage } from "./pages/DataOperationsPage";
 import { OperationsAuthGate } from "./components/dataOperations/OperationsAuth";
-import { EquipmentPage } from "./pages/EquipmentPage";
-import { EpsTestExecutionPage } from "./pages/EpsTestExecutionPage";
-import { IssuesPage } from "./pages/IssuesPage";
-import { MvEquipmentPage } from "./pages/MvEquipmentPage";
-import { OverviewPage } from "./pages/OverviewPage";
-import { PdmPage } from "./pages/PdmPage";
-import { PowerPlanPage } from "./pages/PowerPlanPage";
+
+const DataQualityPage = lazy(() =>
+  import("./pages/DataQualityPage").then((module) => ({ default: module.DataQualityPage })),
+);
+const DataOperationsPage = lazy(() =>
+  import("./pages/DataOperationsPage").then((module) => ({ default: module.DataOperationsPage })),
+);
+const EquipmentPage = lazy(() =>
+  import("./pages/EquipmentPage").then((module) => ({ default: module.EquipmentPage })),
+);
+const EpsTestExecutionPage = lazy(() =>
+  import("./pages/EpsTestExecutionPage").then((module) => ({ default: module.EpsTestExecutionPage })),
+);
+const IssuesPage = lazy(() =>
+  import("./pages/IssuesPage").then((module) => ({ default: module.IssuesPage })),
+);
+const MvEquipmentPage = lazy(() =>
+  import("./pages/MvEquipmentPage").then((module) => ({ default: module.MvEquipmentPage })),
+);
+const OverviewPage = lazy(() =>
+  import("./pages/OverviewPage").then((module) => ({ default: module.OverviewPage })),
+);
+const PdmPage = lazy(() =>
+  import("./pages/PdmPage").then((module) => ({ default: module.PdmPage })),
+);
+const PowerPlanPage = lazy(() =>
+  import("./pages/PowerPlanPage").then((module) => ({ default: module.PowerPlanPage })),
+);
 
 const KprPage = lazy(() =>
   import("./pages/KprPage").then((module) => ({ default: module.KprPage })),
@@ -95,30 +114,32 @@ function App() {
                   Back to KPR
                 </button>
               ) : null}
-              <Routes>
-                <Route element={<Navigate replace to="/overview" />} path="/" />
-                <Route element={<OverviewPage data={dashboardData} />} path="/overview" />
-                <Route
-                  element={
-                    <Suspense fallback={<LoadingState />}>
-                      <KprPage data={dashboardData} />
-                    </Suspense>
-                  }
-                  path="/kpr"
-                />
-                <Route element={<PdmPage data={dashboardData} />} path="/pdms" />
-                <Route element={<EquipmentPage data={dashboardData} />} path="/equipment" />
-                <Route element={<IssuesPage data={dashboardData} />} path="/issues" />
-                <Route element={<EpsTestExecutionPage data={dashboardData} />} path="/eps-test-execution" />
-                <Route element={<PowerPlanPage data={dashboardData} />} path="/power-plan" />
-                <Route element={<MvEquipmentPage data={dashboardData} />} path="/mv-equipment" />
-                <Route element={<DataQualityPage data={dashboardData} />} path="/data-quality" />
-                <Route
-                  element={<OperationsAuthGate><DataOperationsPage onDashboardReload={dashboardData.reload} /></OperationsAuthGate>}
-                  path="/data-operations"
-                />
-                <Route element={<Navigate replace to="/overview" />} path="*" />
-              </Routes>
+              <Suspense fallback={<LoadingState />}>
+                <Routes>
+                  <Route element={<Navigate replace to="/overview" />} path="/" />
+                  <Route element={<OverviewPage data={dashboardData} />} path="/overview" />
+                  <Route
+                    element={
+                      <Suspense fallback={<LoadingState />}>
+                        <KprPage data={dashboardData} />
+                      </Suspense>
+                    }
+                    path="/kpr"
+                  />
+                  <Route element={<PdmPage data={dashboardData} />} path="/pdms" />
+                  <Route element={<EquipmentPage data={dashboardData} />} path="/equipment" />
+                  <Route element={<IssuesPage data={dashboardData} />} path="/issues" />
+                  <Route element={<EpsTestExecutionPage data={dashboardData} />} path="/eps-test-execution" />
+                  <Route element={<PowerPlanPage data={dashboardData} />} path="/power-plan" />
+                  <Route element={<MvEquipmentPage data={dashboardData} />} path="/mv-equipment" />
+                  <Route element={<DataQualityPage data={dashboardData} />} path="/data-quality" />
+                  <Route
+                    element={<OperationsAuthGate><DataOperationsPage onDashboardReload={dashboardData.reload} /></OperationsAuthGate>}
+                    path="/data-operations"
+                  />
+                  <Route element={<Navigate replace to="/overview" />} path="*" />
+                </Routes>
+              </Suspense>
             </>
           )}
         </AppLayout>

@@ -13,6 +13,9 @@ vi.mock("./hooks/useDashboardData", () => ({
 vi.mock("./components/layout/AppLayout", () => ({
   AppLayout: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }));
+vi.mock("./components/dataOperations/OperationsAuth", () => ({
+  OperationsAuthGate: ({ children }: { children: React.ReactNode }) => children,
+}));
 vi.mock("./pages/OverviewPage", () => ({
   OverviewPage: () => <div>Overview Route</div>,
 }));
@@ -81,12 +84,12 @@ describe("App routing and loading behavior", () => {
     expect(screen.getByText("Loading dashboard data")).toBeInTheDocument();
   });
 
-  it("keeps Data Operations accessible while dashboard data is broken", () => {
+  it("keeps Data Operations accessible while dashboard data is broken", async () => {
     useDashboardDataMock.mockReturnValue(
       dashboardState({ loading: true, error: "Dashboard failed" }),
     );
     renderRoute("/data-operations");
-    expect(screen.getByText("Data Operations Route")).toBeInTheDocument();
+    expect(await screen.findByText("Data Operations Route")).toBeInTheDocument();
   });
 
   it("loads detail data before rendering a detail route", async () => {
@@ -111,12 +114,12 @@ describe("App routing and loading behavior", () => {
     await waitFor(() => expect(loadDetailData).toHaveBeenCalledTimes(1));
   });
 
-  it("renders a detail route after detail data is ready", () => {
+  it("renders a detail route after detail data is ready", async () => {
     useDashboardDataMock.mockReturnValue(
       dashboardState({ detailDataLoaded: true }),
     );
     renderRoute("/equipment");
-    expect(screen.getByText("Equipment Route")).toBeInTheDocument();
+    expect(await screen.findByText("Equipment Route")).toBeInTheDocument();
   });
 
   it("shows a retryable dashboard error", async () => {
@@ -148,16 +151,16 @@ describe("App routing and loading behavior", () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByText("EPS Route")).toBeInTheDocument();
+    expect(await screen.findByText("EPS Route")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Back to Overview" }));
-    expect(screen.getByText("Overview Route")).toBeInTheDocument();
+    expect(await screen.findByText("Overview Route")).toBeInTheDocument();
   });
 
-  it("does not show the Overview return button for direct navigation", () => {
+  it("does not show the Overview return button for direct navigation", async () => {
     useDashboardDataMock.mockReturnValue(dashboardState());
     renderRoute("/eps-test-execution");
 
-    expect(screen.getByText("EPS Route")).toBeInTheDocument();
+    expect(await screen.findByText("EPS Route")).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Back to Overview" }),
     ).not.toBeInTheDocument();
@@ -181,6 +184,6 @@ describe("App routing and loading behavior", () => {
     );
 
     await user.click(screen.getByRole("button", { name: "Back to KPR" }));
-    expect(screen.getByText("KPR Route")).toBeInTheDocument();
+    expect(await screen.findByText("KPR Route")).toBeInTheDocument();
   });
 });
