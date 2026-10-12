@@ -67,7 +67,7 @@ def require_operator(request: Request) -> str | None:
         "/api/automation/mv-equipment-comments", "/api/automation/neta-report-reviews",
     }:
         return None
-    if is_local_operator(request):
+    if not request.headers.get("Authorization") and is_local_operator(request):
         return "local_operator"
     authorization = request.headers.get("Authorization", "")
     scheme, _, token = authorization.partition(" ")

@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 from datetime import datetime
+from contextlib import asynccontextmanager
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from scripts.automation.daily_reports import (
     ReportNameError,
@@ -32,6 +33,7 @@ from scripts.automation.neta_report_reviews import (
 )
 from scripts.automation.runner import AutomationConfig, TaskManager
 from scripts.automation.auth import require_operator
+from scripts.automation.browser_login import BrowserLoginManager, KEYS, WIDTH, HEIGHT
 
 
 class JobOptionsRequest(BaseModel):
@@ -92,6 +94,28 @@ class NetaReportReviewRequest(BaseModel):
     status: str = Field(pattern=r"^(PASSED|FAILED)$")
 
 
+class BrowserActionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    kind: Literal["screen", "click", "text", "key", "scroll", "save"]
+    x: float | None = Field(default=None, ge=0, lt=WIDTH)
+    y: float | None = Field(default=None, ge=0, lt=HEIGHT)
+    text: str | None = Field(default=None, max_length=4096)
+    key: str | None = None
+    delta: int | None = Field(default=None, ge=-800, le=800)
+
+    @model_validator(mode="after")
+    def validate_action(self) -> BrowserActionRequest:
+        if self.kind == "click" and (self.x is None or self.y is None):
+            raise ValueError("Click coordinates are required.")
+        if self.kind == "text" and self.text is None:
+            raise ValueError("Text is required.")
+        if self.kind == "key" and self.key not in KEYS:
+            raise ValueError("Unsupported key.")
+        if self.kind == "scroll" and self.delta is None:
+            raise ValueError("Scroll distance is required.")
+        return self
+
+
 def _file_status(path: Path) -> dict[str, Any]:
     if not path.exists():
         return {"exists": False, "modified_at": None}
@@ -119,13 +143,39 @@ def _last_etl_status(config: AutomationConfig) -> dict[str, Any] | None:
 def create_app(
     config: AutomationConfig | None = None,
     manager: TaskManager | None = None,
+    browser_logins: BrowserLoginManager | None = None,
 ) -> FastAPI:
     resolved_config = config or AutomationConfig.discover()
     task_manager = manager or TaskManager(resolved_config)
+    login_manager = browser_logins or BrowserLoginManager(resolved_config)
+    @asynccontextmanager
+    async def lifespan(app):
+        yield
+        login_manager.shutdown()
     app = FastAPI(title="IAD6 Dashboard Automation", version="1.0.0",
-                  dependencies=[Depends(require_operator)])
+                  dependencies=[Depends(require_operator)], lifespan=lifespan)
     app.state.automation_config = resolved_config
     app.state.task_manager = task_manager
+    app.state.browser_logins = login_manager
+
+    @app.middleware("http")
+    async def private_api_cache(request, call_next):
+        response = await call_next(request)
+        if request.url.path.startswith("/api/automation/"):
+            response.headers["Cache-Control"] = "no-store"
+        return response
+
+    def visible(run: dict[str, Any], user_id: str) -> bool:
+        return run.get("owner_user_id") == user_id or (user_id == "local_operator" and run.get("owner_user_id") is None)
+
+    def require_run(run_id: str, user_id: str) -> dict[str, Any]:
+        try:
+            run = task_manager.get_run(run_id)
+        except KeyError as exc:
+            raise HTTPException(404, "Task not found.") from exc
+        if not visible(run, user_id):
+            raise HTTPException(404, "Task not found.")
+        return run
     app.add_middleware(
         CORSMiddleware,
         allow_origin_regex=r"^https?://(?:localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$",
@@ -139,7 +189,9 @@ def create_app(
         return {"user_id": user_id}
 
     @app.get("/api/automation/health")
-    def health() -> dict[str, Any]:
+    def health(user_id: str = Depends(require_operator)) -> dict[str, Any]:
+        active_id = task_manager.active_run_id()
+        own_active_id = active_id if active_id and visible(task_manager.get_run(active_id), user_id) else None
         return {
             "service_status": "ok",
             "dashboard_root": str(resolved_config.dashboard_root),
@@ -149,10 +201,12 @@ def create_app(
             "mv_report_directory": str(resolved_config.mv_report_dir),
             "runtime_directory": str(resolved_config.runtime_root),
             "sessions": {
-                "jc2": _file_status(resolved_config.jc2_auth_state),
-                "cxalloy": _file_status(resolved_config.cxalloy_auth_state),
+                "jc2": _file_status(resolved_config.session_path(user_id, "jc2")),
+                "cxalloy": _file_status(resolved_config.session_path(user_id, "cxalloy")),
             },
-            "active_run_id": task_manager.active_run_id(),
+            "active_run_id": own_active_id,
+            "busy": bool(active_id),
+            "session_scope": "personal",
             "last_etl": _last_etl_status(resolved_config),
         }
 
@@ -161,11 +215,12 @@ def create_app(
         return task_manager.jobs_public()
 
     @app.get("/api/automation/runs")
-    def runs() -> list[dict[str, Any]]:
-        return task_manager.list_runs()
+    def runs(user_id: str = Depends(require_operator)) -> list[dict[str, Any]]:
+        return [run for run in task_manager.list_runs() if visible(run, user_id)]
 
     @app.get("/api/automation/runs/{run_id}")
-    def run_detail(run_id: str) -> dict[str, Any]:
+    def run_detail(run_id: str, user_id: str = Depends(require_operator)) -> dict[str, Any]:
+        require_run(run_id, user_id)
         try:
             return task_manager.get_run(run_id)
         except KeyError as exc:
@@ -176,19 +231,22 @@ def create_app(
         run_id: str,
         after: int = Query(default=0, ge=0),
         limit: int = Query(default=65_536, ge=1, le=262_144),
+        user_id: str = Depends(require_operator),
     ) -> dict[str, Any]:
+        require_run(run_id, user_id)
         try:
             return task_manager.read_log(run_id, after, limit)
         except KeyError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     @app.post("/api/automation/jobs/{job_id}/runs", status_code=202)
-    def start_job(job_id: str, request: JobRunRequest) -> dict[str, Any]:
+    def start_job(job_id: str, request: JobRunRequest, user_id: str = Depends(require_operator)) -> dict[str, Any]:
         try:
             return task_manager.start_job(
                 job_id,
                 request.options.model_dump(),
                 confirmed=request.confirmed,
+                owner_user_id=user_id,
             )
         except PermissionError as exc:
             raise HTTPException(status_code=403, detail=str(exc)) from exc
@@ -196,14 +254,15 @@ def create_app(
             raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     @app.post("/api/automation/pipelines/daily/runs", status_code=202)
-    def start_daily_pipeline(request: PipelineRunRequest) -> dict[str, Any]:
+    def start_daily_pipeline(request: PipelineRunRequest, user_id: str = Depends(require_operator)) -> dict[str, Any]:
         try:
-            return task_manager.start_daily_pipeline(request.model_dump())
+            return task_manager.start_daily_pipeline(request.model_dump(), owner_user_id=user_id)
         except (RuntimeError, ValueError) as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     @app.post("/api/automation/runs/{run_id}/resume", status_code=202)
-    def resume_run(run_id: str) -> dict[str, Any]:
+    def resume_run(run_id: str, user_id: str = Depends(require_operator)) -> dict[str, Any]:
+        require_run(run_id, user_id)
         try:
             return task_manager.resume(run_id)
         except KeyError as exc:
@@ -212,7 +271,8 @@ def create_app(
             raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     @app.post("/api/automation/runs/{run_id}/cancel", status_code=202)
-    def cancel_run(run_id: str) -> dict[str, Any]:
+    def cancel_run(run_id: str, user_id: str = Depends(require_operator)) -> dict[str, Any]:
+        require_run(run_id, user_id)
         try:
             return task_manager.cancel(run_id)
         except KeyError as exc:
@@ -222,13 +282,33 @@ def create_app(
 
     @app.post("/api/automation/logins/{provider}", status_code=202)
     def start_login(provider: str) -> dict[str, Any]:
+        raise HTTPException(410, "Use the personal browser login window in Data Operations.")
+
+    @app.post("/api/automation/browser-logins/{provider}", status_code=202)
+    def start_browser_login(provider: Literal["jc2", "cxalloy"], user_id: str = Depends(require_operator)):
         try:
-            return task_manager.start_login(provider)
-        except (RuntimeError, ValueError) as exc:
-            raise HTTPException(status_code=409, detail=str(exc)) from exc
+            return login_manager.start(user_id, provider)
+        except (ValueError, OSError, StopIteration) as exc:
+            raise HTTPException(503, "Provider login configuration is unavailable on the automation host.") from exc
+
+    @app.post("/api/automation/browser-logins/{session_id}/actions")
+    def browser_action(session_id: str, action: BrowserActionRequest, user_id: str = Depends(require_operator)):
+        return login_manager.command(user_id, session_id, action.model_dump(exclude_none=True))
+
+    @app.delete("/api/automation/browser-logins/{session_id}")
+    def close_browser_login(session_id: str, user_id: str = Depends(require_operator)):
+        return login_manager.close(user_id, session_id)
+
+    @app.delete("/api/automation/provider-sessions/{provider}")
+    def disconnect_provider(provider: Literal["jc2", "cxalloy"], user_id: str = Depends(require_operator)):
+        if task_manager.has_active_run():
+            raise HTTPException(409, "Wait for the active task before disconnecting.")
+        login_manager.disconnect(user_id, provider)
+        return {"provider": provider, "disconnected": True}
 
     @app.post("/api/automation/runs/{run_id}/continue", status_code=202)
-    def continue_login(run_id: str) -> dict[str, Any]:
+    def continue_login(run_id: str, user_id: str = Depends(require_operator)) -> dict[str, Any]:
+        require_run(run_id, user_id)
         try:
             return task_manager.continue_login(run_id)
         except KeyError as exc:
@@ -258,7 +338,7 @@ def create_app(
         )
 
     @app.put("/api/automation/daily-reports/{report_name}", status_code=202)
-    def save_daily_report(report_name: str, request: DailyReportRequest) -> dict[str, Any]:
+    def save_daily_report(report_name: str, request: DailyReportRequest, user_id: str = Depends(require_operator)) -> dict[str, Any]:
         if task_manager.has_active_run():
             raise HTTPException(
                 status_code=409,
@@ -278,7 +358,7 @@ def create_app(
                 overwrite=request.overwrite,
             )
             saved_report = read_report(resolved_config.report_dir, path.name)
-            wash_run = task_manager.start_job("wash_daily_reports")
+            wash_run = task_manager.start_job("wash_daily_reports", owner_user_id=user_id)
             return {
                 "report": saved_report,
                 "validation": validation,

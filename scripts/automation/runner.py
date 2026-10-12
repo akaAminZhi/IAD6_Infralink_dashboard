@@ -12,9 +12,15 @@ import threading
 import time
 from typing import Any
 from uuid import uuid4
+from scripts.automation.user_sessions import user_session_path
 
 
 ACTIVE_STATUSES = {"queued", "running", "waiting_for_user"}
+AUTH_PROVIDERS = {
+    "refresh_jc2_exports": "jc2", "download_neta_reports": "jc2",
+    "download_feeder_cable_atp": "jc2", "download_issue_attachments": "jc2",
+    "upload_cxalloy_reports": "cxalloy",
+}
 RESUMABLE_STATUSES = {"failed", "auth_required", "interrupted", "cancelled"}
 
 
@@ -29,6 +35,11 @@ class AutomationConfig:
     runtime_root: Path
     jc2_auth_state: Path
     cxalloy_auth_state: Path
+
+    def session_path(self, user_id: str | None, provider: str) -> Path:
+        if user_id is not None:
+            return user_session_path(self.jc2_auth_state.parent, user_id, provider)
+        return self.jc2_auth_state if provider == "jc2" else self.cxalloy_auth_state
 
     @classmethod
     def discover(
@@ -209,6 +220,7 @@ class TaskManager:
         options: dict[str, Any] | None = None,
         *,
         confirmed: bool = False,
+        owner_user_id: str | None = None,
     ) -> dict[str, Any]:
         definition = self._job(job_id)
         normalized_options = self._validate_options(definition, options or {})
@@ -219,11 +231,12 @@ class TaskManager:
             label=definition.label,
             steps=[job_id],
             options=normalized_options,
+            owner_user_id=owner_user_id,
         )
         self._start_worker(run["run_id"], 0)
         return self.get_run(run["run_id"])
 
-    def start_login(self, provider: str) -> dict[str, Any]:
+    def start_login(self, provider: str, owner_user_id: str | None = None) -> dict[str, Any]:
         provider_key = provider.strip().lower()
         if provider_key == "jc2":
             job_id = "login_jc2"
@@ -233,11 +246,11 @@ class TaskManager:
             label = "Refresh CxAlloy Login"
         else:
             raise ValueError("Login provider must be jc2 or cxalloy.")
-        run = self._new_run(kind="login", label=label, steps=[job_id], options={})
+        run = self._new_run(kind="login", label=label, steps=[job_id], options={}, owner_user_id=owner_user_id)
         self._start_worker(run["run_id"], 0)
         return self.get_run(run["run_id"])
 
-    def start_daily_pipeline(self, options: dict[str, Any] | None = None) -> dict[str, Any]:
+    def start_daily_pipeline(self, options: dict[str, Any] | None = None, *, owner_user_id: str | None = None) -> dict[str, Any]:
         options = options or {}
         allowed = {"headed", "force"}
         unknown = {key for key, value in options.items() if value and key not in allowed}
@@ -249,6 +262,7 @@ class TaskManager:
             label="Daily Data Refresh",
             steps=list(DAILY_PIPELINE),
             options=normalized,
+            owner_user_id=owner_user_id,
         )
         self._start_worker(run["run_id"], 0)
         return self.get_run(run["run_id"])
@@ -343,12 +357,14 @@ class TaskManager:
         label: str,
         steps: list[str],
         options: dict[str, Any],
+        owner_user_id: str | None = None,
     ) -> dict[str, Any]:
         with self._lock:
             self._ensure_idle()
             run_id = uuid4().hex
             run = {
                 "run_id": run_id,
+                "owner_user_id": owner_user_id,
                 "kind": kind,
                 "label": label,
                 "status": "queued",
@@ -375,11 +391,13 @@ class TaskManager:
             self._runs[run_id] = run
             self._persist(run)
             self._trim_history()
+            self._active_run_id = run_id
             return run
 
     def _start_worker(self, run_id: str, start_index: int) -> None:
         with self._lock:
-            self._ensure_idle()
+            if self._active_run_id not in {None, run_id}:
+                self._ensure_idle()
             self._active_run_id = run_id
             self._cancel_requested = False
         thread = threading.Thread(
@@ -491,7 +509,13 @@ class TaskManager:
         *,
         login: bool,
     ) -> tuple[int, str | None, bool]:
-        command, cwd = self.build_command(job_id, options)
+        owner = self.get_run(run_id).get("owner_user_id")
+        provider = AUTH_PROVIDERS.get(job_id)
+        if owner and provider and not self.config.session_path(owner, provider).is_file():
+            message = f"Your {provider.upper()} session is missing. Use Refresh login."
+            self._append_log(run_id, message + "\n")
+            return 2, message, True
+        command, cwd = self.build_command(job_id, options, owner_user_id=owner)
         self._append_log(run_id, f"Working directory: {cwd}\n")
         self._append_log(run_id, f"Command: {' '.join(command)}\n")
         process = subprocess.Popen(
@@ -561,8 +585,9 @@ class TaskManager:
                         missing.append("Playwright Chromium (run: playwright install chromium)")
             except Exception as exc:
                 missing.append(f"Playwright Chromium check: {exc}")
-        if not self.config.jc2_auth_state.is_file():
-            message = f"JC2 login session not found: {self.config.jc2_auth_state}"
+        auth_path = self.config.session_path(self.get_run(run_id).get("owner_user_id"), "jc2")
+        if not auth_path.is_file():
+            message = "Your JC2 session is missing. Sign in using Refresh login."
             self._append_log(run_id, f"AUTH REQUIRED: {message}\n")
             return 2, message, True
         if missing:
@@ -575,7 +600,7 @@ class TaskManager:
         return 0, None, False
 
     def build_command(
-        self, job_id: str, options: dict[str, Any] | None = None
+        self, job_id: str, options: dict[str, Any] | None = None, *, owner_user_id: str | None = None
     ) -> tuple[list[str], Path]:
         options = options or {}
         if job_id == "login_jc2":
@@ -584,6 +609,7 @@ class TaskManager:
                 "-u",
                 str(self.config.eps_root / "download_jc2_excel_exports.py"),
                 "--login",
+                *(["--auth-state", str(self.config.session_path(owner_user_id, "jc2"))] if owner_user_id else []),
             ], self.config.eps_root
         if job_id == "login_cxalloy":
             return [
@@ -591,6 +617,7 @@ class TaskManager:
                 "-u",
                 str(self.config.eps_root / "upload_cxalloy_reports.py"),
                 "--login",
+                *(["--auth-state", str(self.config.session_path(owner_user_id, "cxalloy"))] if owner_user_id else []),
             ], self.config.eps_root
 
         definition = self._job(job_id)
@@ -614,6 +641,9 @@ class TaskManager:
             command.extend(["--limit", str(normalized["limit"])])
         if normalized.get("no_excel_update"):
             command.append("--no-excel-update")
+        provider = AUTH_PROVIDERS.get(job_id)
+        if owner_user_id and provider:
+            command.extend(["--auth-state", str(self.config.session_path(owner_user_id, provider))])
         return command, cwd
 
     def _options_for_step(self, run: dict[str, Any], job_id: str) -> dict[str, Any]:

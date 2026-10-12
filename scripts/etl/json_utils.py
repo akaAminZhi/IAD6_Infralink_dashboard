@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import json
+import os
+import tempfile
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -68,4 +71,30 @@ def selected_input_files_metadata(
 def write_json(path: str | Path, payload: Any) -> None:
     output_path = Path(path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    # Keep readers on a complete file and tolerate brief Windows/OneDrive locks.
+    serialized = json.dumps(payload, indent=2)
+    temporary_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", dir=output_path.parent,
+            prefix=f".{output_path.name}.", suffix=".tmp", delete=False,
+        ) as temporary:
+            temporary_path = Path(temporary.name)
+            temporary.write(serialized)
+        for attempt in range(4):
+            try:
+                os.replace(temporary_path, output_path)
+                break
+            except PermissionError as exc:
+                if attempt == 3:
+                    raise PermissionError(
+                        exc.errno,
+                        "Cannot replace ETL output after retries. Check file permissions, "
+                        "read-only attributes, and whether OneDrive or another program "
+                        "is locking the file",
+                        str(output_path),
+                    ) from exc
+                time.sleep(0.1 * (2 ** attempt))
+    finally:
+        if temporary_path is not None:
+            temporary_path.unlink(missing_ok=True)

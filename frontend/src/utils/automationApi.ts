@@ -1,5 +1,7 @@
 import type {
   AutomationHealth,
+  BrowserLoginSession,
+  BrowserLoginAction,
   AutomationJob,
   AutomationRun,
   DailyReport,
@@ -112,6 +114,24 @@ export function cancelAutomationRun(runId: string) {
 
 export function startAutomationLogin(provider: "jc2" | "cxalloy") {
   return request<AutomationRun>(`/logins/${provider}`, { method: "POST" });
+}
+
+export function startBrowserLogin(provider: "jc2" | "cxalloy") {
+  return request<BrowserLoginSession>(`/browser-logins/${provider}`, { method: "POST" });
+}
+
+export function browserLoginAction(sessionId: string, action: BrowserLoginAction) {
+  return request<BrowserLoginSession>(`/browser-logins/${encodeURIComponent(sessionId)}/actions`, {
+    method: "POST", body: JSON.stringify(action),
+  });
+}
+
+export function closeBrowserLogin(sessionId: string) {
+  return request<{ status: string }>(`/browser-logins/${encodeURIComponent(sessionId)}`, { method: "DELETE" });
+}
+
+export function disconnectProvider(provider: "jc2" | "cxalloy") {
+  return request<{ disconnected: boolean }>(`/provider-sessions/${provider}`, { method: "DELETE" });
 }
 
 export function continueAutomationLogin(runId: string) {

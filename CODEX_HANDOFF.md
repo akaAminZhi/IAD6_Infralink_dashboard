@@ -2,6 +2,60 @@
 
 ## Current Status (2026-10-12)
 
+Local ETL reported PermissionError for eps_history/snapshots/2026-06-05.json.
+The builder rewrites historical snapshots via shared write_json. Changed that
+helper to write a sibling temporary file and atomically replace the output,
+retrying PermissionError four times with bounded delays. Persistent errors
+identify the output and suggest checking permissions/read-only/OneDrive locks;
+the old output survives failed replacement and temporary files are cleaned up.
+28 JSON helper/EPS builder/ETL orchestration tests passed. Subsequent local
+inspection confirmed Windows sharing violation 32; Restart Manager and psutil
+identified orphaned `node ... vite.js build` PID 13100 (parent no longer present)
+holding this exact snapshot. Stopped only that stale build, verified write
+access without changing contents, and ran the real EPS builder successfully.
+Full real local ETL then completed all 16 steps with exit code 0 and regenerated
+dashboard outputs. No ACL changes or dashboard service restarts were needed.
+
+Remote JC2 login trial reached company SSO `idp.mcdean.com`, which the new
+network allowlist blocked. Added that exact host to the built-in allowlist;
+other company subdomains and lookalike suffixes remain blocked. Restart the
+backend and open a new login window after syncing this fix to the VM.
+
+Latest personal-account remote-login implementation: Windows VM; user requires
+individual JC2 accounts with Microsoft phone MFA and individual CxAlloy accounts
+with username/password. Added `browser_login.py`, `user_sessions.py` and
+BrowserLoginDialog. Refresh login opens an owner-bound web-controlled Chromium
+page (screenshot/click/type/keys/scroll), not the old VM-only login task. No
+additional service/tunnel/dependency is required beyond existing Playwright.
+
+State is saved only after returning to the provider origin with no visible
+password fields/auth routes and some browser state. Per-user auth files are
+outside the repo, hashed by verified Clerk ID. All five external job types get
+explicit personal --auth-state paths; missing states never use old VM states.
+Run IDs/metadata are owner-bound, and other users cannot read logs, resume,
+cancel, view/control/close browser sessions or delete another user's auth state.
+Global job serialization is retained and its reservation made atomic. API JSON
+responses use no-store; browser inputs/screenshots are not persisted or logged.
+
+Old /logins/{provider} endpoints return 410. CLI maintenance paths remain;
+remote clients must use new browser-logins endpoints. Existing shared auth files
+are kept but not migrated to users. Each user must connect once after deployment.
+Disable local bypass for strict personal identity on localhost; otherwise the
+anonymous local operator has its own profile. Clerk tokens take precedence even
+with bypass enabled. Optional additional SSO hosts / headless override are
+documented in README. Browser lifetime is 20 minutes, cap six active contexts.
+
+Verification so far: 66 Python auth/API/runner/personal-isolation tests passed.
+A real Windows Chromium fixture test exercised remote typing, simulated phone
+MFA, guarded save and cross-user rejection; passed after increasing fixture
+startup wait from 15 to 45 seconds for cold Chromium startup. It did not contact
+real vendor accounts and the saved fixture state contained no entered password.
+Frontend dialog tests 4 passed; DataOperationsPage tests 5 passed (including the
+new web-login trigger), automationApi tests 6 passed. Preview build passed;
+real Microsoft tenant MFA and provider policy must be trialed by the user on VM.
+No live uploads, ETL, real provider login, credential inspection or service
+restart was performed. No commit was made.
+
 Latest Equipment report-preview fix: reproduced a real report URL returning
 200 text/html (dashboard SPA) in compiled preview when the PDF existed in the
 live public junction but not dist. Locally, live report counts were 1666 original

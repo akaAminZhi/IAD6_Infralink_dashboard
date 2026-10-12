@@ -138,3 +138,14 @@ def test_local_bypass_is_opt_in(monkeypatch):
     monkeypatch.setenv("AUTOMATION_LOCAL_AUTH_BYPASS", "false")
     client = TestClient(create_app(), base_url="http://127.0.0.1:8765", client=("127.0.0.1", 12345))
     assert client.get("/api/automation/access").status_code == 401
+
+
+def test_clerk_identity_takes_precedence_over_local_bypass(session, monkeypatch):
+    key, claims, settings = session
+    monkeypatch.setenv("AUTOMATION_LOCAL_AUTH_BYPASS", "true")
+    monkeypatch.setattr(auth.AuthSettings, "from_env", lambda: settings)
+    client = TestClient(create_app(), base_url="http://127.0.0.1:8765", client=("127.0.0.1", 12345))
+    token = jwt.encode(claims, key, algorithm="RS256")
+    response = client.get("/api/automation/access", headers={"Authorization": f"Bearer {token}"})
+    assert response.json() == {"user_id": "user_allowed"}
+    assert client.get("/api/automation/access", headers={"Authorization": "Bearer invalid"}).status_code == 401

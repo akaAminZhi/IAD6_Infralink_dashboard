@@ -177,6 +177,17 @@ is marked dangerous and requires confirmation.
   proxy/forwarding headers; Vite marks every proxy request to prevent bypass.
   MV comment and NETA review GET endpoints remain public for viewing; their
   writes and all other automation endpoints require an authorized operator.
+- Personal provider logins use owner-bound remote browser windows rendered as
+  transient screenshots with restricted click/text/key/scroll actions. An
+  isolated Playwright context supports Microsoft phone MFA and CxAlloy login.
+  Save is allowed only back on the provider origin after login fields disappear
+  and browser state exists. Screenshots/input are not persisted; sensitive
+  storage state lives outside the repo under a hash of the verified Clerk ID.
+- Provider jobs receive explicit personal `--auth-state` paths and never fall
+  back to the shared VM state. Run records carry owner IDs; API history, logs,
+  resume and cancellation are owner-scoped. The host retains a single job lock
+  because project outputs remain shared. Legacy desktop-login HTTP endpoints
+  return 410; direct local CLI behavior remains available for maintenance.
 - The automation service is started on `127.0.0.1:8765`; CORS permits only
   localhost/loopback origins.
 - JC2 and CxAlloy authentication is delegated to Playwright-driven sibling
@@ -211,6 +222,11 @@ No integration credentials or endpoints belong in this repository.
 - `CLERK_ISSUER`, `CLERK_AUTHORIZED_PARTIES`, `CLERK_ALLOWED_USER_IDS`: backend
   session validation and operator authorization. The local launcher loads these
   from root `.env.local`; Vite loads its own `frontend/.env.local`.
+- `AUTOMATION_LOGIN_ALLOWED_HOSTS`: optional exact additional SSO/CDN hostnames.
+- `AUTOMATION_LOGIN_HEADLESS`: defaults to true; false uses an interactive host
+  browser while retaining owner-bound remote control.
+- `CXALLOY_PROJECT_URL`: optional personal-login entry URL; default is read from
+  the existing tracker upload script.
 - `LOCALAPPDATA`: used indirectly to locate local browser auth-state files.
 - `config/equipment_lifecycle.json`: lifecycle order, labels, status aliases,
   and colors used by KPR.

@@ -19,6 +19,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { DailyReportDialog } from "../components/dataOperations/DailyReportDialog";
+import { BrowserLoginDialog } from "../components/dataOperations/BrowserLoginDialog";
 import { Button } from "../components/ui/button";
 import type {
   AutomationHealth,
@@ -45,7 +46,7 @@ import {
   getRunLogs,
   resumeAutomationRun,
   runAutomationJob,
-  startAutomationLogin,
+  disconnectProvider,
   startDailyPipeline,
 } from "../utils/automationApi";
 import { cn } from "../utils/cn";
@@ -147,6 +148,7 @@ function isMvDailyReport(report: DailyReport | MvDailyReport): report is MvDaily
 }
 
 export function DataOperationsPage({ onDashboardReload }: DataOperationsPageProps) {
+  const [loginProvider, setLoginProvider] = useState<"jc2" | "cxalloy" | null>(null);
   const [health, setHealth] = useState<AutomationHealth | null>(null);
   const [jobs, setJobs] = useState<AutomationJob[]>([]);
   const [runs, setRuns] = useState<AutomationRun[]>([]);
@@ -281,7 +283,7 @@ export function DataOperationsPage({ onDashboardReload }: DataOperationsPageProp
   const latestPipeline = runs.find((run) => run.kind === "pipeline") ?? null;
   const resumablePipeline =
     latestPipeline && RESUMABLE_STATUSES.has(latestPipeline.status) ? latestPipeline : null;
-  const serviceBusy = Boolean(activeRun);
+  const serviceBusy = Boolean(activeRun) || Boolean(health?.busy);
   const activeReports = reportView === "mv" ? mvReports : reports;
   const reportPageCount = Math.max(1, Math.ceil(activeReports.length / REPORT_PAGE_SIZE));
   const visibleReports = reportsExpanded
@@ -427,7 +429,7 @@ export function DataOperationsPage({ onDashboardReload }: DataOperationsPageProp
           {(["jc2", "cxalloy"] as const).map((provider) => (
             <div className="p-4" key={provider}>
               <div className="text-xs font-medium uppercase text-muted-foreground">
-                {provider} Session
+                My {provider.toUpperCase()} session
               </div>
               <div className="mt-2 font-semibold">
                 {health.sessions[provider].exists ? "Session saved" : "Login required"}
@@ -438,11 +440,16 @@ export function DataOperationsPage({ onDashboardReload }: DataOperationsPageProp
               <button
                 className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline disabled:opacity-50"
                 disabled={serviceBusy}
-                onClick={() => void perform(() => startAutomationLogin(provider))}
+                onClick={() => setLoginProvider(provider)}
                 type="button"
               >
                 <LogIn className="h-3.5 w-3.5" /> Refresh login
               </button>
+              {health.sessions[provider].exists ? <button type="button" disabled={serviceBusy}
+                className="ml-3 text-xs font-semibold text-muted-foreground underline disabled:opacity-50"
+                onClick={() => {
+                  void disconnectProvider(provider).then(() => refreshService()).catch(error => setActionError(error instanceof Error ? error.message : "Unable to disconnect."));
+                }}>Disconnect my account</button> : null}
             </div>
           ))}
           <div className="p-4">
@@ -456,14 +463,15 @@ export function DataOperationsPage({ onDashboardReload }: DataOperationsPageProp
           </div>
           <div className="p-4">
             <div className="text-xs font-medium uppercase text-muted-foreground">Active Operation</div>
-            <div className="mt-2 font-semibold">{activeRun?.label ?? "Idle"}</div>
+            <div className="mt-2 font-semibold">{activeRun?.label ?? (serviceBusy ? "Another operator is running a task" : "Idle")}</div>
             <div className="mt-1 text-xs text-muted-foreground">
-              {activeRun ? duration(activeRun) : "Ready for the next task"}
+              {activeRun ? duration(activeRun) : serviceBusy ? "Wait before starting a task" : "Ready for the next task"}
             </div>
           </div>
         </div>
       </section>
 
+      {loginProvider ? <BrowserLoginDialog key={loginProvider} provider={loginProvider} onClose={() => setLoginProvider(null)} onSaved={() => void refreshService()} /> : null}
       {activeRun?.status === "waiting_for_user" ? (
         <section className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-300 bg-amber-50 p-4">
           <div>

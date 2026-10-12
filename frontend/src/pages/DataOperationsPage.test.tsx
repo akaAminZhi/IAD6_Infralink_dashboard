@@ -17,6 +17,10 @@ import {
   getMvDailyReports,
   getRunLogs,
   startDailyPipeline,
+  startAutomationLogin,
+  startBrowserLogin,
+  browserLoginAction,
+  closeBrowserLogin,
 } from "../utils/automationApi";
 import { DataOperationsPage } from "./DataOperationsPage";
 
@@ -47,6 +51,10 @@ vi.mock("../utils/automationApi", () => {
     saveDailyReport: vi.fn(),
     saveMvDailyReport: vi.fn(),
     startAutomationLogin: vi.fn(),
+    disconnectProvider: vi.fn(),
+    startBrowserLogin: vi.fn(),
+    browserLoginAction: vi.fn(),
+    closeBrowserLogin: vi.fn(),
     startDailyPipeline: vi.fn(),
     validateDailyReport: vi.fn(),
     validateMvDailyReport: vi.fn(),
@@ -146,6 +154,28 @@ afterEach(() => {
 });
 
 describe("DataOperationsPage", () => {
+  it("opens a personal web login instead of the legacy VM login job", async () => {
+    const user = userEvent.setup();
+    vi.mocked(getAutomationHealth).mockResolvedValue(health);
+    vi.mocked(getAutomationJobs).mockResolvedValue(jobs);
+    vi.mocked(getAutomationRuns).mockResolvedValue([]);
+    vi.mocked(getDailyReports).mockResolvedValue([]);
+    vi.mocked(getMvDailyReports).mockResolvedValue([]);
+    const browser = { session_id: "my-browser", provider: "jc2" as const, status: "ready" as const,
+      error: null, width: 1180, height: 760, image: "data:image/jpeg;base64,fixture" };
+    vi.mocked(startBrowserLogin).mockResolvedValue(browser);
+    vi.mocked(browserLoginAction).mockResolvedValue(browser);
+    vi.mocked(closeBrowserLogin).mockResolvedValue({ status: "closed" });
+    render(<DataOperationsPage onDashboardReload={vi.fn()} />);
+    await screen.findByText("My JC2 session");
+    await user.click(screen.getAllByRole("button", { name: "Refresh login" })[0]);
+    expect(await screen.findByRole("dialog", { name: "JC2 personal login" })).toBeInTheDocument();
+    await screen.findByAltText("Your personal provider login browser");
+    expect(startBrowserLogin).toHaveBeenCalledWith("jc2");
+    expect(startAutomationLogin).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Close personal login" }));
+    await waitFor(() => expect(closeBrowserLogin).toHaveBeenCalledWith("my-browser"));
+  });
   it("shows a recovery command when the local task service is offline", async () => {
     vi.mocked(getAutomationHealth).mockRejectedValue(new Error("Connection refused"));
     vi.mocked(getAutomationJobs).mockResolvedValue([]);

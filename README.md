@@ -161,8 +161,54 @@ To verify remote setup, open the ngrok URL, sign in as an invited, authorized op
 the operations page loads. A signed-in account omitted from the ID list should
 see an access-denied message; a direct API request without a token should return
 401. CxAlloy live upload still requires its existing explicit confirmation.
-JC2/CxAlloy browser logins still happen on the automation host. Keep that host
-running and retain its tracker files/sessions for remote operations.
+JC2/CxAlloy browsers run on the automation host, but their personal login windows
+are displayed and controlled inside Data Operations. Keep the host running and
+retain its tracker files for remote operations.
+
+### Personal JC2 / CxAlloy accounts
+
+Each authenticated Clerk user now has separate JC2 and CxAlloy browser state.
+Click **Refresh login**, click the fields in the displayed browser image and
+type, or select a field then use the masked **Send text** box. Use **Tab** and
+**Enter** as needed. For JC2, complete Microsoft sign-in and approve the phone
+MFA prompt. Once the actual provider page has loaded, click **Save my session**.
+The window closes and your personal session status updates. No remote desktop
+access or second ngrok tunnel is required.
+
+Session files are stored under the existing local auth directory's
+`users/<hash-of-Clerk-user-ID>/` subdirectories, outside the repository. Password
+inputs and screenshots are not written to application logs or files. Stored
+browser state contains sensitive cookies/tokens; keep that directory private.
+Existing shared VM states are never assigned to remote users or used as a
+fallback. Everyone must connect their own provider accounts once.
+
+All external jobs receive the caller's explicit `--auth-state` path; missing
+personal state produces `auth_required`. Runs are tagged with the initiating
+Clerk user and only that user can inspect logs, resume or cancel them. Jobs
+continue to share project datasets/files and run one at a time on the host.
+**Disconnect my account** removes only your saved state and closes your pending
+login window. It does not revoke the account at the provider. Browser windows
+expire after 20 minutes, and up to six can be open at once.
+
+For per-person identity on localhost as well, set both local bypass switches to
+`false` and sign in with Clerk. Anonymous local bypass uses its own single
+`local_operator` profile. A supplied Clerk token always takes precedence.
+
+The VM needs Playwright Chromium (`python -m playwright install chromium`).
+Login URLs come from the sibling tracker's JC2 configuration and CxAlloy script
+default (or `CXALLOY_PROJECT_URL`). Login navigation is limited to HTTPS provider
+and Microsoft authentication/CDN hosts. If a company SSO or asset host is
+blocked, add its exact hostname to root `.env.local` and restart:
+
+```dotenv
+AUTOMATION_LOGIN_ALLOWED_HOSTS=idp.mcdean.com,assets.example.com
+```
+
+If your provider rejects headless Chromium, Windows hosts can set
+`AUTOMATION_LOGIN_HEADLESS=false` and restart. This requires an interactive
+Windows desktop session on the host; the user's controls still work through
+the webpage. Company MFA/device policies require a real VM trial; tests use a
+local simulated login/MFA flow and never sign in to live vendor accounts.
 
 ### Optional localhost access without sign-in
 

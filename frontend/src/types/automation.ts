@@ -19,6 +19,7 @@ export interface AutomationRunStep {
 }
 
 export interface AutomationRun {
+  owner_user_id?: string | null;
   run_id: string;
   kind: "job" | "pipeline" | "login";
   label: string;
@@ -47,6 +48,8 @@ export interface SessionStatus {
 }
 
 export interface AutomationHealth {
+  busy?: boolean;
+  session_scope?: "personal";
   service_status: "ok";
   dashboard_root: string;
   eps_tracker_root: string;
@@ -65,6 +68,24 @@ export interface AutomationHealth {
     readable: boolean;
   } | null;
 }
+
+export interface BrowserLoginSession {
+  session_id: string;
+  provider: "jc2" | "cxalloy";
+  status: "starting" | "ready" | "saved" | "closed" | "failed";
+  error: string | null;
+  image?: string;
+  width: number;
+  height: number;
+  blocked_host?: string | null;
+}
+
+export type BrowserLoginAction =
+  | { kind: "screen" | "save" }
+  | { kind: "click"; x: number; y: number }
+  | { kind: "text"; text: string }
+  | { kind: "key"; key: string }
+  | { kind: "scroll"; delta: number };
 
 export interface JobOptions {
   headed?: boolean;
