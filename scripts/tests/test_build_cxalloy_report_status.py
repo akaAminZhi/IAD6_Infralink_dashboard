@@ -131,6 +131,25 @@ def test_missing_manifests_produce_empty_status(tmp_path: Path) -> None:
     assert payload["summary"]["pending_equipment"] == 0
 
 
+def test_duplicate_pdf_content_under_new_source_does_not_become_pending(tmp_path: Path) -> None:
+    first = tmp_path / "original.pdf"
+    duplicate = tmp_path / "renamed.pdf"
+    first.write_bytes(b"same report")
+    duplicate.write_bytes(b"same report")
+    rename_manifest = tmp_path / "rename.csv"
+    upload_manifest = tmp_path / "upload.csv"
+    rows = [{"device_name": "IAD06-PDU6-01A-1", "source_path": source,
+             "output_path": path.name, "status": "copied"}
+            for source, path in [("source/first.pdf", first), ("source/second.pdf", duplicate)]]
+    write_csv(rename_manifest, list(rows[0]), rows)
+    uploaded = {"target_equipment": "PDU6-01A-1", "source_path": "source/first.pdf",
+                "pdf_path": first.name, "sha256": uploader_group_hash([first]), "status": "uploaded"}
+    write_csv(upload_manifest, list(uploaded), [uploaded])
+    payload = build_cxalloy_report_status(rename_manifest, upload_manifest, tmp_path)
+    assert payload["summary"]["uploaded_equipment"] == 1
+    assert payload["summary"]["pending_equipment"] == 0
+
+
 def test_prior_status_preserves_uploaded_hash_across_machines(tmp_path: Path) -> None:
     gc_dir = tmp_path / "NETA_eport_To_GC" / "IAD06-PDU6-01A-1"
     report = gc_dir / "report.pdf"

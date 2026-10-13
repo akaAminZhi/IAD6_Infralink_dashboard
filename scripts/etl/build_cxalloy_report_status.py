@@ -192,6 +192,10 @@ def build_cxalloy_report_status(
     tracker_root: Path,
     prior_status_manifest: Path | None = None,
 ) -> dict[str, Any]:
+    try:
+        from .cxalloy_upload_plan import ReportEvidence, plan_upload
+    except ImportError:
+        from cxalloy_upload_plan import ReportEvidence, plan_upload
     grouped_rows: dict[str, list[dict[str, str]]] = defaultdict(list)
     for row in read_csv_rows(rename_manifest):
         if clean(row.get("status")).casefold() not in VALID_RENAME_STATUSES:
@@ -217,6 +221,7 @@ def build_cxalloy_report_status(
     for device_name in sorted(grouped_rows, key=str.casefold):
         target = target_equipment(device_name)
         existing_files: list[tuple[Path, str]] = []
+        evidence: list[ReportEvidence] = []
         report_names: list[str] = []
         missing_report_names: list[str] = []
 
@@ -224,13 +229,16 @@ def build_cxalloy_report_status(
             report_path = resolve_manifest_path(clean(row.get("output_path")), tracker_root)
             report_names.append(report_path.name)
             if report_path.exists() and report_path.is_file() and report_path.stat().st_size > 0:
-                existing_files.append((report_path, sha256_file(report_path)))
+                digest = sha256_file(report_path)
+                existing_files.append((report_path, digest))
+                evidence.append(ReportEvidence(clean(row.get("source_path")), report_path, digest))
             else:
                 missing_report_names.append(report_path.name)
 
         report_names.sort(key=str.casefold)
         missing_report_names.sort(key=str.casefold)
         current_hash = combined_sha256(existing_files) if existing_files else None
+        content_plan = plan_upload(evidence, uploads_by_target[target.casefold()])
         uploaded = bool(
             current_hash
             and not missing_report_names
@@ -240,6 +248,7 @@ def build_cxalloy_report_status(
                     grouped_rows[device_name], existing_files,
                     uploads_by_target[target.casefold()],
                 )
+                or (not content_plan.new_paths and not content_plan.review_paths)
             )
         )
         local_attempt = latest_attempts.get(target.casefold(), {})

@@ -15,6 +15,16 @@ The repository contains two distinct runtime surfaces:
 
 ## System Flow
 
+The registered CxAlloy upload job invokes `scripts/automation/cxalloy_upload.py`
+with the configured EPS Tracker root and the operator's auth state. This adapter
+reuses the sibling uploader's browser and matrix helpers while guarding PDF
+selection with shared `scripts/etl/cxalloy_upload_plan.py` evidence checks.
+Historical package digests prove per-PDF contents and original site filenames;
+new cable attachments do not cause old renamed PDFs to be uploaded again.
+The status builder uses the same content coverage rules. Force is unsupported
+for this job; uncertain history/site state fails closed. No live upload occurs
+without the existing explicit confirmation.
+
 ```mermaid
 flowchart LR
     A[Excel exports and plan PDFs] --> B[Python ETL]

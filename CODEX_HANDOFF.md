@@ -2,6 +2,30 @@
 
 ## Current Status (2026-10-12)
 
+CxAlloy duplicate-report fix: local 291 pending comprised 278 previously
+uploaded equipment packages with 499 added LV cable PDFs and 13 without
+completed history. The old uploader dry-run selected 292: PDU6-03F-5's
+unchanged reports had new filename suffixes. Added dashboard-owned guarded
+upload adapter and shared per-PDF evidence planner. Registered upload job now
+invokes the adapter with EPS root and personal auth state; Force is unsupported.
+Verified old package hashes recover original site filenames. Whole unchanged
+packages are skipped; changed packages send only new attachments and retain
+the original equipment answer. Unverifiable history/changed files, missing
+historical site aliases or unknown site PDFs fail closed. Successful manifests
+record actual site filenames/hashes. Exceptions become failed rows so earlier
+successful groups can still be persisted. Original sibling uploader unchanged.
+
+58 targeted planner/status/runner/personal-session/API tests passed. Native
+uploader import and real-files dry-run verified PDU6-03F-5 skips all 15 PDFs.
+One extra identical-content source is also covered, making current totals
+93 uploaded / 290 needing additions, with 556 candidate new PDFs before site
+filename checks. Status output regenerated, no live CxAlloy connection/upload,
+credentials, upload-manifest or Excel changes. No frontend changes/build needed.
+Local inspection took roughly 10 seconds for 2187 PDFs; not a VM benchmark.
+Use Data Operations or scripts/automation/cxalloy_upload.py, not the original
+standalone vendor command, to get these safeguards. Runtime services not
+manually restarted. No commit made.
+
 Local ETL reported PermissionError for eps_history/snapshots/2026-06-05.json.
 The builder rewrites historical snapshots via shared write_json. Changed that
 helper to write a sibling temporary file and atomically replace the output,

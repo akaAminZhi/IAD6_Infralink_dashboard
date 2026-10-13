@@ -25,6 +25,26 @@ frontend/src/         Future React + TypeScript application source.
 
 ## Local Dashboard And Data Operations
 
+CxAlloy uploads from Data Operations use the dashboard's guarded incremental
+entry point. It verifies successful upload hashes against current PDF contents,
+reuses historical filenames after local renaming, and sends only new attachments.
+Unverifiable changed reports, missing historical site filenames, or unexpected
+site PDF names stop the affected upload instead of re-uploading old PDFs.
+Force upload is disabled for this job. Pending equipment includes previously
+uploaded equipment that now needs additional cable PDFs; it is not a count of
+equipment never uploaded.
+
+Preview without contacting CxAlloy or changing upload records:
+
+```powershell
+python scripts/automation/cxalloy_upload.py --dry-run
+python scripts/automation/cxalloy_upload.py --dry-run --only IAD06-PDU6-03F-5
+```
+
+Use this entry point or Data Operations for the duplicate-report safeguards;
+the sibling EPS Tracker's original upload command is unchanged. Keep the upload
+manifest alongside the report PDFs when deploying to another machine.
+
 Install the Python dependencies and Playwright Chromium once:
 
 ```powershell
