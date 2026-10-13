@@ -224,16 +224,26 @@ def build_cxalloy_report_status(
         evidence: list[ReportEvidence] = []
         report_names: list[str] = []
         missing_report_names: list[str] = []
+        report_hashes: dict[str, str | None] = {}
 
         for row in grouped_rows[device_name]:
             report_path = resolve_manifest_path(clean(row.get("output_path")), tracker_root)
-            report_names.append(report_path.name)
-            if report_path.exists() and report_path.is_file() and report_path.stat().st_size > 0:
-                digest = sha256_file(report_path)
-                existing_files.append((report_path, digest))
+            # Match the uploader's package: multiple source rows can point to
+            # one physical PDF. Count/hash that output once, retaining sources
+            # separately for the conservative per-PDF evidence planner.
+            path_key = str(report_path.resolve()).casefold()
+            if path_key not in report_hashes:
+                report_names.append(report_path.name)
+                if report_path.is_file() and report_path.stat().st_size > 0:
+                    digest = sha256_file(report_path)
+                    existing_files.append((report_path, digest))
+                    report_hashes[path_key] = digest
+                else:
+                    missing_report_names.append(report_path.name)
+                    report_hashes[path_key] = None
+            digest = report_hashes[path_key]
+            if digest is not None:
                 evidence.append(ReportEvidence(clean(row.get("source_path")), report_path, digest))
-            else:
-                missing_report_names.append(report_path.name)
 
         report_names.sort(key=str.casefold)
         missing_report_names.sort(key=str.casefold)

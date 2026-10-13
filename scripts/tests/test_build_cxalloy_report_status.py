@@ -82,6 +82,44 @@ def test_current_hash_controls_uploaded_status(tmp_path: Path) -> None:
     assert changed["records"][0]["upload_status"] == "pending"
 
 
+@pytest.mark.parametrize("change, expected", [("unchanged", "uploaded"), ("changed", "pending"), ("missing", "missing_pdf")])
+def test_multiple_sources_for_one_pdf_use_unique_package_hash(
+    tmp_path: Path, change: str, expected: str,
+) -> None:
+    equipment = tmp_path / "equipment.pdf"
+    cable = tmp_path / "FDR.pdf"
+    equipment.write_bytes(b"equipment report")
+    cable.write_bytes(b"shared feeder report")
+    rows = [
+        {"device_name": "IAD06-CDS6-03R-2", "source_path": "source/equipment.pdf",
+         "output_path": equipment.name, "status": "copied"},
+        *[{"device_name": "IAD06-CDS6-03R-2", "source_path": f"source/feeder-{index}.pdf",
+           "output_path": cable.name, "status": "skipped_existing"} for index in range(4)],
+    ]
+    upload = {"target_equipment": "CDS6-03R-2", "status": "uploaded",
+              "sha256": uploader_group_hash([equipment, cable]),
+              "source_path": "; ".join(row["source_path"] for row in rows),
+              "pdf_path": f"{equipment.name}; {cable.name}"}
+    rename_manifest, upload_manifest = tmp_path / "rename.csv", tmp_path / "upload.csv"
+    write_csv(rename_manifest, list(rows[0]), rows)
+    write_csv(upload_manifest, list(upload), [upload])
+    if change == "changed":
+        cable.write_bytes(b"changed feeder report")
+    elif change == "missing":
+        cable.unlink()
+
+    payload = build_cxalloy_report_status(rename_manifest, upload_manifest, tmp_path)
+    record = payload["records"][0]
+    assert record["upload_status"] == expected
+    assert record["expected_report_count"] == 2
+    assert record["available_report_count"] == (1 if change == "missing" else 2)
+    assert record["report_names"] == ["equipment.pdf", "FDR.pdf"]
+    assert record["missing_report_names"] == (["FDR.pdf"] if change == "missing" else [])
+    assert payload["summary"]["expected_report_files"] == 2
+    if change == "unchanged":
+        assert record["current_sha256"] == upload["sha256"]
+
+
 def test_missing_pdf_and_latest_failure_are_preserved(tmp_path: Path) -> None:
     rename_manifest = tmp_path / "NETA_eport_To_GC" / "rename_manifest.csv"
     upload_manifest = tmp_path / "NETA_eport_To_GC" / "cxalloy_upload_manifest.csv"
