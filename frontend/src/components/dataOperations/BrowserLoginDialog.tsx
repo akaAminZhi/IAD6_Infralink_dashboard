@@ -90,6 +90,7 @@ export function BrowserLoginDialog({ provider, onClose, onSaved }: Props) {
           <h2 className="font-semibold">Connect your {provider.toUpperCase()} account</h2>
           <p className="mt-1 text-sm text-muted-foreground">Click the login fields below and type. This window belongs to your dashboard account.</p>
           {provider === "jc2" ? <p className="mt-1 text-sm">Complete Microsoft sign-in and approve MFA on your phone when prompted.</p> : null}
+          {provider === "jc2" ? <p className="mt-1 text-sm text-muted-foreground">If Microsoft offers a passkey, choose Other ways to sign in or Sign in another way, then use an available password, Authenticator, or verification code option. Windows Hello and security keys cannot be used through this window.</p> : null}
         </div>
         <button aria-label="Close personal login" onClick={onClose} type="button"><X className="h-5 w-5" /></button>
       </header>

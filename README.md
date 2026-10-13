@@ -215,6 +215,17 @@ For per-person identity on localhost as well, set both local bypass switches to
 `local_operator` profile. A supplied Clerk token always takes precedence.
 
 The VM needs Playwright Chromium (`python -m playwright install chromium`).
+The remote login window shows browser content, so Windows Security / Windows
+Hello / passkey dialogs on the VM cannot be controlled through it. Microsoft
+passkey requests are cancelled before opening native dialogs. Select **Other
+ways to sign in** / **Sign in another way** and use a company-permitted password,
+Authenticator approval, or verification code. MFA is still required by the
+provider. If company policy requires passkeys exclusively, this remote login
+flow cannot satisfy it; consult the identity administrator about a supported
+sign-in flow. After updating, restart the automation backend and open a new
+personal login window; existing browser contexts retain their old behavior.
+Microsoft sign-in image CDN hosts under `msauthimages.net` and
+`msftauthimages.net` are included in the login network allowlist.
 Login URLs come from the sibling tracker's JC2 configuration and CxAlloy script
 default (or `CXALLOY_PROJECT_URL`). Login navigation is limited to HTTPS provider
 and Microsoft authentication/CDN hosts. If a company SSO or asset host is

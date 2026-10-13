@@ -24,6 +24,41 @@ KEYS = {"Enter", "Tab", "Shift+Tab", "Backspace", "Delete", "Escape",
         "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End",
         "PageUp", "PageDown", "Control+A"}
 
+# Native WebAuthn prompts belong to the host OS, outside the remotely controlled
+# page. Cancel these requests before they open; Microsoft can offer its other
+# permitted sign-in methods. This never creates credentials or approves MFA.
+REMOTE_MICROSOFT_AUTH_SCRIPT = """(() => {
+    if (!["login.microsoftonline.com", "login.microsoft.com", "login.live.com"]
+        .includes(location.hostname)) return;
+    const credentials = navigator.credentials;
+    if (credentials) {
+        for (const method of ["get", "create"]) {
+            const original = credentials[method];
+            if (typeof original !== "function") continue;
+            Object.defineProperty(credentials, method, {
+                value: function(options) {
+                    if (options?.publicKey) {
+                        return Promise.reject(new DOMException(
+                            "Use another sign-in method in the remote login window.",
+                            "NotAllowedError"));
+                    }
+                    return original.call(this, options);
+                }
+            });
+        }
+    }
+    if (typeof PublicKeyCredential !== "undefined") {
+        for (const method of ["isUserVerifyingPlatformAuthenticatorAvailable",
+                              "isConditionalMediationAvailable"]) {
+            if (typeof PublicKeyCredential[method] === "function") {
+                Object.defineProperty(PublicKeyCredential, method, {
+                    value: () => Promise.resolve(false)
+                });
+            }
+        }
+    }
+})();"""
+
 
 def provider_url(config: AutomationConfig, provider: str) -> str:
     if provider == "jc2":
@@ -54,7 +89,8 @@ def allowed_host(host: str, target_host: str) -> bool:
     exact = {target_host, "login.microsoftonline.com", "login.microsoft.com", "login.live.com",
              "idp.mcdean.com", "fonts.googleapis.com", "fonts.gstatic.com", "cdnjs.cloudflare.com", "cdn.jsdelivr.net"}
     exact.update(value.strip().lower() for value in os.environ.get("AUTOMATION_LOGIN_ALLOWED_HOSTS", "").split(",") if value.strip())
-    suffixes = (".microsoftonline.com", ".msauth.net", ".msftauth.net", ".microsoft.com", ".live.com")
+    suffixes = (".microsoftonline.com", ".msauth.net", ".msftauth.net",
+                ".msauthimages.net", ".msftauthimages.net", ".microsoft.com", ".live.com")
     return host in exact or host.endswith(suffixes)
 
 
@@ -149,6 +185,7 @@ class BrowserLoginManager:
                 try:
                     context = browser.new_context(viewport={"width": WIDTH, "height": HEIGHT},
                                                   accept_downloads=False, service_workers="block")
+                    context.add_init_script(REMOTE_MICROSOFT_AUTH_SCRIPT)
                     def route_request(route):
                         parsed = urlsplit(route.request.url)
                         if parsed.scheme == "https" and allowed_host(parsed.hostname or "", target.hostname or ""):

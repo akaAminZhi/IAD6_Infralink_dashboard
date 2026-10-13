@@ -12,6 +12,75 @@ from scripts.automation import browser_login
 from scripts.tests.test_personal_sessions import config_for
 
 
+@pytest.mark.parametrize("host, permitted", [
+    ("aadcdn.msauthimages.net", True),
+    ("aadcdn.msftauthimages.net", True),
+    ("aadcdn.msauthimages.net.evil.test", False),
+    ("evilmsauthimages.net", False),
+])
+def test_microsoft_image_hosts_are_narrowly_allowed(host, permitted):
+    assert browser_login.allowed_host(host, "provider.example.test") is permitted
+
+
+def test_remote_microsoft_passkey_cancelled_in_pages_frames_and_popups():
+    from playwright.sync_api import sync_playwright
+
+    # Local HTTPS fixtures only. The original API is a sentinel: it must never
+    # receive a public-key request on Microsoft, but other requests still work.
+    sentinel = """
+        Object.defineProperty(navigator.credentials, 'get', {
+            configurable: true, value: function(options) {
+                return Promise.resolve(this === navigator.credentials ? 'delegated' : 'wrong receiver');
+            }
+        });
+        Object.defineProperty(navigator.credentials, 'create', {
+            configurable: true, value: () => Promise.resolve('delegated')
+        });
+    """
+    check = """async () => {
+        const result = {};
+        for (const method of ['get', 'create']) {
+            try { result[method] = await navigator.credentials[method]({publicKey: {}}); }
+            catch (error) { result[method] = error.name; }
+        }
+        result.other = await navigator.credentials.get({password: true});
+        result.platform = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+        result.conditional = await PublicKeyCredential.isConditionalMediationAvailable();
+        return result;
+    }"""
+    with sync_playwright() as driver:
+        browser = driver.chromium.launch(headless=True)
+        try:
+            context = browser.new_context()
+            context.add_init_script(sentinel + browser_login.REMOTE_MICROSOFT_AUTH_SCRIPT)
+            context.route("**/*", lambda route: route.fulfill(
+                content_type="text/html", body="<html><body>Local login fixture</body></html>"))
+            page = context.new_page()
+            page.goto("https://login.microsoftonline.com/fixture")
+            expected = {"get": "NotAllowedError", "create": "NotAllowedError",
+                        "other": "delegated", "platform": False, "conditional": False}
+            assert page.evaluate(check) == expected
+            with page.expect_event("framenavigated", predicate=lambda frame:
+                                   frame.url == "https://login.live.com/fixture") as navigation:
+                page.evaluate("""() => {
+                    const frame = document.createElement('iframe');
+                    frame.src = 'https://login.live.com/fixture';
+                    document.body.append(frame);
+                }""")
+            frame = navigation.value
+            frame.wait_for_load_state()
+            assert frame.evaluate(check) == expected
+            with page.expect_popup() as popup:
+                page.evaluate("window.open('https://login.microsoft.com/fixture')")
+            popup.value.wait_for_load_state()
+            assert popup.value.evaluate(check) == expected
+            page.goto("https://provider.example.test/fixture")
+            outside = page.evaluate(check)
+            assert outside["get"] == outside["create"] == outside["other"] == "delegated"
+        finally:
+            browser.close()
+
+
 def wait_ready(manager, session_id):
     deadline = time.monotonic() + 45
     while time.monotonic() < deadline:
@@ -45,6 +114,10 @@ def test_real_browser_remote_controls_mfa_save_and_owner_isolation(tmp_path, mon
         def route(self, pattern, handler):
             self.context.route(pattern, lambda route: route.fulfill(status=200, content_type="text/html", body=html)
                                if route.request.url == target else handler(route))
+
+        def add_init_script(self, script):
+            assert script == browser_login.REMOTE_MICROSOFT_AUTH_SCRIPT
+            self.context.add_init_script(script)
 
         def __getattr__(self, name):
             return getattr(self.context, name)

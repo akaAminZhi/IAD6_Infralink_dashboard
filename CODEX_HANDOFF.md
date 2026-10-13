@@ -1,6 +1,24 @@
 ﻿# Codex Handoff
 
-## Current Status (2026-10-12)
+## Current Status (2026-10-13)
+
+Remote Microsoft login: user screenshots showed an unrendered Windows Security
+passkey dialog on the VM and blocked aadcdn.msauthimages.net assets. Added
+Microsoft image-CDN suffixes with boundary checks. Browser contexts now install
+an init script on the three exact Microsoft login origins to reject WebAuthn
+get/create public-key requests with NotAllowedError and report platform and
+conditional authenticators unavailable. Non-public-key requests still delegate;
+no credentials are fabricated and MFA is not bypassed. Microsoft must offer a
+company-permitted alternative; passkey-only policy remains unsupported by this
+screenshot-based remote flow. UI and README explain Other ways to sign in.
+
+20 targeted Python tests passed, including real Chromium local fixtures for
+pages/frames/popups, API delegation, MFA/save and owner isolation. Four existing
+frontend dialog tests passed. Preview-mode npm build (IAD6_PREVIEW_BUILD=1)
+passed with existing chunk/timing warnings; diff check passed. No real Microsoft
+account sign-in, VM deployment, service restart or commit performed. Sync source
+to the VM, restart dashboard services, and open a new personal login window;
+real tenant fallback behavior still needs a VM trial.
 
 CxAlloy duplicate-report fix: local 291 pending comprised 278 previously
 uploaded equipment packages with 499 added LV cable PDFs and 13 without
