@@ -56,6 +56,7 @@ OUTPUT_FIELDS = [
     "test_tracking_required",
     "neta_complete",
     "neta_completed_at",
+    "energized_completed_at",
     "neta_test_report",
     "feeder_cable_atp",
     "manufacturer",
@@ -311,6 +312,9 @@ def normalize_row(row: tuple[Any, ...], header_map: dict[str, int]) -> dict[str,
         ),
         "neta_complete": neta_complete,
         "neta_completed_at": neta_completed_at,
+        "energized_completed_at": to_iso_datetime(
+            get_optional_cell(row, header_map, "Energized: Completed")
+        ),
         "neta_test_report": clean_text(get_cell(row, header_map, "NETA Test Report")),
         "feeder_cable_atp": clean_text(
             get_optional_cell(row, header_map, "Feeder Cable ATP")

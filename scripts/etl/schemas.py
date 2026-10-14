@@ -43,6 +43,7 @@ class Equipment(SchemaRecord):
     test_tracking_required: bool = True
     neta_complete: bool | str | None = None
     neta_completed_at: DateValue | None = None
+    energized_completed_at: DateValue | None = None
     neta_test_report: str | None = None
     feeder_cable_atp: str | None = None
     manufacturer: str | None = None

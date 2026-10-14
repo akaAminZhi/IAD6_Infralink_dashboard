@@ -46,7 +46,7 @@ flowchart LR
 - `frontend/src/App.tsx` owns route composition, common layout, loading/error
   boundaries, and return-to-Overview/KPR navigation state.
 - Current routes: `/overview`, `/kpr`, `/pdms`, `/equipment`, `/issues`,
-  `/eps-test-execution`, `/power-plan`, `/mv-equipment`, `/data-quality`, and
+  `/eps-test-execution`, `/power-plan`, `/layout`, `/mv-equipment`, `/data-quality`, and
   `/data-operations`.
 - All route pages load their code on demand inside a shared Suspense boundary.
 
@@ -107,6 +107,35 @@ lookup. URL query parameters carry drill-down filters from Overview and KPR.
 Power-plan builders also read PDFs from `raw_data/power_plan/`. Several EPS,
 NETA, attachment, CxAlloy, and MV inputs are read from a sibling
 `IAD6_EPS_Testing_Tracker` repository.
+
+`build_layout_plan.py` separately reads the PDF/page/floor mappings in
+`config/layout_plans.json`. Rectangle comments identify equipment; one boundary
+rectangle clips each floor, and fix rectangles place contained devices in a
+shared layer. Both controls are omitted from the SVG. Rotated PDF coordinates
+are transformed and made relative to the boundary origin. Normalized equipment
+IDs match only when unique; uncertain records remain visible with diagnostics.
+`layout_plan.json` carries the floor geometry and SystemElements energized dates.
+The `/layout` page loads this file on demand, keeps a common coordinate frame
+across floors, and stores manual electrical-status overrides in browser storage.
+Overrides are keyed by equipment ID and never modify workbook or server data.
+POD and E-number room annotations are separate noninteractive regions, with
+optional shared fixed regions. Equipment gets a bounded visual inset; source
+geometry remains intact. Room labels have fixed positions in the background,
+equipment is drawn above them, and all lightning markers are drawn together in
+the final SVG layer. Energized has a stronger red fill/border. The SVG uses
+a fixed-size canvas and a movable viewBox, pointer capture for panning, and a
+non-passive wheel handler with cursor-anchored zoom. Global search suggestions
+select the appropriate floor and focus the device. A single Energize today
+toggle and reset controls replace the equipment-status selector.
+Confirmed Excel energisation takes priority over stored planning overrides;
+effective Energized status locks the planning button. A bounded HTML inspection
+card shows the full ID/status on hover or keyboard focus at a fixed font size,
+independent of SVG scale, without intercepting map pointer events.
+Box select changes the pointer gesture from panning to a marquee in drawing
+coordinates. It selects fully enclosed equipment IDs; Shift adds another group.
+Bulk planning is idempotent and skips Energized IDs using the shared status rule.
+Selection is cleared on floor changes/search confirmation/exit; overrides remain
+in the existing browser-local storage, with existing global reset behavior.
 
 ### Pipeline
 

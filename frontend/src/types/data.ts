@@ -46,6 +46,7 @@ export interface Equipment {
   test_tracking_required?: boolean;
   neta_complete?: boolean | string | null;
   neta_completed_at?: string | null;
+  energized_completed_at?: string | null;
   neta_test_report?: string | null;
   feeder_cable_atp?: string | null;
   manufacturer?: string | null;
@@ -245,6 +246,49 @@ export interface PowerPlanRect {
   y: number;
   width: number;
   height: number;
+}
+
+export interface LayoutEquipmentRecord {
+  annotation_id: string;
+  equipment_key: string;
+  label: string;
+  rect: PowerPlanRect;
+  fixed: boolean;
+  source_floor_id: string;
+  match_status: "matched" | "unmatched" | "ambiguous";
+  matched_equipment_id: string | null;
+  candidate_equipment_ids: string[];
+  energized_completed_at: string | null;
+  system_element_status: string | null;
+}
+
+export interface LayoutRegionRecord {
+  annotation_id: string;
+  label: string;
+  kind: "pod" | "room";
+  rect: PowerPlanRect;
+  fixed: boolean;
+  source_floor_id: string;
+}
+
+export interface LayoutFloorRecord {
+  floor_id: string;
+  label: string;
+  file_name: string;
+  page_number: number;
+  width: number;
+  height: number;
+  equipment: LayoutEquipmentRecord[];
+  regions?: LayoutRegionRecord[];
+}
+
+export interface LayoutPlanManifest {
+  generated_at: string;
+  selected_input_files: SourceFileMap;
+  floors: LayoutFloorRecord[];
+  fixed_equipment: LayoutEquipmentRecord[];
+  fixed_regions?: LayoutRegionRecord[];
+  diagnostics: { floor_id: string; label?: string; reason: string; candidate_equipment_ids?: string[] }[];
 }
 
 export interface PowerPlanPoint {

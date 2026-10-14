@@ -25,6 +25,7 @@ try:
     from . import build_neta_report_reviews
     from . import build_pdm_dataset
     from . import build_power_plan
+    from . import build_layout_plan
     from . import build_summary
     from . import inspect_workbooks
     from . import match_equipment
@@ -50,6 +51,7 @@ except ImportError:
     import build_neta_report_reviews
     import build_pdm_dataset
     import build_power_plan
+    import build_layout_plan
     import build_summary
     import inspect_workbooks
     import match_equipment
@@ -92,6 +94,7 @@ OUTPUT_FILES = {
     "neta_report_reviews": DATA_DIR / "neta_report_reviews.json",
     "cxalloy_report_status": DATA_DIR / "cxalloy_report_status.json",
     "power_plan": DATA_DIR / "power_plan.json",
+    "layout_plan": DATA_DIR / "layout_plan.json",
     "kpr_summary": DATA_DIR / "kpr_summary.json",
     "etl_run_metadata": ETL_METADATA_OUTPUT_PATH,
 }
@@ -137,6 +140,7 @@ def build_pipeline_steps(input_files: dict[str, str]) -> list[tuple[str, Callabl
         ("build_cxalloy_report_status.py", build_cxalloy_report_status.main),
         ("build_issue_attachment_manifest.py", build_issue_attachment_manifest.main),
         ("build_power_plan.py", build_power_plan.main),
+        ("build_layout_plan.py", build_layout_plan.main),
     ]
 
 

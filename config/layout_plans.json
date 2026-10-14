@@ -1,0 +1,10 @@
+{
+  "floors": [
+    {
+      "floor_id": "first-floor",
+      "label": "First Floor",
+      "file_name": "First_Floor_Layout_Plan.pdf",
+      "page_number": 1
+    }
+  ]
+}

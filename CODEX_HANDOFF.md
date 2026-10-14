@@ -1,6 +1,293 @@
 ﻿# Codex Handoff
 
-## Current Status (2026-10-13)
+## Current Status (2026-10-14): Layout route
+
+Implemented `/layout`, with a Layout sidebar entry and lazy-loaded route. It
+renders equipment rectangle annotations from
+`raw_data/power_plan/First_Floor_Layout_Plan.pdf` as rounded SVG rectangles using
+their PDF geometry, with a small visual inset for spacing. PODs and numbered
+rooms are shown as noninteractive reference regions. Boundary and fix control rectangles are never drawn, and
+the underlying PDF/background drawing is not included. Existing Power Plan,
+PDM hierarchy, readiness, tracking exclusions and case evidence were unchanged.
+
+### Current implementation and decisions
+
+- `config/layout_plans.json` is the extension interface: each floor has a unique
+  `floor_id`, display `label`, PDF `file_name`, and one-based `page_number`.
+  Currently it contains First Floor, page 1 of the supplied PDF. Additional
+  floors can use separate PDFs or additional pages of one PDF.
+- `scripts/etl/build_layout_plan.py` emits `frontend/public/data/layout_plan.json`.
+  It is registered after equipment normalization in the normal ETL and its
+  output is included in ETL output metadata. It also runs independently from
+  the project root. Missing PDFs create diagnostics and unavailable floors;
+  invalid page numbers, duplicate floor IDs, and missing/multiple boundary
+  rectangles fail explicitly rather than publishing misleading geometry.
+- Only Square/rectangle annotations with nonempty comments fully contained in
+  the page's single boundary are included. Boundary/fix names are trimmed and
+  compared case-insensitively. PDF rotation is applied to both controls and
+  devices, then coordinates are translated relative to the boundary origin.
+- `POD` / numbered POD comments and `E6-110-01` / `E-1-2` room comments are
+  region records, excluded from equipment matching, status, search and counts.
+  Optional `regions` on floors and `fixed_regions` on the manifest keep older
+  generated manifests readable. All 14 real POD regions are inside fix and
+  persist across floors. Matching fixed-region geometry copied on later floors
+  uses its first source floor; distinct POD placements are retained.
+- Region SVG layers have no equipment role, tab stop or selection handler and
+  disable pointer events. PODs use pale blue dashed outlines; rooms use neutral
+  outlines. Room names now have a fixed centered position near the top inside
+  each room, drawn in the background below all equipment. `layoutRoomLabels`
+  depends only on region geometry; planning/energisation never moves names.
+- Equipment centers and stored coordinates remain unchanged. A visual inset
+  of up to 0.8 PDF units per edge (bounded to 12% for small devices) creates
+  separation. Labels, hit areas and lightning follow the inset rectangles.
+- Devices fully inside a fix rectangle form a shared layer visible on every
+  floor. The updated real PDF contains one fix rectangle. A common SVG frame
+  across floors preserves fixed positions; floor drawings should use aligned
+  boundary origins. All distinct rectangles for repeated equipment IDs are
+  retained. If an ID is fixed on multiple source floors, the first configured
+  source floor supplies all its fixed placements; later floor copies do not
+  duplicate that equipment. Fixed placements take precedence over floor-local
+  copies of the same ID.
+- Matching reuses Power Plan's case/whitespace/project-prefix normalization.
+  Only unique SystemElements matches populate dates and source status.
+  Unmatched/ambiguous equipment stays visible as Unknown, with candidate IDs
+  retained in the generated source diagnostics. Outside-boundary/empty-comment
+  rectangles are also diagnosed, rather than silently discarded.
+- Equipment normalization adds nullable `energized_completed_at` to JSON/CSV,
+  Python `Equipment`, and the TypeScript equipment contract. It parses only the
+  optional exact `Energized: Completed` column using the existing date helper.
+  A valid completed date gives Energized/red lightning. N/A, blanks, plain
+  Completed, booleans, the separate Circuit Energized column, EPS/NETA state,
+  and PDM energisation flags do not determine this state. Older workbooks without
+  the column remain supported.
+- The Equipment status dropdown was removed per the follow-up request. A single
+  Energize today toggle sets/removes that manual override for the selected ID;
+  a pressed button indicates the planned state. Excel determines the default
+  red Energized marker. Previously saved overrides remain readable and resettable.
+  Latest rule: effective Energized status disables the button, with a matching
+  click-handler guard. This includes retained manual Energized flags. Shared
+  `layoutEquipmentStatus` gives a valid Excel energisation date precedence over
+  old browser planning overrides, so they cannot hide confirmed red markers.
+  Energize today shows orange lightning; Energized shows red. Both use the
+  existing 2.2-second breathing class and reduced-motion rule. Translation is
+  on an outer SVG group so breathing does not move the marker away from its
+  device. Markers are positioned above rectangles.
+- All lightning is now rendered by `EquipmentLightning` in the final SVG
+  layer, after all device bodies and the marquee. The layer disables pointer
+  events, so flashes cannot block selecting/panning equipment underneath.
+  Search dimming is preserved for markers despite separating them from bodies.
+  Room backgrounds/PODs, room labels, equipment, selection marquee, lightning
+  are drawn in that order. Both orange and red flashes retain breathing and
+  reduced-motion support. Energized bodies now use `#f87171` fill, `#b91c1c`
+  border/marker and a stronger border width; text remains dark and readable.
+- Box select is a MousePointer2 button switching the map from pan to marquee
+  mode. Fully enclosed inset device bodies are selected by equipment ID, with
+  repeated placements sharing selection. Shift + drag adds another group;
+  click/Enter/Space toggles an individual ID. Blue outlines/counts show selection.
+  The bulk Energize today (count) action sets all eligible IDs together, skips
+  effective Energized states and leaves existing plans intact (idempotent).
+  Clear selection/Escape remove selection; Escape/pointer cancellation abandons
+  an unfinished marquee. Floor changes, search focus or exit clear selection.
+  Existing persistence and global reset handle bulk plans. Selection does not
+  move the camera. Canvas focus uses preventScroll to avoid page jumps changing
+  pointer coordinates when the canvas extends below the browser viewport.
+- Manual overrides are browser-local, keyed by normalized equipment ID, and
+  apply to every placement of that ID. They persist through refresh and floor
+  navigation until reset; Energize today does not automatically expire at
+  midnight. Reset device removes one override; Reset all statuses clears all
+  overrides, including hidden floors, and restores Excel defaults. Neither
+  changes the source workbook nor shared server state. Invalid stored values
+  are ignored; unavailable browser storage falls back to this visit's state.
+- The page fetches its own typed layout manifest on mount using `fetchJson`;
+  it does not add another dataset to global initial loading or request global
+  equipment/case detail data. It provides search, selectable/keyboard-accessible
+  rectangles, a details/status panel, zoom, focus on device, fit, and source
+  diagnostics. The fixed-size SVG canvas pans by changing its viewBox, using
+  pointer capture and a four-pixel movement threshold. Dragging can start on
+  equipment and does not select it; clicks and Enter/Space still select.
+  A non-passive wheel handler prevents page scrolling and zooms at the cursor,
+  accounting for SVG letterboxing. Buttons zoom about the view center, with
+  bounded zoom; Fit layout restores the common frame. Manual floor switching
+  retains the current camera so fixed equipment stays in place.
+  Find equipment offers up to 12 unique ID/floor suggestions from all floors,
+  prioritizing exact/prefix matches. Click or Arrow Up/Down + Enter confirms,
+  switches floor when required, selects and immediately zooms to the device.
+  Escape/blur closes suggestions. Dense original geometry is preserved;
+  zoom/search/detail selection provide readable access to small equipment.
+- Latest small-device readability: hover or keyboard focus opens a single HTML
+  inspection card with a full equipment ID in fixed 16px text, status and fixed
+  layer context. Its size is independent of SVG zoom and its position is bounded
+  within the map. It has tooltip semantics/aria-describedby and no pointer
+  interception. Escape, blur/leave, panning, zooming and floor switching dismiss
+  it. Click/tap still opens the details panel. Device rectangles/geometry and
+  camera remain unchanged when inspecting.
+
+### Real local data
+
+Latest read-only inspection in the button-lock/readability follow-up sees the
+independently refreshed local manifest generated at 2026-10-14 09:58 EDT:
+173 device rectangles, 172 unique IDs, 88 fixed placements, zero diagnostics.
+The following counts describe the earlier floor/region implementation snapshot.
+No ETL or source/data regeneration was performed in this UI-only follow-up.
+
+- Latest user-updated PDF: one page, 194 annotations comprising 175 equipment
+  rectangles, 14 POD regions, 3 room regions, boundary and fix controls.
+- Rendered all 175 equipment rectangles, representing 159 distinct IDs:
+  85 floor-specific placements and 90 fixed placements (74 distinct fixed IDs).
+  Rooms: `E6-110-01`, `E6-110-02`, `E6-110-03`.
+- All 175 placements matched, zero ambiguous/unmatched and zero diagnostics.
+  This supersedes the initial PDF's 178 rectangles and three unmatched IDs.
+- Normalized 13,122 equipment records from the latest selected export,
+  `SystemElements_10-14-2026_08-13-AM.xlsx`, and regenerated equipment JSON/CSV
+  plus the initial layout manifest. The follow-up rebuilt only the layout
+  manifest against the updated PDF. One placement is date-confirmed Energized:
+  `IAD06-CDS6-01A`, completed `2025-01-14T14:22:00`.
+- No raw PDF or workbook was modified by Codex. Generated datasets, screenshots
+  and browser smoke script remain gitignored. Full ETL was not run; unrelated
+  dashboard datasets/header ETL metadata retain their previous refresh time.
+
+### Relevant files
+
+- `config/layout_plans.json`: floor/PDF/page configuration.
+- `scripts/etl/build_layout_plan.py`: annotation geometry, fixed layer, matching
+  and diagnostics; `scripts/etl/run_etl.py`: orchestration/output registration.
+- `scripts/etl/normalize_equipment.py`, `scripts/etl/schemas.py`,
+  `frontend/src/types/data.ts`: completed-date and layout contracts.
+- `frontend/src/pages/LayoutPlanPage.tsx`,
+  `frontend/src/utils/layoutPlanUtils.ts`: map, search, camera interaction,
+  regions, collision-free label bands, spacing, electrical status/persistence.
+- `frontend/src/App.tsx`, `frontend/src/components/layout/Sidebar.tsx`: route/nav.
+- `scripts/tests/test_build_layout_plan.py`,
+  `scripts/tests/test_normalize_equipment.py`, `scripts/tests/test_run_etl.py`,
+  `frontend/src/pages/LayoutPlanPage.test.tsx`,
+  `frontend/src/utils/layoutPlanUtils.test.ts`, `frontend/src/App.test.tsx`: tests.
+- `frontend/README.md`, `ARCHITECTURE.md`: operation and architecture notes.
+
+### Tests actually performed
+
+Latest layering/bulk-selection update:
+
+- `npm test -- src/pages/LayoutPlanPage.test.tsx --pool=threads --maxWorkers=1`:
+  19 passed, rerun successfully after the final focus/scroll fix.
+- `npm test -- src/utils/layoutPlanUtils.test.ts --pool=threads --maxWorkers=1`:
+  6 passed. Initial cold page/utility workers timed out before starting; isolated
+  retries passed. Total 25 targeted tests, covering fixed room labels, layer
+  order/red styling, fully-contained/reversed-direction selection, deduplicated
+  IDs, planning exclusions/idempotence, keyboard/clear/Escape, unchanged camera,
+  batch/global reset and clearing selection on floor changes.
+- Preview-mode npm build passed (including strict TypeScript). Existing large
+  chunk/timing warnings remain. No Python tests/full suites/lint were rerun;
+  this change is frontend-only and needs no data regeneration.
+- Real Chromium on temporary Vite 5185: selected the confirmed Energized device
+  alone (bulk disabled), then Shift-added its room. Selected 30 IDs and planned
+  29, leaving the date-confirmed ID red. Verified unchanged viewBox and room-label
+  markup, final lightning layer, stronger red fill/border, no page errors,
+  browser-refresh persistence and global reset. The first attempts exposed
+  canvas focus scrolling the page and disrupting marquee coordinates; fixed
+  with preventScroll, then the complete browser check passed.
+- Captured and visually reviewed
+  `runtime/automation/layout-bulk-top-lightning.png`, showing the actual room
+  with all flashes above device bodies and the name fixed in the background.
+
+Earlier checks from this conversation:
+
+Latest Energized lock and readability change: targeted page/geometry run passed
+the 4 utility tests but the page worker timed out before starting. Isolated
+`npm test -- src/pages/LayoutPlanPage.test.tsx --pool=threads --maxWorkers=1`
+passed all 16 page tests (20 targeted tests across runs). Covers source and
+retained manual Energized button locks, stale planning flags losing to confirmed
+dates, available planning on unenergized devices, and full-ID hover/focus cards
+without camera changes. Preview-mode build passed; `npx tsc -b` passed again
+after the final parameterized test change. No Python tests were rerun because
+this follow-up changed only frontend status/display logic and documentation.
+A focused Chromium check passed for a real small device: full-ID card computes
+to 16px with an unchanged viewBox, hover/keyboard focus and Escape work, planning
+still toggles on unenergized equipment, and confirmed Energized stays locked
+even after reloading a stale browser plan. Captured/reviewed
+`runtime/automation/layout-small-device-card.png`. Initial automatic SVG clicks
+timed out on breathing animation stability; clicking the observed rectangle
+center completed the actual interaction check. No app change was needed for
+that browser-test locator issue.
+
+Latest room-name correction: reran
+`npm test -- src/utils/layoutPlanUtils.test.ts --pool=threads --maxWorkers=1`;
+all 4 passed, including centered labels inside the upper third and occupied-band
+avoidance. Preview-mode `npm run build` passed again. A focused real Chromium
+check verified all three room-name rectangles stay inside the upper third,
+their text uses centered anchoring, and none intersects device rectangles.
+Captured/reviewed `runtime/automation/layout-room-names-inside.png`.
+No data regeneration was needed for this frontend-only placement change.
+
+- `python -m pytest scripts/tests/test_build_layout_plan.py scripts/tests/test_normalize_equipment.py scripts/tests/test_schemas.py scripts/tests/test_run_etl.py -q`:
+  latest run **23 passed**, dependency deprecation warnings only. Covers actual
+  annotated PDF fixtures, rotated coordinates, boundary filtering, fix regions,
+  multiple floors, uncertain matches, missing PDF/boundary, duplicate floor IDs,
+  POD/room classification and exclusion from equipment diagnostics,
+  completed-date parsing and exact-column isolation, optional old exports,
+  schemas and ETL registration. Initial fixture expectations were corrected for
+  PyMuPDF's annotation border expansion; final run passed.
+- From `frontend/`, targeted Layout page, geometry utilities and App route
+  tests: **26 passed across runs** (12 page, 4 utilities, 10 App tests).
+  The initial three-file threads run passed App/utilities (13 tests) but the
+  Layout worker timed out before starting. Its isolated retry passed all 12.
+  Added fixed-region deduplication coverage and reran the 4 utility tests.
+  Final page/utilities run after selector typing fixes passed all 16 tests.
+  Commands:
+  `npm test -- src/pages/LayoutPlanPage.test.tsx src/utils/layoutPlanUtils.test.ts src/App.test.tsx --pool=threads --maxWorkers=1`,
+  `npm test -- src/pages/LayoutPlanPage.test.tsx --pool=threads --maxWorkers=1`,
+  `npm test -- src/utils/layoutPlanUtils.test.ts --pool=threads --maxWorkers=1`,
+  `npm test -- src/pages/LayoutPlanPage.test.tsx src/utils/layoutPlanUtils.test.ts --pool=threads --maxWorkers=1`.
+  Covers retained placements, cross-floor hints/keyboard/automatic focus,
+  pointer dragging from equipment without selection, wheel event prevention,
+  cursor anchoring with letterboxing and zoom limits, reference-region roles,
+  room-label clearance, spacing/center preservation, Energize today toggling,
+  persistence/reset, default red markers, retries and lazy route loading.
+- `$env:IAD6_PREVIEW_BUILD='1'; npm run build`: final build passed, including
+  strict TypeScript. Existing large-chunk warning remains. Preview build omits
+  copying large public datasets/reports; this is not a static publishing build.
+- Latest local Chromium/Playwright on temporary Vite port 5185: verified 175
+  rounded device rectangles/90 fixed, 14 PODs, 3 rooms and their nonoverlapping
+  name bands. Regions have no button role/tab stop. Verified drag from equipment
+  without selection, cursor-anchored wheel zoom without page scroll, suggestions
+  and Enter confirmation directly zooming to the device, removed dropdown,
+  workbook-derived red lightning, manually set
+  orange lightning, 2.2-second breathing, marker bounds above the device,
+  refresh persistence, global reset, and disabled animation with reduced motion.
+  No page errors. A browser-only synthetic second-floor dataset verified that
+  all 90 fixed placements and 14 PODs keep screen coordinates/manual status while
+  85 floor devices and the three rooms disappear. No second-floor PDF exists yet.
+- Captured and visually reviewed `runtime/automation/layout-plan-v2-overview.png`
+  and `runtime/automation/layout-plan-v2-device.png` (initial screenshots also
+  retained). The in-app browser execution
+  tool was unavailable; standalone local Playwright was used. The browser
+  check caught unintended deduplication of repeated PDF IDs, which was fixed
+  and covered by a regression test before the final browser/test/build runs.
+- No full suites or lint command were run. No commit, deployment, live vendor
+  operation, credential change, or existing user service restart was performed.
+  The user's pre-existing `prompt.md` changes were preserved.
+- `git diff --check -- . ':(exclude)prompt.md'` passed. The unrestricted check
+  reported existing whitespace in the user's modified prompt, which was left
+  intact. Restored the build-generated tracked TypeScript build-info file and
+  stopped the temporary Vite server after verification.
+
+### Refresh and follow-up
+
+Save/close the sources, then run from the root:
+
+```powershell
+python scripts/etl/normalize_equipment.py
+python scripts/etl/build_layout_plan.py
+```
+
+Reload `/layout`. Normal full ETL also refreshes this dataset. For a compiled
+preview, rebuild/restart once to load the new route; subsequent data rebuilds
+use the existing live-data service. For static hosting, use an ordinary build
+and publish its code/data. Add future floors to the config and regenerate;
+multi-floor behavior has fixture coverage, while real geometry alignment needs
+verification when those PDFs are supplied. Current source matching is complete;
+no unmatched-ID follow-up remains from the latest drawing.
+
+## Previous Status (2026-10-13)
 
 Remote Microsoft login: user screenshots showed an unrendered Windows Security
 passkey dialog on the VM and blocked aadcdn.msauthimages.net assets. Added

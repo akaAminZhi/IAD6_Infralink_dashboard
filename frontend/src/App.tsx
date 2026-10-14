@@ -37,6 +37,9 @@ const PdmPage = lazy(() =>
 const PowerPlanPage = lazy(() =>
   import("./pages/PowerPlanPage").then((module) => ({ default: module.PowerPlanPage })),
 );
+const LayoutPlanPage = lazy(() =>
+  import("./pages/LayoutPlanPage").then((module) => ({ default: module.LayoutPlanPage })),
+);
 
 const KprPage = lazy(() =>
   import("./pages/KprPage").then((module) => ({ default: module.KprPage })),
@@ -131,6 +134,7 @@ function App() {
                   <Route element={<IssuesPage data={dashboardData} />} path="/issues" />
                   <Route element={<EpsTestExecutionPage data={dashboardData} />} path="/eps-test-execution" />
                   <Route element={<PowerPlanPage data={dashboardData} />} path="/power-plan" />
+                  <Route element={<LayoutPlanPage />} path="/layout" />
                   <Route element={<MvEquipmentPage data={dashboardData} />} path="/mv-equipment" />
                   <Route element={<DataQualityPage data={dashboardData} />} path="/data-quality" />
                   <Route

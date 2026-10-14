@@ -3,6 +3,14 @@ from __future__ import annotations
 from scripts.etl import run_etl
 
 
+def test_layout_builder_runs_after_equipment_normalization_and_is_registered_output() -> None:
+    steps = run_etl.build_pipeline_steps({})
+    names = [name for name, _ in steps]
+    assert names.index("normalize_equipment.py") < names.index("build_layout_plan.py")
+    assert steps[names.index("build_layout_plan.py")][1] is run_etl.build_layout_plan.main
+    assert run_etl.OUTPUT_FILES["layout_plan"] == run_etl.DATA_DIR / "layout_plan.json"
+
+
 def test_run_steps_stops_after_first_failure(monkeypatch, capsys) -> None:
     calls: list[str] = []
 

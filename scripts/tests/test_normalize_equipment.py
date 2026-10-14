@@ -40,6 +40,22 @@ def test_parse_open_issues_converts_blank_numeric_and_text_values() -> None:
     assert parse_open_issues(2.9) == 2
 
 
+@pytest.mark.parametrize("value, expected", [
+    (datetime(2026, 10, 14, 8, 30), "2026-10-14T08:30:00"),
+    ("10/14/2026 08:30 AM", "2026-10-14T08:30:00"),
+    ("N/A", None), ("Completed", None), (True, None), (None, None),
+])
+def test_energized_requires_completed_date(tmp_path, value, expected) -> None:
+    path = tmp_path / "SystemElements.xlsx"
+    headers = [*SOURCE_COLUMNS, "Energized: Completed", "Circuit Energized: Completed"]
+    row = [None] * len(headers)
+    row[0] = "IAD06-EQ-1"
+    row[-2] = value
+    row[-1] = datetime(2026, 10, 13)
+    make_workbook(path, headers=headers, rows=[row])
+    assert normalize_equipment(str(path))[0]["energized_completed_at"] == expected
+
+
 def test_normalize_equipment_reads_and_trims_workbook_values(tmp_path) -> None:
     workbook_path = tmp_path / "SystemElements_07-01-2026_05-00-AM.xlsx"
     make_workbook(
@@ -76,6 +92,7 @@ def test_normalize_equipment_reads_and_trims_workbook_values(tmp_path) -> None:
             "test_tracking_required": True,
             "neta_complete": True,
             "neta_completed_at": "2026-07-01T08:30:00",
+            "energized_completed_at": None,
             "neta_test_report": "report.pdf",
             "feeder_cable_atp": None,
             "manufacturer": "IEM",

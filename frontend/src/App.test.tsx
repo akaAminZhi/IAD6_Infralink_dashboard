@@ -37,6 +37,9 @@ vi.mock("./pages/EpsTestExecutionPage", () => ({
 vi.mock("./pages/PowerPlanPage", () => ({
   PowerPlanPage: () => <div>Power Plan Route</div>,
 }));
+vi.mock("./pages/LayoutPlanPage", () => ({
+  LayoutPlanPage: () => <div>Layout Route</div>,
+}));
 vi.mock("./pages/MvEquipmentPage", () => ({
   MvEquipmentPage: () => <div>MV Equipment Route</div>,
 }));
@@ -78,6 +81,13 @@ afterEach(() => {
 });
 
 describe("App routing and loading behavior", () => {
+  it("renders the layout route without fetching global equipment detail data", async () => {
+    const state = dashboardState();
+    useDashboardDataMock.mockReturnValue(state);
+    renderRoute("/layout");
+    expect(await screen.findByText("Layout Route")).toBeInTheDocument();
+    expect(state.loadDetailData).not.toHaveBeenCalled();
+  });
   it("shows the loading state for dashboard routes", () => {
     useDashboardDataMock.mockReturnValue(dashboardState({ loading: true }));
     renderRoute("/overview");
