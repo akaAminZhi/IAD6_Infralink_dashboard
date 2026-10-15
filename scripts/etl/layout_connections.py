@@ -6,15 +6,16 @@ import re
 from typing import Any
 
 try:
-    from .build_power_plan import normalize_equipment_key
+    from .build_power_plan import L3_STATUS, normalize_equipment_key, split_attachment_names
 except ImportError:
-    from build_power_plan import normalize_equipment_key
+    from build_power_plan import L3_STATUS, normalize_equipment_key, split_attachment_names
 
 
 def build_layout_connections(
     equipment_index: dict[str, list[dict[str, Any]]],
     layout_keys: set[str],
     mv_test_index: dict[str, list[dict[str, str]]],
+    feeder_cable_atp_index: dict[str, list[dict[str, Any]]] | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Keep unresolved cables as records and diagnostics, without invented paths."""
     assets = {
@@ -54,6 +55,13 @@ def build_layout_connections(
             reason = "endpoint_not_on_layout"
         history = mv_test_index.get(key, [])
         latest = history[-1] if history else None
+        atp_names = split_attachment_names(record.get("feeder_cable_atp"))
+        expected_names = {name.casefold() for name in atp_names}
+        atp_files = [file_record for file_record in (feeder_cable_atp_index or {}).get(key, [])
+                     if file_record["file_name"].casefold() in expected_names]
+        atp_required = " ".join(str(record.get("status") or "").strip().upper().split()) == L3_STATUS
+        atp_status = ("available" if atp_files else "missing_required" if atp_required
+                      else "referenced_file_missing" if atp_names else "not_required")
         cables.append({
             "cable_id": str(record.get("equipment_id") or key),
             "equipment_type": equipment_type,
@@ -63,6 +71,10 @@ def build_layout_connections(
             "system_element_status": record.get("status"),
             "neta_complete": record.get("neta_complete") is True,
             "neta_test_report": record.get("neta_test_report"),
+            "feeder_cable_atp_names": atp_names,
+            "feeder_cable_atp_files": atp_files,
+            "feeder_cable_atp_required": atp_required,
+            "feeder_cable_atp_status": atp_status,
             "mv_daily_test_status": latest["status"] if latest else None,
             "mv_daily_test_date": latest["date"] if latest else None,
         })

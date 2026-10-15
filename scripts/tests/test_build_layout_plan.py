@@ -83,9 +83,11 @@ def test_publishes_cable_endpoints_types_and_latest_daily_evidence(tmp_path):
     config, equipment = inputs(tmp_path)
     records = json.loads(equipment.read_text())
     records["records"][0]["equipment_type"] = "Switchboard"
+    records["records"][0]["neta_test_report"] = "EQ-1 - NETA Test Report-01.pdf"
     cable_id = "FDR-IAD06-EQ-1-IAD06-EQ-FIX"
     records["records"].extend([
-        {"equipment_id": cable_id, "equipment_type": "Feeder Cable - LV", "status": "Installation Complete"},
+        {"equipment_id": cable_id, "equipment_type": "Feeder Cable - LV", "status": "Installation Complete",
+         "feeder_cable_atp": "EQ-1 Cable ATP.pdf"},
         {"equipment_id": cable_id + "-A", "equipment_type": "Termination", "parent": cable_id},
     ])
     equipment.write_text(json.dumps(records))
@@ -93,8 +95,13 @@ def test_publishes_cable_endpoints_types_and_latest_daily_evidence(tmp_path):
     reports.mkdir()
     (reports / "2026-10-14.md").write_text(f"# Tested And Passed\n- {cable_id}\n")
     (reports / "2026-10-15.md").write_text(f"# Failed\n- {cable_id}\n")
-    payload = build_layout_plan(config, tmp_path, equipment, tmp_path / "layout.json", reports)
+    atp_dir = tmp_path / "atp"
+    cable_folder = atp_dir / cable_id
+    cable_folder.mkdir(parents=True)
+    (cable_folder / "EQ-1 Cable ATP.pdf").write_bytes(b"%PDF-1.4\n")
+    payload = build_layout_plan(config, tmp_path, equipment, tmp_path / "layout.json", reports, atp_dir)
     assert payload["floors"][0]["equipment"][0]["equipment_type"] == "Switchboard"
+    assert payload["floors"][0]["equipment"][0]["neta_test_report"] == "EQ-1 - NETA Test Report-01.pdf"
     assert len(payload["cables"]) == 1
     cable = payload["cables"][0]
     assert cable["connection_status"] == "resolved"
@@ -102,6 +109,8 @@ def test_publishes_cable_endpoints_types_and_latest_daily_evidence(tmp_path):
     assert cable["target_equipment_key"] == "EQ-FIX"
     assert cable["mv_daily_test_status"] == "failed"
     assert cable["mv_daily_test_date"] == "2026-10-15"
+    assert cable["feeder_cable_atp_names"] == ["EQ-1 Cable ATP.pdf"]
+    assert cable["feeder_cable_atp_files"][0]["url"].endswith("EQ-1%20Cable%20ATP.pdf")
     assert len(payload["mv_daily_report_files"]) == 2
 
 

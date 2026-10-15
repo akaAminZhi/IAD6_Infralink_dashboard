@@ -151,6 +151,15 @@ views resets the camera/selection geometry. `cableTestUtils.ts` supplies the sam
 cable readiness rules to Layout and MV Equipment. Cable test evidence and equipment
 energisation remain independent; equipment tracking exclusions do not remove
 physical cable connections. Global dashboard initial loading is unchanged.
+Layout carries equipment NETA report names and cable `Feeder Cable ATP` names
+from normalized System Elements. Its cable builder reuses Power Plan's ATP file
+index, matching each listed filename within the exact cable ID folder. The
+frontend previews those local PDFs; cable NETA PDFs are additionally resolved
+by exact full FDR filename in the shared report manifest. Missing files remain
+references without clickable links or inferred test completion.
+Linked ATP/NETA names are shown once; equipment PDF previews prefer GC-renamed
+links. In 2.5D, selection only changes emphasis and detail state; explicit
+Zoom actions own camera changes.
 Equipment illustrations use closed, independently shaded top/left/right faces
 and separate structures for the five device types. Nearby connections use low
 cubic arcs; longer paths have rounded bends. Cable path bounds are included in

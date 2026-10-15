@@ -2,6 +2,25 @@
 
 ## Current update (2026-10-15): 2.5D Layout and overhead cable tracing
 
+- Report-link follow-up: Layout equipment records now carry `neta_test_report`
+  and use Equipment's `NetaReportChips` PDF preview. Cable records carry the
+  System Elements `Feeder Cable ATP` filenames and exact downloaded matches
+  from Power Plan's ATP index; the Layout cable detail previews matched PDFs
+  and identifies referenced PDFs missing locally. Exact full FDR filenames in
+  the shared NETA report manifest provide additional cable NETA links. Cable
+  readiness and missing-report quality flags remain independent from file
+  availability. First-floor real data has 77 placed cables listing ATP files,
+  with 56 linked locally; across all 4,326 cable records, 404 list ATP and 356
+  have linked local PDFs. Targeted checks passed: 19 Python, 30 frontend; the
+  production preview built and real-data browser smoke opened an equipment
+  NETA PDF, a cable ATP PDF and a cable NETA PDF with HTTP 200 and no page errors.
+- Layout follow-up: duplicate linked ATP/NETA cable filenames appear once,
+  equipment PDFs prefer GC-renamed links, and sidebar reports use compact
+  single-column rows. In 2.5D, selecting a device, cable, or search result
+  preserves the camera. Clear focus reserves its toolbar space so the map does
+  not shift vertically; explicit Zoom buttons still change the view. Layout's
+  30 frontend tests and a production build passed, and a browser check confirmed
+  identical map position and viewBox before and after device selection.
 - Performance/visibility follow-up: current-floor 2.5D models remain mounted but
   hidden in 2D after the first 2.5D visit. Static model geometry is memoized
   separately from selection overlays; equipment, cable and background components

@@ -1,11 +1,11 @@
 from scripts.etl.layout_connections import build_layout_connections
 
 
-def build(records, keys=None, history=None):
+def build(records, keys=None, history=None, atp=None):
     index = {}
     for record in records:
         index.setdefault(record["equipment_id"].removeprefix("IAD06-"), []).append(record)
-    return build_layout_connections(index, keys or {"TX-UPP6-06A", "UPP6-06A"}, history or {})
+    return build_layout_connections(index, keys or {"TX-UPP6-06A", "UPP6-06A"}, history or {}, atp or {})
 
 
 def assets():
@@ -66,3 +66,20 @@ def test_latest_mv_daily_result_and_missing_neta_report_are_preserved():
     assert cables[0]["mv_daily_test_date"] == "2026-10-14"
     assert cables[0]["neta_complete"] is True
     assert cables[0]["neta_test_report"] is None
+
+
+def test_feeder_cable_atp_uses_excel_filenames_and_exact_cable_folder():
+    cable = {"equipment_id": CABLE_ID, "equipment_type": "Feeder Cable - LV",
+             "status": "L3: Pre Func Testing & Startup",
+             "feeder_cable_atp": "ATP-02.pdf; ATP-01.pdf"}
+    matching = {"file_name": "ATP-01.pdf", "url": "/feeder-cable-atp/cable/ATP-01.pdf"}
+    unrelated = {"file_name": "ATP-02.pdf", "url": "/feeder-cable-atp/other/ATP-02.pdf"}
+    cables, _ = build(assets() + [cable], atp={CABLE_ID: [matching], "OTHER-CABLE": [unrelated]})
+    assert cables[0]["feeder_cable_atp_names"] == ["ATP-02.pdf", "ATP-01.pdf"]
+    assert cables[0]["feeder_cable_atp_files"] == [matching]
+    assert cables[0]["feeder_cable_atp_status"] == "available"
+    assert cables[0]["feeder_cable_atp_required"] is True
+
+    cables, _ = build(assets() + [cable])
+    assert cables[0]["feeder_cable_atp_files"] == []
+    assert cables[0]["feeder_cable_atp_status"] == "missing_required"

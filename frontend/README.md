@@ -79,6 +79,17 @@ and zoom to the connection. The cable toggle hides/shows overhead connections.
 Terminations are not drawn. Existing search, pan/zoom, floor switching and planning
 controls work in both views; 2.5D box selection uses projected device bounds.
 
+Selecting a device shows its NETA PDFs using the same local report preview as
+Equipment. Selecting a cable shows Feeder Cable ATP PDFs named in the System
+Elements `Feeder Cable ATP` column; only matching downloaded files in that
+cable's folder are linked. Missing referenced PDFs remain visible as missing.
+Cable NETA PDFs whose filename exactly matches the full FDR ID are also linked
+from the local report manifest. Connected cable rows mark available ATP PDFs.
+When a linked ATP PDF has the same name as a cable NETA PDF, Layout shows it
+once. Equipment reports prefer the GC-renamed PDF link. In 2.5D, selecting
+equipment, a cable, or a search result keeps the current camera; the detail
+panel's Zoom buttons change it only when clicked.
+
 Cable testing uses the shared MV Equipment readiness rule: a latest failed daily
 result takes precedence; exact `L3: Pre Func Testing & Startup` means tested and
 Infralink updated; a passed/retested-and-passed MV daily result means tested with

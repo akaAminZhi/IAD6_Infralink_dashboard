@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { NetaReportManifestProvider } from "../contexts/NetaReportManifestContext";
 import type { LayoutCableRecord, LayoutEquipmentRecord, LayoutPlanManifest } from "../types/data";
 import { LAYOUT_VIEW_KEY } from "../utils/layoutIsometricUtils";
 import * as isometricUtils from "../utils/layoutIsometricUtils";
@@ -73,6 +74,65 @@ describe("2.5D Layout connections", () => {
     expect(screen.getByLabelText("Cable details")).toHaveTextContent("Tested + Infralink Updated");
     expect(screen.getByRole("button", { name: "EQ-FIX: Not Energized" })).toHaveAttribute("aria-pressed", "true");
     expect(container.querySelector("[data-mv-termination]")).not.toBeInTheDocument();
+  });
+
+  it("opens equipment and exact-ID cable PDFs from the shared report manifest", async () => {
+    const manifest = isometricDataset();
+    const equipmentReport = "IAD06-EQ-1 - NETA Test Report-01.pdf";
+    const gcEquipmentReport = "IAD06-EQ-1-NETA-01.pdf";
+    const cableReport = "FDR-IAD06-EQ-1-IAD06-EQ-FIX.pdf";
+    const atpReport = "EQ-1 Cable ATP.pdf";
+    manifest.floors[0].equipment[0].neta_test_report = equipmentReport;
+    manifest.cables![0].feeder_cable_atp_names = [atpReport];
+    manifest.cables![0].feeder_cable_atp_files = [{ file_name: atpReport,
+      relative_path: `${manifest.cables![0].cable_id}/${atpReport}`, url: "/feeder-cable-atp/eq-1.pdf" }];
+    const user = userEvent.setup();
+    const { container } = render(<NetaReportManifestProvider manifest={{ records: [
+      { report_name: equipmentReport, url: "/neta-reports/eq-1.pdf", source_key: "downloaded" },
+      { report_name: gcEquipmentReport, source_report_name: equipmentReport,
+        url: "/neta-reports-gc/eq-1-renamed.pdf", source_key: "gc" },
+      { report_name: cableReport, url: "/neta-reports-gc/cable.pdf", source_key: "gc" },
+      { report_name: "FDR-IAD06-EQ-1-IAD06-EQ-FIX-1.pdf", url: "/neta-reports-gc/other.pdf", source_key: "gc" },
+    ] }}><LayoutPlanPage /></NetaReportManifestProvider>);
+    await user.click(await screen.findByRole("button", { name: "EQ-1: Energized" }));
+    expect(screen.getByLabelText("Equipment test reports")).toHaveTextContent(gcEquipmentReport);
+    expect(screen.getByLabelText("Equipment test reports")).not.toHaveTextContent(equipmentReport);
+    expect(screen.getByRole("button", { name: "Energize today" }).compareDocumentPosition(
+      screen.getByLabelText("Equipment test reports")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByLabelText("Equipment test reports").querySelector(".grid-cols-1")).toBeInTheDocument();
+    expect(screen.getByLabelText("Connected cables")).toHaveTextContent("Feeder Cable ATP PDF");
+    await user.click(screen.getByRole("button", { name: gcEquipmentReport }));
+    expect(container.querySelector("iframe")).toHaveAttribute("src", "/neta-reports-gc/eq-1-renamed.pdf");
+    await user.click(screen.getByRole("button", { name: "Close NETA report preview" }));
+    await user.click(container.querySelector(`[data-cable-id="${manifest.cables![0].cable_id}"]`)!);
+    expect(screen.getByLabelText("Feeder Cable ATP reports")).toHaveTextContent(atpReport);
+    await user.click(screen.getByRole("button", { name: atpReport }));
+    expect(container.querySelector("iframe")).toHaveAttribute("src", "/feeder-cable-atp/eq-1.pdf");
+    await user.click(screen.getByRole("button", { name: /^Close Feeder Cable ATP preview$/ }));
+    expect(screen.getByLabelText("Cable test reports")).toHaveTextContent(cableReport);
+    expect(screen.getByLabelText("Cable test reports")).not.toHaveTextContent("FIX-1.pdf");
+    await user.click(screen.getByRole("button", { name: cableReport }));
+    expect(container.querySelector("iframe")).toHaveAttribute("src", "/neta-reports-gc/cable.pdf");
+  });
+
+  it("shows the same linked cable PDF only once", async () => {
+    const manifest = isometricDataset();
+    const report = `${manifest.cables![0].cable_id}.pdf`;
+    manifest.cables![0].neta_test_report = report;
+    manifest.cables![0].feeder_cable_atp_names = [report];
+    manifest.cables![0].feeder_cable_atp_files = [
+      { file_name: report, relative_path: `${manifest.cables![0].cable_id}/${report}`,
+        url: `/feeder-cable-atp/${report}` },
+    ];
+    const user = userEvent.setup();
+    const { container } = render(<NetaReportManifestProvider manifest={{ records: [
+      { report_name: report, url: `/neta-reports-gc/${report}`, source_key: "gc" },
+    ] }}><LayoutPlanPage /></NetaReportManifestProvider>);
+    await user.click(await screen.findByRole("button", { name: /FDR-IAD06-EQ-1-IAD06-EQ-FIX:/ }));
+    expect(screen.getByLabelText("Feeder Cable ATP reports")).toHaveTextContent(report);
+    expect(screen.queryByLabelText("Cable test reports")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: report }));
+    expect(container.querySelector("iframe")).toHaveAttribute("src", `/feeder-cable-atp/${report}`);
   });
 
   it("traces a device's cables, distinguishes failed/partial/daily passed, and preserves missing-report problems", async () => {
@@ -178,6 +238,8 @@ describe("2.5D Layout connections", () => {
     const original = map.getAttribute("viewBox");
     await user.type(screen.getByLabelText("Find equipment"), "EQ-1");
     await user.click(screen.getByRole("option", { name: /EQ-1/ }));
+    expect(map).toHaveAttribute("viewBox", original);
+    await user.click(screen.getByRole("button", { name: "Zoom to device" }));
     expect(map.getAttribute("viewBox")).not.toBe(original);
     await user.click(screen.getByRole("button", { name: "Global view" }));
     expect(map).toHaveAttribute("viewBox", original);
@@ -203,6 +265,25 @@ describe("2.5D Layout connections", () => {
     expect(map).toHaveAttribute("viewBox", original);
     expect(screen.getByLabelText("Find equipment")).toHaveValue("");
     expect(screen.queryByLabelText("Connected cables")).not.toBeInTheDocument();
+  });
+
+  it("keeps the camera and toolbar height stable while selecting equipment and its cables", async () => {
+    isometricDataset();
+    const user = userEvent.setup();
+    render(<LayoutPlanPage />);
+    const map = await screen.findByRole("img", { name: "First Floor equipment layout" });
+    const clearFocusButton = screen.getByText("Clear focus").closest("button")!;
+    expect(clearFocusButton).toHaveClass("invisible");
+    await user.click(screen.getByRole("button", { name: "Zoom in" }));
+    const zoomed = map.getAttribute("viewBox");
+    await user.click(screen.getByRole("button", { name: "EQ-1: Energized" }));
+    expect(map).toHaveAttribute("viewBox", zoomed);
+    expect(clearFocusButton).not.toHaveClass("invisible");
+    await user.click(screen.getByRole("button", { name: /↔ EQ-FIX/ }));
+    expect(map).toHaveAttribute("viewBox", zoomed);
+    await user.click(screen.getByRole("button", { name: "Clear focus" }));
+    expect(map).toHaveAttribute("viewBox", zoomed);
+    expect(clearFocusButton).toHaveClass("invisible");
   });
 });
 

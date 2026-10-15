@@ -11,11 +11,11 @@ from typing import Any
 import fitz
 
 try:
-    from .build_power_plan import MV_REPORT_DIR, build_mv_test_index, normalize_equipment_key
+    from .build_power_plan import FEEDER_CABLE_ATP_DIR, MV_REPORT_DIR, build_feeder_cable_atp_index, build_mv_test_index, normalize_equipment_key
     from .layout_connections import build_layout_connections
     from .json_utils import file_metadata, load_records_json, write_json
 except ImportError:
-    from build_power_plan import MV_REPORT_DIR, build_mv_test_index, normalize_equipment_key
+    from build_power_plan import FEEDER_CABLE_ATP_DIR, MV_REPORT_DIR, build_feeder_cable_atp_index, build_mv_test_index, normalize_equipment_key
     from layout_connections import build_layout_connections
     from json_utils import file_metadata, load_records_json, write_json
 
@@ -55,6 +55,7 @@ def build_layout_plan(
     equipment_path: Path = DATA_DIR / "equipment.json",
     output_path: Path = DATA_DIR / "layout_plan.json",
     mv_report_dir: Path = MV_REPORT_DIR,
+    feeder_cable_atp_dir: Path = FEEDER_CABLE_ATP_DIR,
 ) -> dict[str, Any]:
     config = json.loads(config_path.read_text(encoding="utf-8"))
     equipment_index: dict[str, list[dict[str, Any]]] = {}
@@ -137,6 +138,7 @@ def build_layout_plan(
                     "energized_completed_at": matched.get("energized_completed_at") if matched else None,
                     "system_element_status": matched.get("status") if matched else None,
                     "equipment_type": matched.get("equipment_type") if matched else None,
+                    "neta_test_report": matched.get("neta_test_report") if matched else None,
                 }
                 if match_status != "matched":
                     diagnostics.append({"floor_id": floor_id, "label": label, "reason": match_status, "candidate_equipment_ids": record["candidate_equipment_ids"]})
@@ -174,8 +176,9 @@ def build_layout_plan(
                 record["rect"] = {**rect, "x": round(rect["x"] + dx, 3), "y": round(rect["y"] + dy, 3)}
         aligned_floors[spec["floor_id"]] = floor
     mv_test_index, mv_report_files = build_mv_test_index(mv_report_dir)
+    feeder_cable_atp_index = build_feeder_cable_atp_index(feeder_cable_atp_dir)
     layout_keys = {record["equipment_key"] for record in fixed_equipment + [record for floor in floors for record in floor["equipment"]]}
-    cables, cable_diagnostics = build_layout_connections(equipment_index, layout_keys, mv_test_index)
+    cables, cable_diagnostics = build_layout_connections(equipment_index, layout_keys, mv_test_index, feeder_cable_atp_index)
     # Preserve all placements; the UI chooses the first fixed source floor per ID.
     payload = {
         "generated_at": datetime.now().astimezone().isoformat(),

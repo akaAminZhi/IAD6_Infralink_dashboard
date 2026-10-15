@@ -14,6 +14,7 @@ interface NetaReportChipsProps {
   className?: string;
   compactNameMode?: NetaReportNameMode;
   showLinkedFileNames?: boolean;
+  stackedCompact?: boolean;
 }
 
 interface ReportPreview {
@@ -99,6 +100,7 @@ export function NetaReportChips({
   className,
   compactNameMode = "original",
   showLinkedFileNames = false,
+  stackedCompact = false,
 }: NetaReportChipsProps) {
   const manifest = useNetaReportManifest();
   const [preview, setPreview] = useState<ReportPreview | null>(null);
@@ -112,7 +114,7 @@ export function NetaReportChips({
       <div
         className={cn(
           showLinkedFileNames
-            ? "grid gap-2 lg:grid-cols-2"
+            ? stackedCompact ? "grid grid-cols-1 gap-1.5" : "grid gap-2 lg:grid-cols-2"
             : "flex w-full flex-wrap gap-2 overflow-x-auto",
           className,
         )}
@@ -130,12 +132,12 @@ export function NetaReportChips({
 
             return (
               <div
-                className="max-w-full overflow-hidden rounded-md border border-blue-200 bg-blue-50 text-xs text-blue-950 shadow-sm"
+                className={cn("max-w-full overflow-hidden rounded-md border border-blue-200 bg-blue-50 text-blue-950 shadow-sm", stackedCompact ? "text-[11px]" : "text-xs")}
                 key={`${reportName}-${index}`}
               >
                 {displayLink ? (
                   <button
-                    className="block w-full break-all px-3 py-2 text-left font-semibold underline-offset-4 hover:bg-blue-100 hover:underline"
+                    className={cn("block w-full break-all text-left font-semibold underline-offset-4 hover:bg-blue-100 hover:underline", stackedCompact ? "px-2 py-1.5" : "px-3 py-2")}
                     onClick={(event) => {
                       event.stopPropagation();
                       setPreview(makePreview(reportName, displayLink));
@@ -146,7 +148,7 @@ export function NetaReportChips({
                     {displayName}
                   </button>
                 ) : (
-                  <div className="break-all px-3 py-2 font-semibold">{displayName}</div>
+                  <div className={cn("break-all font-semibold", stackedCompact ? "px-2 py-1.5" : "px-3 py-2")}>{displayName}</div>
                 )}
                 {!displayLink ? (
                   <div className="border-t border-blue-200 bg-white/70 px-3 py-2 text-muted-foreground">

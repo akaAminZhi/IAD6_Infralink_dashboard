@@ -261,6 +261,7 @@ export interface LayoutEquipmentRecord {
   energized_completed_at: string | null;
   system_element_status: string | null;
   equipment_type?: string | null;
+  neta_test_report?: string | null;
 }
 
 export interface LayoutCableRecord {
@@ -272,6 +273,10 @@ export interface LayoutCableRecord {
   system_element_status: string | null;
   neta_complete: boolean;
   neta_test_report: string | null;
+  feeder_cable_atp_names?: string[];
+  feeder_cable_atp_files?: FeederCableAtpFile[];
+  feeder_cable_atp_required?: boolean;
+  feeder_cable_atp_status?: string;
   mv_daily_test_status: string | null;
   mv_daily_test_date: string | null;
 }

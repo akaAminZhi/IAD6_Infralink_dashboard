@@ -4,14 +4,19 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState, type PointerEv
 import { EmptyState } from "../components/common/EmptyState";
 import { ErrorState } from "../components/common/ErrorState";
 import { LoadingState } from "../components/common/LoadingState";
+import { NetaReportChips } from "../components/common/NetaReportChips";
 import { Button } from "../components/ui/button";
 import { IsometricEquipment } from "../components/layout/IsometricEquipment";
+import { FeederCableAtpReports } from "../components/layout/FeederCableAtpReports";
 import { LayoutCable } from "../components/layout/LayoutCable";
 import { LayoutBackground } from "../components/layout/LayoutBackground";
 import { useFrameState } from "../hooks/useFrameState";
+import { useNetaReportManifest } from "../contexts/NetaReportManifestContext";
 import type { LayoutCableRecord, LayoutEquipmentRecord, LayoutPlanManifest, PowerPlanRect } from "../types/data";
 import { fetchJson } from "../utils/dataLoaders";
 import { CABLE_TEST_STATES, cableTestState } from "../utils/cableTestUtils";
+import { getLayoutCableReportNames } from "../utils/layoutReportUtils";
+import { getNetaReportNames } from "../utils/netaReports";
 import {
   DEVICE_KIND_LABELS, LAYOUT_VIEW_KEY, isNearbyCable, layoutCablePath, layoutConnectionBounds, layoutDeviceHeight, layoutDeviceKind,
   placedLayoutCables, projectLayoutPoint, projectedLayoutBounds,
@@ -92,6 +97,7 @@ interface PanState {
 }
 
 export function LayoutPlanPage() {
+  const netaReportManifest = useNetaReportManifest();
   const [isometric, setIsometric] = useState(() => {
     try { return localStorage.getItem(LAYOUT_VIEW_KEY) !== "plan"; } catch { return true; }
   });
@@ -148,6 +154,8 @@ export function LayoutPlanPage() {
     return { byId, byEquipment };
   }, [manifest]);
   const selectedCable = selectedCableId ? cableIndex.byId.get(selectedCableId) : undefined;
+  const selectedCableReports = useMemo(() => selectedCable
+    ? getLayoutCableReportNames(selectedCable, netaReportManifest) : [], [selectedCable, netaReportManifest]);
   const sortedRows = useMemo(() => [...rows].sort((a, b) =>
     a.rect.x + a.rect.y + a.rect.width + a.rect.height - b.rect.x - b.rect.y - b.rect.width - b.rect.height), [rows]);
   const selectionRows = useMemo(() => isometric ? rows.map((row) => ({ ...row,
@@ -170,6 +178,7 @@ export function LayoutPlanPage() {
   const bounds = viewport ?? fullBounds;
   const zoom = fullBounds.width / bounds.width;
   const selected = rows.find((row) => row.annotation_id === selectedId);
+  const selectedEquipmentReports = useMemo(() => getNetaReportNames(selected?.neta_test_report), [selected]);
   const selectedConnections = useMemo(() => selected ? cableIndex.byEquipment.get(selected.equipment_key) ?? [] : [], [selected, cableIndex]);
   const connectedKeys = useMemo(() => new Set(selectedConnections.flatMap((cable) => [cable.source_equipment_key, cable.target_equipment_key])), [selectedConnections]);
   const cableEndpointKeys = selectedCable ? [selectedCable.source_equipment_key, selectedCable.target_equipment_key] : [];
@@ -242,7 +251,12 @@ export function LayoutPlanPage() {
     setFloorId(suggestion.floorId);
     setSearch(suggestion.record.label);
     setSearchOpen(false);
-    focusDevice(suggestion.record);
+    if (!isometric) { focusDevice(suggestion.record); return; }
+    setInspection(null);
+    setSelectedId(suggestion.record.annotation_id);
+    setSelectedCableId(null);
+    setSelectionKeys(new Set());
+    setSelectionMode(false);
   }
 
   function handlePointerDown(event: ReactPointerEvent<SVGSVGElement>) {
@@ -407,7 +421,8 @@ export function LayoutPlanPage() {
               if (event.key === "Enter" && suggestions.length) {
                 event.preventDefault(); confirmSuggestion(suggestions[Math.min(activeSearchIndex, suggestions.length - 1)]);
               }
-            }} placeholder="Equipment ID · Enter to zoom" className="h-9 w-full rounded-md border bg-background pl-9 pr-3" />
+            }} placeholder={isometric ? "Equipment ID · Enter to select" : "Equipment ID · Enter to zoom"}
+            className="h-9 w-full rounded-md border bg-background pl-9 pr-3" />
         </div>
         {searchOpen && query ? <div id="layout-equipment-suggestions" role="listbox" aria-label="Equipment suggestions"
           className="absolute left-0 right-0 top-full z-30 mt-1 max-h-72 overflow-auto rounded-md border bg-card p-1 shadow-lg">
@@ -436,7 +451,8 @@ export function LayoutPlanPage() {
       {Object.entries(CABLE_TEST_STATES).map(([key, state]) => <span key={key} className="inline-flex items-center gap-2">
         <svg width="22" height="8" aria-hidden="true"><line x1="0" x2="22" y1="4" y2="4" stroke={state.color} strokeWidth="2" strokeDasharray={state.dash} /></svg>{state.label}
       </span>)}
-      {selected || selectedCable ? <Button variant="ghost" onClick={clearFocus}><X className="mr-2 h-4 w-4" />Clear focus</Button> : null}
+      <Button variant="ghost" className={selected || selectedCable ? undefined : "invisible"}
+        disabled={!selected && !selectedCable} onClick={clearFocus}><X className="mr-2 h-4 w-4" />Clear focus</Button>
       <span className="w-full text-muted-foreground">Illustrative equipment heights and overhead routes. Select a device or cable to trace its connections. Terminations are hidden.</span>
       {!manifest.cables ? <span className="text-amber-700">Cable data is unavailable. Rebuild Layout data to load connections.</span> : null}
     </div> : null}
@@ -526,17 +542,18 @@ export function LayoutPlanPage() {
           <p className="text-xs">Infralink: {selectedCable.system_element_status ?? "Unknown"}</p>
           <p className="text-xs">MV daily: {selectedCable.mv_daily_test_status?.replace(/_/g, " ") ?? "No test evidence"}{selectedCable.mv_daily_test_date ? ` · ${selectedCable.mv_daily_test_date}` : ""}</p>
           <p className="text-xs">NETA: {selectedCable.neta_complete ? "Complete" : "Not confirmed"}</p>
+          <FeederCableAtpReports key={selectedCable.cable_id} files={selectedCable.feeder_cable_atp_files ?? []}
+            names={selectedCable.feeder_cable_atp_names ?? []} required={selectedCable.feeder_cable_atp_required ?? false} />
+          {selectedCableReports.length ? <section className="space-y-2" aria-label="Cable test reports">
+            <h4 className="text-xs font-medium uppercase text-muted-foreground">Cable NETA reports</h4>
+            <NetaReportChips reports={selectedCableReports} showLinkedFileNames stackedCompact />
+          </section> : null}
           {selectedCable.neta_complete && !selectedCable.neta_test_report ? <p className="text-xs text-red-700">Data quality: NETA complete but report is missing.</p> : null}
           {!connectionIds.has(selectedCable.cable_id) ? <p className="text-xs text-amber-700">Connection is not drawn: {selectedCable.connection_status === "resolved" ? "endpoint is on another floor or has multiple placements" : selectedCable.connection_status.replace(/_/g, " ")}.</p> : null}
           <Button variant="outline" disabled={!connectionIds.has(selectedCable.cable_id)} onClick={() => focusCable(selectedCable.cable_id)}>Zoom to connection</Button>
         </div> : null}
         {selected ? <div className="space-y-3">
           <h3 className="break-all font-semibold">{selected.matched_equipment_id ?? selected.label}</h3>
-          <p className="text-xs text-muted-foreground">{selected.fixed ? "Fixed across all floors" : "Floor equipment"} · {selected.match_status}</p>
-          {isometric ? <p className="text-xs text-muted-foreground">{DEVICE_KIND_LABELS[layoutDeviceKind(selected)]}</p> : null}
-          <p className="text-sm">Excel energized date: {selected.energized_completed_at ?? "No completed date"}</p>
-          <p className="text-sm">System status: {selected.system_element_status ?? "Unknown"}</p>
-          <p className="text-sm font-medium">{LAYOUT_STATUS_LABELS[statusOf(selected)]}</p>
           <Button className="w-full gap-2" aria-pressed={statusOf(selected) === "energizeToday"}
             disabled={statusOf(selected) === "energized"}
             variant={statusOf(selected) === "energizeToday" ? "secondary" : "default"}
@@ -547,6 +564,15 @@ export function LayoutPlanPage() {
               else next[selected.equipment_key] = "energizeToday";
               saveOverrides(next);
             }}><Zap className="h-4 w-4 text-orange-500" />Energize today</Button>
+          <p className="text-xs text-muted-foreground">{selected.fixed ? "Fixed across all floors" : "Floor equipment"} · {selected.match_status}</p>
+          {isometric ? <p className="text-xs text-muted-foreground">{DEVICE_KIND_LABELS[layoutDeviceKind(selected)]}</p> : null}
+          <p className="text-sm">Excel energized date: {selected.energized_completed_at ?? "No completed date"}</p>
+          <p className="text-sm">System status: {selected.system_element_status ?? "Unknown"}</p>
+          <p className="text-sm font-medium">{LAYOUT_STATUS_LABELS[statusOf(selected)]}</p>
+          {selectedEquipmentReports.length ? <section className="space-y-2" aria-label="Equipment test reports">
+            <h4 className="text-xs font-medium uppercase text-muted-foreground">NETA test reports</h4>
+            <NetaReportChips reports={selectedEquipmentReports} compactNameMode="gc" showLinkedFileNames stackedCompact />
+          </section> : null}
           <p className="text-xs text-muted-foreground">{overrides[selected.equipment_key] && !selected.energized_completed_at ? "Manual override · saved in this browser" : "From SystemElements Excel"}</p>
           <div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => focusDevice(selected)}>Zoom to device</Button>
             <Button variant="ghost" disabled={!overrides[selected.equipment_key]} onClick={() => {
@@ -559,11 +585,12 @@ export function LayoutPlanPage() {
             {selectedConnections.map((cable) => {
               const state = CABLE_TEST_STATES[cableTestState(cable)];
               const other = cable.source_equipment_key === selected.equipment_key ? cable.target_equipment_key : cable.source_equipment_key;
-              return <button key={cable.cable_id} type="button" onClick={() => focusCable(cable.cable_id)}
+              return <button key={cable.cable_id} type="button" onClick={() => { setSelectedCableId(cable.cable_id); setInspection(null); }}
                 aria-pressed={selectedCableId === cable.cable_id} className={`w-full space-y-1 rounded-md border p-2 text-left hover:bg-accent ${selectedCableId === cable.cable_id ? "border-blue-500 bg-blue-50" : ""}`}>
                 <span className="block break-all text-sm font-medium">↔ {other ?? "Unresolved endpoint"}</span>
                 <span className="block break-all text-xs text-muted-foreground">{cable.cable_id}</span>
                 <span className="block text-xs" style={{ color: state.color }}>{state.label}</span>
+                {cable.feeder_cable_atp_files?.length ? <span className="block text-xs font-medium text-blue-700">Feeder Cable ATP PDF</span> : null}
                 {!connectionIds.has(cable.cable_id) ? <span className="block text-xs text-muted-foreground">Outside this view / unresolved placement</span> : null}
               </button>;
             })}
