@@ -1,6 +1,104 @@
 ﻿# Codex Handoff
 
-## Current Status (2026-10-15): Layout route, two PDF floors
+## Current update (2026-10-15): 2.5D Layout and overhead cable tracing
+
+- Performance/visibility follow-up: current-floor 2.5D models remain mounted but
+  hidden in 2D after the first 2.5D visit. Static model geometry is memoized
+  separately from selection overlays; equipment, cable and background components
+  use stable callbacks/memoization. Cable paths, fit frames, lookup indexes and
+  diagnostic summaries are cached. `useFrameState.ts` coalesces camera updates
+  per animation frame, flushes final drags and cancels pending motion on explicit
+  camera commands/unmount. Geometry/appearance and test evidence are unchanged.
+- Added explicit Hide all cables / Show all cables controls. Hiding removes line
+  marks and hit targets, clears cable focus and stays in effect through Global
+  view, searches/connection inspection and floor/view changes. Only Show all
+  cables restores lines; the choice lasts for the page visit.
+- Follow-up checks: 54 targeted tests passed across the Layout page (27), model
+  rendering (6), frame scheduler (4) and existing geometry/selection tests (17).
+  One thread-worker startup timed out before Page tests began; the isolated
+  rerun passed all 27 Page tests. Real-data smoke verified retained model identity,
+  20 wheel events -> 1 camera mutation, final drag position and cable visibility
+  across global/search/inspection/floor/view/show actions, without page errors.
+  Runtime scripts: `layout_optimized_smoke.py`, `layout_performance_check.py`.
+  Before/after performance outputs are ignored `layout-performance-*.json` files.
+- Final compiled-preview comparison (same real floor, eight switches each way,
+  twelve hover updates, headless Chromium 1600x1100): 2.5D switch median 66.7 ->
+  52.8 ms; script CPU across sixteen switches 299.4 -> 135.1 ms; script CPU for
+  twelve hover updates 110.3 -> 13.9 ms. Two-frame timings include browser frame
+  scheduling and are local measurements, not an FPS guarantee. Retaining models
+  increases SVG DOM count (6708 -> 7746) to avoid rebuilding it on view changes.
+  Final preview build and optimized real-data smoke passed on port 5173 with
+  no page errors. Temporary port 5185 development server was stopped; existing
+  preview/automation services remain running. No ETL/Python/data changes in this
+  performance follow-up; Python suites were not rerun.
+
+- Visual revision after user feedback: replaced the oblique cuboids with a shared
+  orthographic 2:1 grid and five distinct industrial illustrations. Closed shaded
+  faces fix the missing side. TX6 includes oil tank/radiators/conservator/brown
+  bushings; Utility has instrumented bays; GEN6 has radiator/fans/exhaust; TX has
+  a vented housing; ordinary cabinets have doors/meters. Transparent models have
+  subtle shadows, restrained outlines and smaller labels.
+- Added the always-visible Global view action: clears device/cable/search/box
+  focus and restores fitted camera without altering planning or cable visibility
+  overrides. Escape does the same outside selection mode; blank map clicks and
+  Clear focus cancel focus/search while retaining the camera. Nearby cable runs
+  are low cubic arcs, long runs have rounded corners; widths are 3px / 4.5px.
+  Connection bends are included in fit/zoom bounds and equipment is depth-sorted
+  on the new grid. Room labels follow the same projection.
+- Revision QA: targeted model/geometry/Layout tests and a real-data UI smoke in
+  `runtime/automation/layout_isometric_restyle_smoke.py`; screenshots use
+  `layout-isometric-v2-{overview,models,connection}.png`. The models image is a
+  comparison of actual rendered SVG models. Runtime data was refreshed by the
+  user since the earlier counts below; this revision did not rerun ETL.
+- Final revision checks: 47 frontend tests passed (Layout, model faces/features,
+  projection/curve bounds and existing selection helpers) using a single thread
+  worker; default fork startup hit an environment timeout before tests ran.
+  TypeScript/production preview build passed. No Python/data code changed in
+  this visual revision, and Python suites were not rerun for it.
+  The final smoke passed on the rebuilt 5173 preview with no page errors; the
+  temporary 5185 development server was stopped. Existing local preview stays up.
+
+- `/layout` now defaults to 2.5D with a browser-persisted 2D/2.5D switch. Original
+  planar rendering, search, camera, energisation overrides and planning remain
+  available. Both views preserve PDF footprints; heights and overhead paths are
+  illustrative. 2.5D box selection uses projected device bounds.
+- Models: TX6 = MV transformer, Utility = MV switchgear, GEN6 = generator,
+  TX = LV transformer, other equipment = cabinet. Room/POD geometry remains a
+  reference layer; lightning remains the final, pointer-free SVG layer.
+- `scripts/etl/layout_connections.py` derives feeder connections from normalized
+  equipment Type and complete endpoint IDs in FDR names. Terminations are excluded.
+  Missing, ambiguous and single-ended FD connections remain in the dataset with
+  diagnostics, without invented positions. Numeric circuit suffixes are removed
+  only when no exact asset exists and a unique asset matches.
+- `build_layout_plan.py` adds equipment_type, optional cables/cable_diagnostics
+  and MV daily source metadata. It reuses Power Plan's MV daily report parser.
+  Existing normalized equipment schemas and global initial requests are unchanged.
+- `frontend/src/utils/cableTestUtils.ts` shares MV cable readiness with Layout:
+  latest daily failure, then exact L3 updated status, then daily pass/pending,
+  partial, or unconfirmed. NETA completion/report quality remains separate.
+- Select equipment to highlight connections and see cable IDs/remote endpoints/
+  test evidence. Select a line or list item to inspect it, highlight both endpoints
+  and zoom to the connection. Cable visibility can be toggled. Cable/termination
+  Type records are never rendered as cabinet models.
+- Real Layout rebuilt from the existing Oct 15 normalized equipment, without raw
+  source edits or full ETL: 3,152 feeder records retained; 232 distinct cable IDs
+  have both endpoints on Layout. 2,920 retained diagnostics include 2,833 missing
+  Layout endpoints, 59 single-ended IDs and 28 missing source assets. First Floor
+  displays 143 connections; Second Floor displays 128, including shared fixed
+  connections. Equipment remains 173/171 placements on the respective floors.
+- Validation: 21 targeted Python tests, 52 targeted frontend tests and the final
+  production build passed. Real-data Playwright verified five model kinds, connection
+  IDs/endpoints, tracing opacity, evidence, wheel zoom, projected box selection,
+  both floors and plan switching with no page errors. No lint command was run.
+- Ignored smoke/screenshots: `runtime/automation/layout_isometric_smoke.py`,
+  `layout-2p5d-overview.png`, `layout-2p5d-connection.png` and
+  `layout-2p5d-second-floor.png`, plus `layout-2p5d-tested-cable.png` showing a green
+  tested connection. Final real-data smoke also passed against the rebuilt 5173
+  preview. The temporary 5185 development server was stopped. Use
+  `IAD6_PREVIEW_BUILD=1` when building for this
+  preview to avoid copying large live public datasets/reports.
+
+## Previous status (2026-10-15): Layout route, two PDF floors
 
 Implemented `/layout`, with a Layout sidebar entry and lazy-loaded route. It
 renders equipment rectangle annotations from

@@ -1,12 +1,21 @@
-import { Maximize, MousePointer2, RotateCcw, Search, X, Zap, ZoomIn, ZoomOut } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { Box, Cable, Eye, EyeOff, Maximize, MousePointer2, RotateCcw, Search, X, Zap, ZoomIn, ZoomOut } from "lucide-react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 
 import { EmptyState } from "../components/common/EmptyState";
 import { ErrorState } from "../components/common/ErrorState";
 import { LoadingState } from "../components/common/LoadingState";
 import { Button } from "../components/ui/button";
-import type { LayoutEquipmentRecord, LayoutPlanManifest, PowerPlanRect } from "../types/data";
+import { IsometricEquipment } from "../components/layout/IsometricEquipment";
+import { LayoutCable } from "../components/layout/LayoutCable";
+import { LayoutBackground } from "../components/layout/LayoutBackground";
+import { useFrameState } from "../hooks/useFrameState";
+import type { LayoutCableRecord, LayoutEquipmentRecord, LayoutPlanManifest, PowerPlanRect } from "../types/data";
 import { fetchJson } from "../utils/dataLoaders";
+import { CABLE_TEST_STATES, cableTestState } from "../utils/cableTestUtils";
+import {
+  DEVICE_KIND_LABELS, LAYOUT_VIEW_KEY, isNearbyCable, layoutCablePath, layoutConnectionBounds, layoutDeviceHeight, layoutDeviceKind,
+  placedLayoutCables, projectLayoutPoint, projectedLayoutBounds,
+} from "../utils/layoutIsometricUtils";
 import {
   equipmentInLayoutSelection, insetEquipmentRect, layoutBounds, layoutCanvasPoint, layoutEquipmentStatus, layoutRoomLabels,
   layoutSelectionRect, planLayoutSelection,
@@ -14,15 +23,17 @@ import {
   visibleLayoutEquipment, visibleLayoutRegions, zoomLayoutViewport, type LayoutStatus,
 } from "../utils/layoutPlanUtils";
 
-function EquipmentRectangle({ record, status, selected, dimmed, tooltipVisible, onSelect, onInspect, onLeave }: {
+const EquipmentRectangle = memo(function EquipmentRectangle({ record, status, selected, dimmed, tooltipVisible, isometric, hasIsometric, onSelect, onInspect, onLeave }: {
   record: LayoutEquipmentRecord;
   status: LayoutStatus;
   selected: boolean;
   dimmed: boolean;
   tooltipVisible: boolean;
-  onSelect: () => void;
-  onInspect: (element: SVGGElement) => void;
-  onLeave: () => void;
+  isometric: boolean;
+  hasIsometric: boolean;
+  onSelect: (record: LayoutEquipmentRecord) => void;
+  onInspect: (record: LayoutEquipmentRecord, element: SVGGElement) => void;
+  onLeave: (annotationId: string) => void;
 }) {
   const { x, y, width, height } = insetEquipmentRect(record.rect);
   const colors = LAYOUT_STATUS_COLORS[status];
@@ -33,31 +44,35 @@ function EquipmentRectangle({ record, status, selected, dimmed, tooltipVisible, 
     <g role="button" tabIndex={0} aria-label={`${record.label}: ${LAYOUT_STATUS_LABELS[status]}`}
       aria-pressed={selected} data-annotation-id={record.annotation_id} data-equipment-key={record.equipment_key} data-fixed={record.fixed}
       aria-describedby={tooltipVisible ? "layout-equipment-tooltip" : undefined}
-      onPointerEnter={(event) => onInspect(event.currentTarget)} onPointerLeave={onLeave}
-      onFocus={(event) => onInspect(event.currentTarget)} onBlur={onLeave}
-      onClick={onSelect} onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onSelect(); }
+      onPointerEnter={(event) => onInspect(record, event.currentTarget)} onPointerLeave={() => onLeave(record.annotation_id)}
+      onFocus={(event) => onInspect(record, event.currentTarget)} onBlur={() => onLeave(record.annotation_id)}
+      onClick={() => onSelect(record)} onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onSelect(record); }
       }} className="cursor-pointer outline-none focus:drop-shadow-md" opacity={dimmed ? 0.2 : 1}>
       <title>{`${record.label} · ${LAYOUT_STATUS_LABELS[status]}${record.fixed ? " · Fixed across floors" : ""}`}</title>
-      <rect x={x} y={y} width={width} height={height} rx={Math.min(2, width / 4, height / 4)}
+      {hasIsometric ? <g data-equipment-view="isometric" style={isometric ? undefined : { display: "none" }}>
+        <IsometricEquipment record={record} status={status} selected={selected} />
+      </g> : null}
+      <g data-equipment-view="plan" style={isometric ? { display: "none" } : undefined}><rect x={x} y={y} width={width} height={height} rx={Math.min(2, width / 4, height / 4)}
         fill={colors.fill} stroke={selected ? "#2563eb" : colors.stroke} strokeWidth={selected || status === "energized" ? 0.65 : 0.35} />
       {lines.map((line, index) => <text key={index} x={x + width / 2}
         y={y + height / 2 + (index - (lines.length - 1) / 2) * fontSize * 1.15}
-        textAnchor="middle" dominantBaseline="middle" fontSize={fontSize} fill="#0f172a" pointerEvents="none">{line}</text>)}
+        textAnchor="middle" dominantBaseline="middle" fontSize={fontSize} fill="#0f172a" pointerEvents="none">{line}</text>)}</g>
     </g>
   );
-}
+});
 
-function EquipmentLightning({ record, status, dimmed }: { record: LayoutEquipmentRecord; status: LayoutStatus; dimmed: boolean }) {
+const EquipmentLightning = memo(function EquipmentLightning({ record, status, dimmed, isometric }: { record: LayoutEquipmentRecord; status: LayoutStatus; dimmed: boolean; isometric: boolean }) {
   if (status !== "energizeToday" && status !== "energized") return null;
   const { x, y, width } = insetEquipmentRect(record.rect);
   const size = Math.min(6, Math.max(3, width * 0.6));
   const color = LAYOUT_STATUS_COLORS[status].stroke;
-  return <g transform={`translate(${x + width / 2 - size / 2}, ${y - size - 1})`} data-lightning-key={record.equipment_key} opacity={dimmed ? 0.2 : 1}>
+  const anchor = isometric ? projectLayoutPoint(x + width / 2, y, layoutDeviceHeight(record)) : { x: x + width / 2, y };
+  return <g transform={`translate(${anchor.x - size / 2}, ${anchor.y - size - 1})`} data-lightning-key={record.equipment_key} opacity={dimmed ? 0.2 : 1}>
     <Zap x={0} y={0} width={size} height={size} fill={color} color={color}
       className="animate-energisation-breathe" role="img" aria-label={`${record.label} ${LAYOUT_STATUS_LABELS[status]} lightning`} />
   </g>;
-}
+});
 
 interface SearchSuggestion {
   record: LayoutEquipmentRecord;
@@ -71,11 +86,18 @@ interface PanState {
   viewport: PowerPlanRect;
   moved: boolean;
   annotationId: string | null;
+  cableId: string | null;
   mode: "pan" | "select";
   additive: boolean;
 }
 
 export function LayoutPlanPage() {
+  const [isometric, setIsometric] = useState(() => {
+    try { return localStorage.getItem(LAYOUT_VIEW_KEY) !== "plan"; } catch { return true; }
+  });
+  const [hasIsometric, setHasIsometric] = useState(isometric);
+  const [selectedCableId, setSelectedCableId] = useState<string | null>(null);
+  const [showCables, setShowCables] = useState(true);
   const [manifest, setManifest] = useState<LayoutPlanManifest | null>(null);
   const [loading, setLoading] = useState(true);
   const [retry, setRetry] = useState(0);
@@ -86,7 +108,7 @@ export function LayoutPlanPage() {
   const [search, setSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [activeSearchIndex, setActiveSearchIndex] = useState(0);
-  const [viewport, setViewport] = useState<PowerPlanRect | null>(null);
+  const [viewport, setViewport, queueViewport, flushViewport] = useFrameState<PowerPlanRect | null>(null);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectionKeys, setSelectionKeys] = useState<Set<string>>(new Set());
   const [selectionBox, setSelectionBox] = useState<PowerPlanRect | null>(null);
@@ -110,24 +132,58 @@ export function LayoutPlanPage() {
   }, [retry]);
 
   const rows = useMemo(() => manifest ? visibleLayoutEquipment(manifest, floorId) : [], [manifest, floorId]);
+  const connections = useMemo(() => placedLayoutCables(manifest?.cables ?? [], rows), [manifest, rows]);
+  const cableGeometry = useMemo(() => connections.map((connection, index) => ({ connection,
+    path: layoutCablePath(connection, index), route: isNearbyCable(connection) ? "arc" as const : "rounded" as const,
+  })), [connections]);
+  const connectionIds = useMemo(() => new Set(connections.map((item) => item.cable.cable_id)), [connections]);
+  const cableIndex = useMemo(() => {
+    const byId = new Map<string, LayoutCableRecord>(), byEquipment = new Map<string, LayoutCableRecord[]>();
+    for (const cable of manifest?.cables ?? []) {
+      byId.set(cable.cable_id, cable);
+      for (const key of new Set([cable.source_equipment_key, cable.target_equipment_key])) {
+        if (key) { const items = byEquipment.get(key) ?? []; items.push(cable); byEquipment.set(key, items); }
+      }
+    }
+    return { byId, byEquipment };
+  }, [manifest]);
+  const selectedCable = selectedCableId ? cableIndex.byId.get(selectedCableId) : undefined;
+  const sortedRows = useMemo(() => [...rows].sort((a, b) =>
+    a.rect.x + a.rect.y + a.rect.width + a.rect.height - b.rect.x - b.rect.y - b.rect.width - b.rect.height), [rows]);
+  const selectionRows = useMemo(() => isometric ? rows.map((row) => ({ ...row,
+    rect: projectedLayoutBounds(insetEquipmentRect(row.rect), layoutDeviceHeight(row)),
+  })) : rows, [rows, isometric]);
   const regions = useMemo(() => manifest ? visibleLayoutRegions(manifest, floorId) : [], [manifest, floorId]);
   const roomLabels = useMemo(() => layoutRoomLabels(regions), [regions]);
   // One coordinate frame for every floor keeps fixed devices in the same screen positions.
-  const fullBounds = useMemo(() => {
-    if (!manifest) return layoutBounds([]);
+  const allBounds = useMemo(() => {
+    if (!manifest) return { plan: layoutBounds([]), isometric: layoutBounds([]) };
     const allRecords = manifest.floors.flatMap((floor) => visibleLayoutEquipment(manifest, floor.floor_id));
     const allRegions = manifest.floors.flatMap((floor) => visibleLayoutRegions(manifest, floor.floor_id));
     const labels = layoutRoomLabels(allRegions);
-    return layoutBounds([...allRecords, ...allRegions, ...labels]);
+    const records = [...allRecords, ...allRegions, ...labels];
+    const cableBounds = manifest.floors.flatMap((floor) => placedLayoutCables(manifest.cables ?? [], visibleLayoutEquipment(manifest, floor.floor_id)))
+      .map((connection) => ({ rect: layoutConnectionBounds(connection) }));
+    return { plan: layoutBounds(records), isometric: layoutBounds([...records.map((record) => ({ rect: projectedLayoutBounds(record.rect, 32) })), ...cableBounds]) };
   }, [manifest]);
+  const fullBounds = isometric ? allBounds.isometric : allBounds.plan;
   const bounds = viewport ?? fullBounds;
   const zoom = fullBounds.width / bounds.width;
   const selected = rows.find((row) => row.annotation_id === selectedId);
+  const selectedConnections = useMemo(() => selected ? cableIndex.byEquipment.get(selected.equipment_key) ?? [] : [], [selected, cableIndex]);
+  const connectedKeys = useMemo(() => new Set(selectedConnections.flatMap((cable) => [cable.source_equipment_key, cable.target_equipment_key])), [selectedConnections]);
+  const cableEndpointKeys = selectedCable ? [selectedCable.source_equipment_key, selectedCable.target_equipment_key] : [];
+  const rowIsDimmed = (row: LayoutEquipmentRecord) => isometric && selectedCable ? !cableEndpointKeys.includes(row.equipment_key)
+    : isometric && selected ? !connectedKeys.has(row.equipment_key) && row.equipment_key !== selected.equipment_key
+    : !!query && !row.equipment_key.includes(query);
   const inspected = rows.find((row) => row.annotation_id === inspection?.annotationId);
   const query = search.trim().toUpperCase().replace(/^IAD06-/, "");
   const statusOf = (row: LayoutEquipmentRecord) => layoutEquipmentStatus(row, overrides);
-  const selectedRows = [...new Map(rows.filter((row) => selectionKeys.has(row.equipment_key)).map((row) => [row.equipment_key, row])).values()];
+  const selectedRows = useMemo(() => [...new Map(rows.filter((row) => selectionKeys.has(row.equipment_key)).map((row) => [row.equipment_key, row])).values()], [rows, selectionKeys]);
   const eligibleRows = selectedRows.filter((row) => statusOf(row) !== "energized" && statusOf(row) !== "energizeToday");
+  const cableDiagnosticCounts = useMemo(() => (manifest?.cable_diagnostics ?? []).reduce<Record<string, number>>((counts, item) => {
+    counts[item.reason] = (counts[item.reason] ?? 0) + 1; return counts;
+  }, {}), [manifest]);
 
   const suggestions = useMemo(() => {
     if (!manifest || !query) return [];
@@ -154,7 +210,7 @@ export function LayoutPlanPage() {
       if (!event.deltaY || panRef.current) return;
       setInspection(null);
       const canvas = svg!.getBoundingClientRect();
-      setViewport((current) => {
+      queueViewport((current) => {
         const view = current ?? fullBounds;
         return zoomLayoutViewport(view, fullBounds, event.deltaY < 0 ? 0.86 : 1.16,
           layoutCanvasPoint(view, canvas, event.clientX, event.clientY));
@@ -162,7 +218,7 @@ export function LayoutPlanPage() {
     }
     svg.addEventListener("wheel", handleWheel, { passive: false });
     return () => svg.removeEventListener("wheel", handleWheel);
-  }, [fullBounds, loading]);
+  }, [fullBounds, loading, queueViewport]);
 
   function saveOverrides(next: Record<string, LayoutStatus>) {
     setOverrides(next);
@@ -176,7 +232,8 @@ export function LayoutPlanPage() {
   function focusDevice(record: LayoutEquipmentRecord) {
     setInspection(null);
     setSelectedId(record.annotation_id);
-    setViewport(layoutBounds([record]));
+    setSelectedCableId(null);
+    setViewport(layoutBounds([{ rect: isometric ? projectedLayoutBounds(record.rect, layoutDeviceHeight(record) + 25) : record.rect }]));
     setSelectionKeys(new Set());
     setSelectionMode(false);
   }
@@ -198,6 +255,7 @@ export function LayoutPlanPage() {
     panRef.current = {
       pointerId: event.pointerId, x: event.clientX, y: event.clientY, viewport: bounds, moved: false,
       annotationId: (event.target as Element).closest("[data-annotation-id][role=button]")?.getAttribute("data-annotation-id") ?? null,
+      cableId: (event.target as Element).closest("[data-cable-id][role=button]")?.getAttribute("data-cable-id") ?? null,
       mode: selectionMode ? "select" : "pan", additive: event.shiftKey,
     };
   }
@@ -216,12 +274,13 @@ export function LayoutPlanPage() {
       return;
     }
     const scale = Math.max(Number.EPSILON, Math.min(canvas.width / pan.viewport.width, canvas.height / pan.viewport.height));
-    setViewport({ ...pan.viewport, x: pan.viewport.x - (event.clientX - pan.x) / scale, y: pan.viewport.y - (event.clientY - pan.y) / scale });
+    queueViewport({ ...pan.viewport, x: pan.viewport.x - (event.clientX - pan.x) / scale, y: pan.viewport.y - (event.clientY - pan.y) / scale });
   }
 
   function endPan(event: ReactPointerEvent<SVGSVGElement>, cancelled = false) {
     const pan = panRef.current;
     if (!pan || pan.pointerId !== event.pointerId) return;
+    flushViewport();
     if (event.currentTarget.hasPointerCapture?.(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
     panRef.current = null;
     suppressClickRef.current = pan.moved || cancelled || pan.mode === "select";
@@ -230,25 +289,38 @@ export function LayoutPlanPage() {
     if (pan.mode === "select") {
       const canvas = event.currentTarget.getBoundingClientRect();
       if (pan.moved) {
-        const found = equipmentInLayoutSelection(rows, layoutSelectionRect(
+        const found = equipmentInLayoutSelection(selectionRows, layoutSelectionRect(
           layoutCanvasPoint(pan.viewport, canvas, pan.x, pan.y),
           layoutCanvasPoint(pan.viewport, canvas, event.clientX, event.clientY),
-        ));
+        ), !isometric);
         setSelectionKeys((current) => pan.additive ? new Set([...current, ...found]) : found);
       } else if (pan.annotationId) {
         const record = rows.find((row) => row.annotation_id === pan.annotationId);
         if (record) toggleEquipmentSelection(record.equipment_key);
       } else if (!pan.additive) setSelectionKeys(new Set());
-    } else if (!pan.moved && pan.annotationId) setSelectedId(pan.annotationId);
+    } else if (!pan.moved) {
+      if (pan.annotationId) { setSelectedId(pan.annotationId); setSelectedCableId(null); }
+      else if (pan.cableId) { setSelectedCableId(pan.cableId); setSelectedId(null); }
+      else if (isometric) clearFocus();
+    }
   }
 
-  function toggleEquipmentSelection(key: string) {
+  const toggleEquipmentSelection = useCallback((key: string) => {
     setSelectionKeys((current) => {
       const next = new Set(current);
       if (next.has(key)) next.delete(key); else next.add(key);
       return next;
     });
-  }
+  }, []);
+
+  const selectDevice = useCallback((record: LayoutEquipmentRecord) => {
+    if (selectionMode) toggleEquipmentSelection(record.equipment_key);
+    else { setSelectedId(record.annotation_id); setSelectedCableId(null); }
+  }, [selectionMode, toggleEquipmentSelection]);
+  const selectCable = useCallback((cableId: string) => { setSelectedCableId(cableId); setSelectedId(null); }, []);
+  const leaveDevice = useCallback((annotationId: string) => {
+    setInspection((current) => current?.annotationId === annotationId ? null : current);
+  }, []);
 
   function cancelSelectionGesture() {
     const pan = panRef.current;
@@ -260,7 +332,7 @@ export function LayoutPlanPage() {
     } else setSelectionKeys(new Set());
   }
 
-  function inspectDevice(record: LayoutEquipmentRecord, element: SVGGElement) {
+  const inspectDevice = useCallback((record: LayoutEquipmentRecord, element: SVGGElement) => {
     const map = mapRef.current?.getBoundingClientRect();
     if (!map || panRef.current) return;
     const device = element.getBoundingClientRect();
@@ -268,6 +340,30 @@ export function LayoutPlanPage() {
     const preferredTop = device.top - map.top - 124;
     const top = Math.max(12, Math.min(preferredTop >= 12 ? preferredTop : device.bottom - map.top + 12, map.height - 152));
     setInspection({ annotationId: record.annotation_id, left, top });
+  }, []);
+
+  function switchView(next: boolean) {
+    if (next) setHasIsometric(true);
+    setIsometric(next); setViewport(null); setInspection(null); setSelectionKeys(new Set()); setSelectionBox(null);
+    panRef.current = null;
+    try { localStorage.setItem(LAYOUT_VIEW_KEY, next ? "isometric" : "plan"); } catch { /* View works without persistence. */ }
+  }
+
+  function clearFocus() {
+    setSelectedId(null); setSelectedCableId(null); setInspection(null); setSearch(""); setSearchOpen(false);
+    setSelectionKeys(new Set());
+  }
+
+  function restoreGlobalView() {
+    clearFocus(); setViewport(null); setSelectionMode(false); setSelectionBox(null);
+    panRef.current = null;
+  }
+
+  function focusCable(cableId: string) {
+    setSelectedCableId(cableId); setInspection(null); setSelectionMode(false); setSelectionKeys(new Set()); setSearch(""); setSearchOpen(false);
+    const connection = connections.find((item) => item.cable.cable_id === cableId);
+    if (connection) setViewport(isometric ? layoutBounds([{ rect: layoutConnectionBounds(connection) }])
+      : layoutBounds([connection.source, connection.target]));
   }
 
   if (loading) return <LoadingState />;
@@ -283,9 +379,13 @@ export function LayoutPlanPage() {
       </Button>
     </div>
     <div className="relative z-20 flex flex-wrap items-end gap-3 rounded-lg border bg-card p-4">
+      <div className="flex gap-1 self-end rounded-md border p-1" role="group" aria-label="Layout view">
+        <Button variant={!isometric ? "secondary" : "ghost"} aria-pressed={!isometric} onClick={() => switchView(false)}>2D plan</Button>
+        <Button variant={isometric ? "secondary" : "ghost"} aria-pressed={isometric} onClick={() => switchView(true)}><Box className="mr-2 h-4 w-4" />2.5D</Button>
+      </div>
       <label className="space-y-1 text-sm font-medium">Floor
         <select aria-label="Floor" value={floorId} onChange={(event) => {
-          setFloorId(event.target.value); setSelectedId(null); setSearchOpen(false); setInspection(null); setSelectionKeys(new Set());
+          setFloorId(event.target.value); setSelectedId(null); setSelectedCableId(null); setSearchOpen(false); setInspection(null); setSelectionKeys(new Set());
         }} className="block h-9 rounded-md border bg-background px-3">
           {manifest.floors.map((floor) => <option key={floor.floor_id} value={floor.floor_id}>{floor.label}</option>)}
         </select>
@@ -323,11 +423,26 @@ export function LayoutPlanPage() {
       <Button variant="outline" aria-label="Zoom out" onClick={() => { setInspection(null); setViewport(zoomLayoutViewport(bounds, fullBounds, 1.2)); }}><ZoomOut className="h-4 w-4" /></Button>
       <span className="pb-2 text-sm tabular-nums">{Math.round(zoom * 100)}%</span>
       <Button variant="outline" aria-label="Zoom in" onClick={() => { setInspection(null); setViewport(zoomLayoutViewport(bounds, fullBounds, 0.82)); }}><ZoomIn className="h-4 w-4" /></Button>
-      <Button variant="outline" onClick={() => { setInspection(null); setViewport(null); }}><Maximize className="mr-2 h-4 w-4" />Fit layout</Button>
+      <Button variant="outline" onClick={restoreGlobalView}><Maximize className="mr-2 h-4 w-4" />{isometric ? "Global view" : "Fit layout"}</Button>
     </div>
+    {isometric ? <div className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-lg border bg-card px-4 py-3 text-xs">
+      <span className="inline-flex items-center font-medium"><Cable className="mr-2 h-4 w-4" />Overhead cables ({connections.length})</span>
+      <Button variant="outline" aria-pressed={!showCables} aria-controls="layout-cables" onClick={() => {
+        setShowCables((value) => !value); setSelectedCableId(null);
+      }}>
+        {showCables ? <EyeOff className="mr-2 h-4 w-4" /> : <Eye className="mr-2 h-4 w-4" />}
+        {showCables ? "Hide all cables" : "Show all cables"}
+      </Button>
+      {Object.entries(CABLE_TEST_STATES).map(([key, state]) => <span key={key} className="inline-flex items-center gap-2">
+        <svg width="22" height="8" aria-hidden="true"><line x1="0" x2="22" y1="4" y2="4" stroke={state.color} strokeWidth="2" strokeDasharray={state.dash} /></svg>{state.label}
+      </span>)}
+      {selected || selectedCable ? <Button variant="ghost" onClick={clearFocus}><X className="mr-2 h-4 w-4" />Clear focus</Button> : null}
+      <span className="w-full text-muted-foreground">Illustrative equipment heights and overhead routes. Select a device or cable to trace its connections. Terminations are hidden.</span>
+      {!manifest.cables ? <span className="text-amber-700">Cable data is unavailable. Rebuild Layout data to load connections.</span> : null}
+    </div> : null}
     <div className="flex flex-wrap items-center gap-3">
       <Button variant={selectionMode ? "default" : "outline"} aria-pressed={selectionMode} onClick={() => {
-        setSelectionMode((current) => !current); setSelectionKeys(new Set()); setSelectedId(null); setInspection(null);
+        setSelectionMode((current) => !current); setSelectionKeys(new Set()); setSelectedId(null); setSelectedCableId(null); setInspection(null);
       }}><MousePointer2 className="mr-2 h-4 w-4" />Box select</Button>
       {selectionMode ? <>
         <span role="status" className="text-sm text-muted-foreground">{selectedRows.length} selected · {eligibleRows.length} eligible</span>
@@ -346,7 +461,9 @@ export function LayoutPlanPage() {
       </span>)}
       <span className="text-muted-foreground">PODs and rooms are reference areas</span>
     </div>
-    <p className="text-xs text-muted-foreground">Hover or focus equipment to read its full ID. Drag to pan; scroll to zoom. Confirm a search suggestion to zoom to the device. Energized equipment cannot be planned again. Reset restores Excel values for all floors.</p>
+    <p className="text-xs text-muted-foreground">{isometric
+      ? "Click equipment or a cable to trace it. Click empty space to clear focus. Global view or Esc restores the full layout. Drag to pan; scroll to zoom."
+      : "Hover or focus equipment to read its full ID. Drag to pan; scroll to zoom. Confirm a search suggestion to zoom to the device. Energized equipment cannot be planned again. Reset restores Excel values for all floors."}</p>
     {storageError ? <p role="alert" className="text-sm text-amber-700">Browser storage is unavailable. Changes apply for this visit only.</p> : null}
     <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
       <div ref={mapRef} className="relative h-[68vh] min-h-[400px] overflow-hidden rounded-lg border bg-white" aria-label="Layout map">
@@ -355,41 +472,36 @@ export function LayoutPlanPage() {
           className={`h-full w-full select-none ${selectionMode ? "cursor-crosshair" : "cursor-grab active:cursor-grabbing"}`} style={{ touchAction: "none" }}
           onPointerDown={handlePointerDown} onPointerMove={handlePointerMove}
           onPointerUp={(event) => endPan(event)} onPointerCancel={(event) => endPan(event, true)}
-          onKeyDown={(event) => { if (event.key === "Escape") { setInspection(null); cancelSelectionGesture(); } }}
+          onKeyDown={(event) => { if (event.key === "Escape") {
+            if (isometric && !selectionMode) restoreGlobalView(); else { setInspection(null); cancelSelectionGesture(); }
+          } }}
           onClickCapture={(event) => { if (suppressClickRef.current && event.detail !== 0) { event.preventDefault(); event.stopPropagation(); } }}>
-          <g pointerEvents="none" data-layout-layer="regions">
-            {regions.map((region) => <g key={region.annotation_id} data-layout-region={region.kind} data-fixed={region.fixed}>
-              <title>{region.label}</title>
-              <rect {...region.rect} rx={region.kind === "pod" ? 1.5 : 2}
-                fill={region.kind === "pod" ? "#eff6ff" : "#f8fafc"}
-                stroke={region.kind === "pod" ? "#60a5fa" : "#94a3b8"} strokeWidth={0.45}
-                strokeDasharray={region.kind === "pod" ? "2 1.5" : undefined} />
-              {region.kind === "pod" ? <text x={region.rect.x + region.rect.width / 2} y={region.rect.y + region.rect.height / 2}
-                textAnchor="middle" dominantBaseline="middle" fontSize={Math.min(5, region.rect.width / 3)} fill="#2563eb">{region.label}</text> : null}
-            </g>)}
-          </g>
-          <g pointerEvents="none" data-layout-layer="room-labels">
-            {roomLabels.map(({ region, rect, fontSize }) => <g key={region.annotation_id} data-room-label={region.label}>
-              <rect {...rect} fill="white" rx={1.5} />
-              <text x={rect.x + rect.width / 2} y={rect.y + rect.height / 2} textAnchor="middle" dominantBaseline="middle" fontSize={fontSize}
-                fontWeight={600} fill="#334155">{region.label}</text>
-            </g>)}
-          </g>
+          <LayoutBackground regions={regions} roomLabels={roomLabels} isometric={isometric} />
           <g data-layout-layer="equipment">
-            {rows.map((row) => <EquipmentRectangle key={row.annotation_id} record={row} status={statusOf(row)}
-              selected={selectionMode ? selectionKeys.has(row.equipment_key) : selectedId === row.annotation_id}
-              dimmed={!!query && !row.equipment_key.includes(query)}
-              tooltipVisible={inspection?.annotationId === row.annotation_id} onInspect={(element) => inspectDevice(row, element)}
-              onLeave={() => setInspection((current) => current?.annotationId === row.annotation_id ? null : current)}
-              onSelect={() => selectionMode ? toggleEquipmentSelection(row.equipment_key) : setSelectedId(row.annotation_id)} />)}
+            {(isometric ? sortedRows : rows).map((row) => <EquipmentRectangle key={row.annotation_id} record={row} status={statusOf(row)} isometric={isometric} hasIsometric={hasIsometric}
+              selected={selectionMode ? selectionKeys.has(row.equipment_key) : selectedId === row.annotation_id || (isometric && cableEndpointKeys.includes(row.equipment_key))}
+              dimmed={rowIsDimmed(row)}
+              tooltipVisible={inspection?.annotationId === row.annotation_id} onInspect={inspectDevice}
+              onLeave={leaveDevice} onSelect={selectDevice} />)}
           </g>
+          {isometric && showCables ? <g id="layout-cables" data-layout-layer="cables">
+            {cableGeometry.map(({ connection, path, route }) => {
+              const cable = connection.cable;
+              const active = selectedCableId ? selectedCableId === cable.cable_id : !!selected &&
+                [cable.source_equipment_key, cable.target_equipment_key].includes(selected.equipment_key);
+              const dimmed = (!!selectedCableId || !!selected) && !active || !!query && !active &&
+                ![cable.cable_id, cable.source_equipment_key ?? "", cable.target_equipment_key ?? ""].some((key) => key.toUpperCase().includes(query));
+              return <LayoutCable key={cable.cable_id} cable={cable} path={path} route={route} selected={selectedCableId === cable.cable_id}
+                active={active} dimmed={dimmed} selectionMode={selectionMode} onSelect={selectCable} />;
+            })}
+          </g> : null}
           <g pointerEvents="none" data-layout-layer="selection">
             {selectionBox ? <rect {...selectionBox} fill="#2563eb" fillOpacity={0.12} stroke="#2563eb"
               strokeWidth={1.5} strokeDasharray="5 3" vectorEffect="non-scaling-stroke" /> : null}
           </g>
           <g pointerEvents="none" data-layout-layer="lightning">
             {rows.map((row) => <EquipmentLightning key={row.annotation_id} record={row} status={statusOf(row)}
-              dimmed={!!query && !row.equipment_key.includes(query)} />)}
+              isometric={isometric} dimmed={rowIsDimmed(row)} />)}
           </g>
         </svg>
         {inspected && inspection ? <div id="layout-equipment-tooltip" role="tooltip"
@@ -401,9 +513,27 @@ export function LayoutPlanPage() {
         </div> : null}
       </div>
       <aside className="space-y-4 rounded-lg border bg-card p-4">
+        {isometric && selectedCable ? <div className="space-y-3 border-b pb-4" aria-label="Cable details">
+          <div className="flex items-start justify-between gap-2"><h3 className="text-sm font-semibold">Cable connection</h3>
+            <Button variant="ghost" aria-label="Close cable details" onClick={() => setSelectedCableId(null)}><X className="h-4 w-4" /></Button></div>
+          <p className="break-all text-sm font-medium">{selectedCable.cable_id}</p>
+          <div className="space-y-1 rounded-md bg-muted p-3 text-sm">
+            <p className="break-all">From: {selectedCable.source_equipment_key ?? "Unresolved"}</p>
+            <p className="break-all">To: {selectedCable.target_equipment_key ?? "Unresolved"}</p>
+          </div>
+          <p className="text-sm font-medium" style={{ color: CABLE_TEST_STATES[cableTestState(selectedCable)].color }}>{CABLE_TEST_STATES[cableTestState(selectedCable)].label}</p>
+          <p className="text-xs">Type: {selectedCable.equipment_type}</p>
+          <p className="text-xs">Infralink: {selectedCable.system_element_status ?? "Unknown"}</p>
+          <p className="text-xs">MV daily: {selectedCable.mv_daily_test_status?.replace(/_/g, " ") ?? "No test evidence"}{selectedCable.mv_daily_test_date ? ` · ${selectedCable.mv_daily_test_date}` : ""}</p>
+          <p className="text-xs">NETA: {selectedCable.neta_complete ? "Complete" : "Not confirmed"}</p>
+          {selectedCable.neta_complete && !selectedCable.neta_test_report ? <p className="text-xs text-red-700">Data quality: NETA complete but report is missing.</p> : null}
+          {!connectionIds.has(selectedCable.cable_id) ? <p className="text-xs text-amber-700">Connection is not drawn: {selectedCable.connection_status === "resolved" ? "endpoint is on another floor or has multiple placements" : selectedCable.connection_status.replace(/_/g, " ")}.</p> : null}
+          <Button variant="outline" disabled={!connectionIds.has(selectedCable.cable_id)} onClick={() => focusCable(selectedCable.cable_id)}>Zoom to connection</Button>
+        </div> : null}
         {selected ? <div className="space-y-3">
           <h3 className="break-all font-semibold">{selected.matched_equipment_id ?? selected.label}</h3>
           <p className="text-xs text-muted-foreground">{selected.fixed ? "Fixed across all floors" : "Floor equipment"} · {selected.match_status}</p>
+          {isometric ? <p className="text-xs text-muted-foreground">{DEVICE_KIND_LABELS[layoutDeviceKind(selected)]}</p> : null}
           <p className="text-sm">Excel energized date: {selected.energized_completed_at ?? "No completed date"}</p>
           <p className="text-sm">System status: {selected.system_element_status ?? "Unknown"}</p>
           <p className="text-sm font-medium">{LAYOUT_STATUS_LABELS[statusOf(selected)]}</p>
@@ -423,6 +553,28 @@ export function LayoutPlanPage() {
               const next = { ...overrides }; delete next[selected.equipment_key]; saveOverrides(next);
             }}>Reset device</Button></div>
         </div> : <p className="text-sm text-muted-foreground">Select equipment or confirm a search suggestion to view its details.</p>}
+        {isometric && selected ? <section className="space-y-2 border-t pt-3" aria-label="Connected cables">
+          <h3 className="text-sm font-semibold">Connected cables ({selectedConnections.length})</h3>
+          <div className="max-h-80 space-y-2 overflow-auto">
+            {selectedConnections.map((cable) => {
+              const state = CABLE_TEST_STATES[cableTestState(cable)];
+              const other = cable.source_equipment_key === selected.equipment_key ? cable.target_equipment_key : cable.source_equipment_key;
+              return <button key={cable.cable_id} type="button" onClick={() => focusCable(cable.cable_id)}
+                aria-pressed={selectedCableId === cable.cable_id} className={`w-full space-y-1 rounded-md border p-2 text-left hover:bg-accent ${selectedCableId === cable.cable_id ? "border-blue-500 bg-blue-50" : ""}`}>
+                <span className="block break-all text-sm font-medium">↔ {other ?? "Unresolved endpoint"}</span>
+                <span className="block break-all text-xs text-muted-foreground">{cable.cable_id}</span>
+                <span className="block text-xs" style={{ color: state.color }}>{state.label}</span>
+                {!connectionIds.has(cable.cable_id) ? <span className="block text-xs text-muted-foreground">Outside this view / unresolved placement</span> : null}
+              </button>;
+            })}
+          </div>
+          {!selectedConnections.length ? <p className="text-xs text-muted-foreground">No feeder cable references this equipment ID.</p> : null}
+        </section> : null}
+        {isometric && !!manifest.cable_diagnostics?.length ? <details className="text-xs text-muted-foreground">
+          <summary className="cursor-pointer">Cable placement diagnostics ({manifest.cable_diagnostics.length})</summary>
+          <ul className="mt-2 space-y-1">{Object.entries(cableDiagnosticCounts).map(([reason, count]) => <li key={reason}>{reason.replace(/_/g, " ")}: {count}</li>)}</ul>
+          <p className="mt-2">All cable IDs and unresolved endpoints are retained in the Layout dataset.</p>
+        </details> : null}
         {manifest.diagnostics.length ? <details className="text-xs text-muted-foreground"><summary className="cursor-pointer">Source diagnostics ({manifest.diagnostics.length})</summary>
           <ul className="mt-2 max-h-60 space-y-1 overflow-auto">{manifest.diagnostics.map((item, index) => <li key={index}>{item.floor_id} · {item.label ?? "PDF"} · {item.reason}</li>)}</ul>
         </details> : null}

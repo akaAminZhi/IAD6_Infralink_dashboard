@@ -79,6 +79,32 @@ def test_applies_pdf_rotation_to_control_and_equipment_coordinates(tmp_path):
     }
 
 
+def test_publishes_cable_endpoints_types_and_latest_daily_evidence(tmp_path):
+    config, equipment = inputs(tmp_path)
+    records = json.loads(equipment.read_text())
+    records["records"][0]["equipment_type"] = "Switchboard"
+    cable_id = "FDR-IAD06-EQ-1-IAD06-EQ-FIX"
+    records["records"].extend([
+        {"equipment_id": cable_id, "equipment_type": "Feeder Cable - LV", "status": "Installation Complete"},
+        {"equipment_id": cable_id + "-A", "equipment_type": "Termination", "parent": cable_id},
+    ])
+    equipment.write_text(json.dumps(records))
+    reports = tmp_path / "reports"
+    reports.mkdir()
+    (reports / "2026-10-14.md").write_text(f"# Tested And Passed\n- {cable_id}\n")
+    (reports / "2026-10-15.md").write_text(f"# Failed\n- {cable_id}\n")
+    payload = build_layout_plan(config, tmp_path, equipment, tmp_path / "layout.json", reports)
+    assert payload["floors"][0]["equipment"][0]["equipment_type"] == "Switchboard"
+    assert len(payload["cables"]) == 1
+    cable = payload["cables"][0]
+    assert cable["connection_status"] == "resolved"
+    assert cable["source_equipment_key"] == "EQ-1"
+    assert cable["target_equipment_key"] == "EQ-FIX"
+    assert cable["mv_daily_test_status"] == "failed"
+    assert cable["mv_daily_test_date"] == "2026-10-15"
+    assert len(payload["mv_daily_report_files"]) == 2
+
+
 def test_separate_pdf_pages_supply_distinct_floor_equipment_and_share_fixed_layer(tmp_path):
     config, equipment = inputs(tmp_path)
     with fitz.open(tmp_path / "floor.pdf") as document:

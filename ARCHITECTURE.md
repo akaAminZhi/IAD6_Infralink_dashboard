@@ -137,6 +137,36 @@ Bulk planning is idempotent and skips Energized IDs using the shared status rule
 Selection is cleared on floor changes/search confirmation/exit; overrides remain
 in the existing browser-local storage, with existing global reset behavior.
 
+Layout also offers a default 2.5D orthographic 2:1 SVG projection with illustrative device
+heights and overhead cable routing, while keeping source footprints unchanged.
+`layout_connections.py` adds optional `cables`, `cable_diagnostics`, and MV report
+source metadata to the Layout manifest. Classification uses normalized equipment
+Type; termination records are excluded. Complete FDR endpoint IDs are matched
+against unique equipment IDs; unresolved/single-ended FD records remain in the
+dataset. The frontend draws only unique endpoint placements visible on the chosen
+floor, avoiding invented cross-floor or duplicate-placement associations.
+`layoutIsometricUtils.ts` owns projection, device kinds, connection placement, and
+overhead paths. Both views share the existing camera and planning state; switching
+views resets the camera/selection geometry. `cableTestUtils.ts` supplies the same
+cable readiness rules to Layout and MV Equipment. Cable test evidence and equipment
+energisation remain independent; equipment tracking exclusions do not remove
+physical cable connections. Global dashboard initial loading is unchanged.
+Equipment illustrations use closed, independently shaded top/left/right faces
+and separate structures for the five device types. Nearby connections use low
+cubic arcs; longer paths have rounded bends. Cable path bounds are included in
+the shared fit frame and connection zoom. Global view/Escape clear focus and
+search and restore the full camera without changing energisation overrides;
+blank map clicks clear focus while retaining the current camera.
+Layout performance separates static model geometry from selection overlays and
+uses memoized equipment/cable/background components with stable event callbacks.
+Current-floor 2.5D SVG models remain mounted, hidden, after switching to 2D;
+floor changes still replace floor-local geometry. Cable paths, lookup indexes,
+diagnostic counts and both view fit frames are memoized. `useFrameState.ts`
+coalesces wheel/pan updates using requestAnimationFrame, flushes final drag
+positions and cancels queued camera movement on explicit commands or unmount.
+Hide all cables removes cable marks/hit targets without changing connection data;
+Global view, search and floor/view changes preserve the user's visibility choice.
+
 ### Pipeline
 
 `scripts/etl/run_etl.py` is the orchestrator. It runs, in order:

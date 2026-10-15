@@ -1,8 +1,10 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { LayoutEquipmentRecord, LayoutPlanManifest } from "../types/data";
+import type { LayoutCableRecord, LayoutEquipmentRecord, LayoutPlanManifest } from "../types/data";
+import { LAYOUT_VIEW_KEY } from "../utils/layoutIsometricUtils";
+import * as isometricUtils from "../utils/layoutIsometricUtils";
 import { fetchJson } from "../utils/dataLoaders";
 import { LAYOUT_OVERRIDES_KEY, readLayoutOverrides, visibleLayoutEquipment } from "../utils/layoutPlanUtils";
 import { LayoutPlanPage } from "./LayoutPlanPage";
@@ -33,8 +35,175 @@ function dataset(): LayoutPlanManifest {
 }
 beforeEach(() => {
   localStorage.clear();
+  localStorage.setItem(LAYOUT_VIEW_KEY, "plan");
   vi.clearAllMocks();
   fetchMock.mockResolvedValue(dataset());
+});
+
+describe("2.5D Layout connections", () => {
+  function cable(values: Partial<LayoutCableRecord> = {}): LayoutCableRecord {
+    return { cable_id: "FDR-IAD06-EQ-1-IAD06-EQ-FIX", equipment_type: "Feeder Cable - LV",
+      source_equipment_key: "EQ-1", target_equipment_key: "EQ-FIX", connection_status: "resolved",
+      system_element_status: "Installation Complete", neta_complete: false, neta_test_report: null,
+      mv_daily_test_status: null, mv_daily_test_date: null, ...values };
+  }
+  function isometricDataset() {
+    localStorage.removeItem(LAYOUT_VIEW_KEY);
+    const manifest = dataset();
+    manifest.cables = [cable(), cable({ cable_id: "FDR-IAD06-EQ-1-IAD06-EQ-2", target_equipment_key: "EQ-2" })];
+    fetchMock.mockResolvedValue(manifest);
+    return manifest;
+  }
+
+  it("defaults to 2.5D, only draws same-view unique endpoints, and shows cable IDs and test evidence", async () => {
+    const manifest = isometricDataset();
+    manifest.cables![0].system_element_status = "L3: Pre Func Testing & Startup";
+    manifest.floors[0].equipment.push(device("FD-TERM-A", { equipment_type: "Termination" }),
+      device("FD-CABLE", { equipment_type: "Feeder Cable - LV" }));
+    const user = userEvent.setup();
+    const { container } = render(<LayoutPlanPage />);
+    expect(await screen.findByRole("button", { name: "2.5D" })).toHaveAttribute("aria-pressed", "true");
+    expect(container.querySelectorAll("[data-device-kind]")).toHaveLength(3);
+    expect(screen.queryByRole("button", { name: /FD-TERM-A|FD-CABLE/ })).not.toBeInTheDocument();
+    expect(container.querySelectorAll("[data-cable-id]")).toHaveLength(1);
+    expect(container.querySelector('[data-cable-state="updated"]')).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /FDR-IAD06-EQ-1-IAD06-EQ-FIX:/ }));
+    expect(screen.getByLabelText("Cable details")).toHaveTextContent("From: EQ-1");
+    expect(screen.getByLabelText("Cable details")).toHaveTextContent("To: EQ-FIX");
+    expect(screen.getByLabelText("Cable details")).toHaveTextContent("Tested + Infralink Updated");
+    expect(screen.getByRole("button", { name: "EQ-FIX: Not Energized" })).toHaveAttribute("aria-pressed", "true");
+    expect(container.querySelector("[data-mv-termination]")).not.toBeInTheDocument();
+  });
+
+  it("traces a device's cables, distinguishes failed/partial/daily passed, and preserves missing-report problems", async () => {
+    const manifest = isometricDataset();
+    manifest.cables![0] = cable({ mv_daily_test_status: "failed", system_element_status: "L3: Pre Func Testing & Startup",
+      neta_complete: true });
+    manifest.cables![1].mv_daily_test_status = "partially_tested";
+    const user = userEvent.setup();
+    render(<LayoutPlanPage />);
+    await user.click(await screen.findByRole("button", { name: "EQ-1: Energized" }));
+    const list = screen.getByLabelText("Connected cables");
+    expect(list).toHaveTextContent("Connected cables (2)");
+    expect(list).toHaveTextContent("Test Failed");
+    expect(list).toHaveTextContent("Partially Tested");
+    await user.click(screen.getByRole("button", { name: /↔ EQ-FIX/ }));
+    expect(screen.getByLabelText("Cable details")).toHaveTextContent("NETA complete but report is missing");
+    await user.click(screen.getByRole("button", { name: /↔ EQ-2/ }));
+    expect(screen.getByLabelText("Cable details")).toHaveTextContent("another floor");
+    expect(screen.getByRole("button", { name: "Zoom to connection" })).toBeDisabled();
+  });
+
+  it("can hide cables, switch to the preserved plan, and clears cable selection on floor changes", async () => {
+    isometricDataset();
+    const user = userEvent.setup();
+    const { container } = render(<LayoutPlanPage />);
+    await user.click(await screen.findByRole("button", { name: /FDR-IAD06-EQ-1-IAD06-EQ-FIX:/ }));
+    await user.click(screen.getByRole("button", { name: "Hide all cables" }));
+    expect(container.querySelector("[data-layout-layer=cables]")).not.toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText("Floor"), "second");
+    expect(screen.queryByLabelText("Cable details")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "2D plan" }));
+    expect(container.querySelector("[data-device-kind]")).not.toBeVisible();
+    expect(localStorage.getItem(LAYOUT_VIEW_KEY)).toBe("plan");
+    expect(screen.getByRole("button", { name: "EQ-2: Not Energized" })).toBeInTheDocument();
+  });
+
+  it("keeps cable visibility off across global reset, floor/view changes and connection inspection", async () => {
+    isometricDataset();
+    const user = userEvent.setup();
+    const { container } = render(<LayoutPlanPage />);
+    await user.click(await screen.findByRole("button", { name: "Hide all cables" }));
+    expect(screen.getByRole("button", { name: "Show all cables" })).toHaveAttribute("aria-pressed", "true");
+    expect(container.querySelectorAll("[data-cable-id]")).toHaveLength(0);
+    await user.click(screen.getByRole("button", { name: "Global view" }));
+    await user.click(screen.getByRole("button", { name: "EQ-1: Energized" }));
+    await user.click(screen.getByRole("button", { name: /↔ EQ-FIX/ }));
+    expect(screen.getByLabelText("Cable details")).toBeInTheDocument();
+    expect(container.querySelectorAll("[data-cable-id]")).toHaveLength(0);
+    await user.selectOptions(screen.getByLabelText("Floor"), "second");
+    await user.click(screen.getByRole("button", { name: "2D plan" }));
+    await user.click(screen.getByRole("button", { name: "2.5D" }));
+    expect(screen.getByRole("button", { name: "Show all cables" })).toBeInTheDocument();
+    expect(container.querySelectorAll("[data-cable-id]")).toHaveLength(0);
+    await user.selectOptions(screen.getByLabelText("Floor"), "first");
+    await user.click(screen.getByRole("button", { name: "Show all cables" }));
+    expect(container.querySelectorAll("[data-cable-id]")).toHaveLength(1);
+  });
+
+  it("reuses model DOM and cable paths for hover, camera changes and repeated view switches", async () => {
+    isometricDataset();
+    const pathSpy = vi.spyOn(isometricUtils, "layoutCablePath");
+    const user = userEvent.setup();
+    const { container } = render(<LayoutPlanPage />);
+    const device = await screen.findByRole("button", { name: "EQ-FIX: Not Energized" });
+    const model = device.querySelector("[data-device-model]");
+    const pathCalls = pathSpy.mock.calls.length;
+    expect(pathCalls).toBe(1);
+    await user.hover(device);
+    expect(screen.getByRole("tooltip")).toHaveTextContent("EQ-FIX");
+    await user.click(screen.getByRole("button", { name: "Zoom in" }));
+    await user.click(screen.getByRole("button", { name: "2D plan" }));
+    expect(model).not.toBeVisible();
+    await user.click(screen.getByRole("button", { name: "2.5D" }));
+    expect(model).toBeVisible();
+    expect(container.querySelector('[data-equipment-key="EQ-FIX"] [data-device-model]')).toBe(model);
+    expect(pathSpy.mock.calls.length).toBe(pathCalls);
+    pathSpy.mockRestore();
+  });
+
+  it("does not select a cable when dragging its path to pan", async () => {
+    isometricDataset();
+    const user = userEvent.setup();
+    render(<LayoutPlanPage />);
+    const line = await screen.findByRole("button", { name: /FDR-IAD06-EQ-1-IAD06-EQ-FIX:/ });
+    const map = screen.getByRole("img", { name: "First Floor equipment layout" });
+    vi.spyOn(map, "getBoundingClientRect").mockReturnValue({ left: 0, top: 0, width: 600, height: 400 } as DOMRect);
+    const original = map.getAttribute("viewBox");
+    await user.pointer([
+      { target: line, keys: "[MouseLeft>]", coords: { clientX: 200, clientY: 150 } },
+      { target: line, coords: { clientX: 250, clientY: 180 } },
+      { target: line, keys: "[/MouseLeft]", coords: { clientX: 250, clientY: 180 } },
+    ]);
+    expect(map.getAttribute("viewBox")).not.toBe(original);
+    expect(screen.queryByLabelText("Cable details")).not.toBeInTheDocument();
+  });
+
+  it("restores the entire scene, search and camera with Global view without changing planned statuses", async () => {
+    isometricDataset();
+    localStorage.setItem(LAYOUT_OVERRIDES_KEY, JSON.stringify({ "EQ-FIX": "energizeToday" }));
+    const user = userEvent.setup();
+    const { container } = render(<LayoutPlanPage />);
+    const map = await screen.findByRole("img", { name: "First Floor equipment layout" });
+    const original = map.getAttribute("viewBox");
+    await user.type(screen.getByLabelText("Find equipment"), "EQ-1");
+    await user.click(screen.getByRole("option", { name: /EQ-1/ }));
+    expect(map.getAttribute("viewBox")).not.toBe(original);
+    await user.click(screen.getByRole("button", { name: "Global view" }));
+    expect(map).toHaveAttribute("viewBox", original);
+    expect(screen.getByLabelText("Find equipment")).toHaveValue("");
+    expect(screen.queryByLabelText("Connected cables")).not.toBeInTheDocument();
+    expect([...container.querySelectorAll("[data-equipment-key]")].every((element) => element.getAttribute("opacity") === "1")).toBe(true);
+    expect(readLayoutOverrides()).toEqual({ "EQ-FIX": "energizeToday" });
+  });
+
+  it("clears focus from empty space and restores the full camera with Escape", async () => {
+    isometricDataset();
+    const user = userEvent.setup();
+    render(<LayoutPlanPage />);
+    const map = await screen.findByRole("img", { name: "First Floor equipment layout" });
+    const original = map.getAttribute("viewBox");
+    await user.click(screen.getByRole("button", { name: "EQ-1: Energized" }));
+    expect(screen.getByLabelText("Connected cables")).toBeInTheDocument();
+    await user.click(map);
+    expect(screen.queryByLabelText("Connected cables")).not.toBeInTheDocument();
+    await user.type(screen.getByLabelText("Find equipment"), "EQ-1");
+    await user.click(screen.getByRole("option", { name: /EQ-1/ }));
+    fireEvent.keyDown(map, { key: "Escape" });
+    expect(map).toHaveAttribute("viewBox", original);
+    expect(screen.getByLabelText("Find equipment")).toHaveValue("");
+    expect(screen.queryByLabelText("Connected cables")).not.toBeInTheDocument();
+  });
 });
 
 describe("LayoutPlanPage", () => {
@@ -268,10 +437,11 @@ describe("LayoutPlanPage", () => {
     const wheel = new WheelEvent("wheel", { deltaY: -100, clientX: 300, clientY: 200, bubbles: true, cancelable: true });
     fireEvent(map, wheel);
     expect(wheel.defaultPrevented).toBe(true);
+    await waitFor(() => expect(Number(map.getAttribute("viewBox")!.split(" ")[2])).toBeLessThan(initial[2]));
     const zoomed = map.getAttribute("viewBox")!.split(" ").map(Number);
     expect(zoomed[2]).toBeLessThan(initial[2]);
     fireEvent.wheel(map, { deltaY: 100, clientX: 300, clientY: 200 });
-    expect(Number(map.getAttribute("viewBox")!.split(" ")[2])).toBeGreaterThan(zoomed[2]);
+    await waitFor(() => expect(Number(map.getAttribute("viewBox")!.split(" ")[2])).toBeGreaterThan(zoomed[2]));
   });
 
   it("pans when dragging from equipment and suppresses accidental selection", async () => {

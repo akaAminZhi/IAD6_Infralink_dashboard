@@ -34,6 +34,62 @@ API; no database is required.
 
 ## Layout
 
+Layout opens in **2.5D** by default; **2D plan** restores the original rectangle
+view. The last view choice is saved in this browser. TX6, Utility, GEN6, and TX
+use MV transformer, MV switchgear, generator, and LV transformer models;
+other devices use cabinet models. Footprints retain the PDF coordinates;
+heights and overhead cable routes are illustrative, not surveyed geometry.
+Models use one orthographic 2:1 isometric grid, with filled light top, medium
+left and dark right faces. MV transformers include an oil tank, radiator bank,
+conservator and brown ceramic bushings; switchgear has separate instrumented
+bays; generators have a radiator, roof fans and exhaust; LV transformers use a
+ventilated housing; ordinary cabinets have a door, meter and handle. Model
+backgrounds are transparent, with restrained outlines and ground shadows.
+
+**Global view** clears equipment/cable focus, search and box selection and restores
+the fitted camera. **Escape** does the same outside box
+selection. Clicking empty map space or **Clear focus** removes focus/search
+without moving the camera. Planning overrides are unaffected. Nearby cables
+use low cubic arcs; longer routes use rounded bends with less clearance.
+Lines are 3 screen pixels normally and 4.5 pixels when highlighted.
+
+**Hide all cables / Show all cables** is an explicit visibility control. Hidden
+cables stay hidden through Global view, equipment/connection inspection, floor
+changes and 2D/2.5D switching until Show all cables is clicked. Connections and
+test evidence remain accessible in the side panel. The preference lasts for the
+current page visit.
+
+After the first 2.5D visit, equipment models for the current floor stay mounted
+and are hidden in 2D, so repeated view switches reuse their SVG nodes. Static
+models, background regions and cable components are memoized; cable paths and
+both fit frames are cached. Camera motion is combined into one update per
+animation frame, with final drag positions flushed on release and pending motion
+cancelled by Global view/search commands. The models retain their full detail.
+
+The Layout builder reads normalized SystemElements `equipment_type` to include
+feeder cables and exclude terminations. FDR IDs with two complete equipment IDs
+resolve connections (including IDs containing multiple hyphens). Numeric circuit
+suffixes are stripped only if no exact asset exists and a single asset matches.
+Single-ended FD IDs, missing assets/positions, duplicate IDs, and ambiguous
+endpoints are retained with diagnostics rather than assigned invented routes.
+Only connections with one visible placement per endpoint are drawn on a floor.
+Select equipment to highlight its connections and see cable IDs, remote equipment
+IDs, and test evidence in the side panel; select a cable to highlight its endpoints
+and zoom to the connection. The cable toggle hides/shows overhead connections.
+Terminations are not drawn. Existing search, pan/zoom, floor switching and planning
+controls work in both views; 2.5D box selection uses projected device bounds.
+
+Cable testing uses the shared MV Equipment readiness rule: a latest failed daily
+result takes precedence; exact `L3: Pre Func Testing & Startup` means tested and
+Infralink updated; a passed/retested-and-passed MV daily result means tested with
+Infralink update pending; otherwise partial and unconfirmed remain distinct.
+Installation Complete alone does not confirm testing. Green/blue solid and
+amber/red/gray dashed lines distinguish these states, with text labels in the
+legend and details. NETA completion and missing report evidence are shown
+separately. The builder reads the same MV daily report index as Power Plan/MV.
+Rebuild with `python scripts/etl/build_layout_plan.py` after normalized equipment
+or MV daily reports change; normal ETL also performs this step.
+
 Open `/layout` (Layout in the sidebar) for equipment rectangles extracted from
 `raw_data/power_plan/Floor_Layout_Plan.pdf`. Rectangle comments provide
 equipment IDs. Only devices fully inside `boundary` are shown; devices fully

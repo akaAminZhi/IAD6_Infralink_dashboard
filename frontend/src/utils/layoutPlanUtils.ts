@@ -52,7 +52,7 @@ export function visibleLayoutEquipment(manifest: LayoutPlanManifest, floorId: st
     ...(manifest.floors.find((floor) => floor.floor_id === floorId)?.equipment ?? [])
       .filter((record) => !fixedSources.has(record.equipment_key)),
     ...fixed,
-  ];
+  ].filter((record) => !/cable|termination/i.test(record.equipment_type ?? ""));
 }
 
 export function visibleLayoutRegions(manifest: LayoutPlanManifest, floorId: string): LayoutRegionRecord[] {
@@ -86,9 +86,9 @@ export function layoutSelectionRect(start: { x: number; y: number }, end: { x: n
   return { x: Math.min(start.x, end.x), y: Math.min(start.y, end.y), width: Math.abs(end.x - start.x), height: Math.abs(end.y - start.y) };
 }
 
-export function equipmentInLayoutSelection(records: LayoutEquipmentRecord[], selection: PowerPlanRect): Set<string> {
+export function equipmentInLayoutSelection(records: LayoutEquipmentRecord[], selection: PowerPlanRect, inset = true): Set<string> {
   return new Set(records.filter((record) => {
-    const rect = insetEquipmentRect(record.rect);
+    const rect = inset ? insetEquipmentRect(record.rect) : record.rect;
     return rect.x >= selection.x && rect.y >= selection.y &&
       rect.x + rect.width <= selection.x + selection.width && rect.y + rect.height <= selection.y + selection.height;
   }).map((record) => record.equipment_key));

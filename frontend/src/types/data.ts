@@ -260,6 +260,20 @@ export interface LayoutEquipmentRecord {
   candidate_equipment_ids: string[];
   energized_completed_at: string | null;
   system_element_status: string | null;
+  equipment_type?: string | null;
+}
+
+export interface LayoutCableRecord {
+  cable_id: string;
+  equipment_type: string;
+  source_equipment_key: string | null;
+  target_equipment_key: string | null;
+  connection_status: string;
+  system_element_status: string | null;
+  neta_complete: boolean;
+  neta_test_report: string | null;
+  mv_daily_test_status: string | null;
+  mv_daily_test_date: string | null;
 }
 
 export interface LayoutRegionRecord {
@@ -288,6 +302,9 @@ export interface LayoutPlanManifest {
   floors: LayoutFloorRecord[];
   fixed_equipment: LayoutEquipmentRecord[];
   fixed_regions?: LayoutRegionRecord[];
+  cables?: LayoutCableRecord[];
+  cable_diagnostics?: { cable_id: string; reason: string; source_equipment_key: string | null; target_equipment_key: string | null }[];
+  mv_daily_report_files?: SourceFileMetadata[];
   diagnostics: { floor_id: string; label?: string; reason: string; candidate_equipment_ids?: string[] }[];
 }
 

@@ -29,6 +29,7 @@ import type {
 import type { MvEquipmentComment } from "../types/automation";
 import { enrichPowerPlanEquipment, POWER_PLAN_STATUS_COLORS } from "../utils/powerPlanUtils";
 import { formatDateTime } from "../utils/formatters";
+import { CABLE_TEST_STATES, cableTestState, isCableInfralinkUpdated, isMvDailyTestFailed, isMvDailyTestPassed } from "../utils/cableTestUtils";
 import { requiresEquipmentTestTracking } from "../utils/equipmentTrackingUtils";
 import {
   enrichIssuesWithPdmContext,
@@ -284,21 +285,8 @@ function normalizeStatus(status: string | null | undefined): string {
   return String(status ?? "").trim().toUpperCase().replace(/\s+/g, " ");
 }
 
-function isMvDailyTestPassed(annotation: PowerPlanAnnotation): boolean {
-  return ["tested_and_passed", "retested_and_passed"].includes(
-    String(annotation.mv_daily_test_status ?? ""),
-  );
-}
-
-function isMvDailyTestFailed(annotation: PowerPlanAnnotation): boolean {
-  return annotation.mv_daily_test_status === "failed";
-}
-
 function isCableTestedAndInfralinkUpdated(annotation: PowerPlanAnnotation): boolean {
-  return (
-    isConnection(annotation) &&
-    normalizeStatus(annotation.system_element_status) === "L3: PRE FUNC TESTING & STARTUP"
-  );
+  return isConnection(annotation) && isCableInfralinkUpdated(annotation);
 }
 
 function isRequiredAtpMissing(annotation: PowerPlanAnnotation): boolean {
@@ -372,13 +360,7 @@ function mvTestStatusTone(status: string): string {
 }
 
 function cableReadinessLabel(annotation: PowerPlanAnnotation): string {
-  if (isMvDailyTestFailed(annotation)) return "Test Failed";
-  if (isCableTestedAndInfralinkUpdated(annotation)) {
-    return "Tested + Infralink Updated";
-  }
-  if (isMvDailyTestPassed(annotation)) return "Tested - Infralink Update Pending";
-  if (annotation.mv_daily_test_status === "partially_tested") return "Partially Tested";
-  return "Testing Not Confirmed";
+  return CABLE_TEST_STATES[cableTestState(annotation)].label;
 }
 
 function cableReadinessTone(annotation: PowerPlanAnnotation): string {
