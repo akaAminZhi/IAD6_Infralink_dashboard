@@ -79,6 +79,39 @@ def test_applies_pdf_rotation_to_control_and_equipment_coordinates(tmp_path):
     }
 
 
+def test_separate_pdf_pages_supply_distinct_floor_equipment_and_share_fixed_layer(tmp_path):
+    config, equipment = inputs(tmp_path)
+    with fitz.open(tmp_path / "floor.pdf") as document:
+        page = document.new_page(width=300, height=300)
+        for label, coords in [
+            ("boundary", (20, 20, 240, 240)),
+            ("EQ-2", (80, 100, 120, 140)),
+            ("E6-210-01", (70, 70, 150, 160)),
+        ]:
+            annotation = page.add_rect_annot(fitz.Rect(coords))
+            annotation.set_info(content=label)
+            annotation.update()
+        document.saveIncr()
+    specs = json.loads(config.read_text())
+    specs["floors"][1]["page_number"] = 2
+    config.write_text(json.dumps(specs))
+    equipment_records = json.loads(equipment.read_text())
+    equipment_records["records"].append({"equipment_id": "IAD06-EQ-2"})
+    equipment.write_text(json.dumps(equipment_records))
+
+    payload = build_layout_plan(config, tmp_path, equipment, tmp_path / "layout.json")
+    first, second = payload["floors"]
+    assert [first["page_number"], second["page_number"]] == [1, 2]
+    assert [item["label"] for item in first["equipment"]] == ["EQ-1", "EQ-DUP", "EQ-MISSING"]
+    assert [item["label"] for item in second["equipment"]] == ["EQ-2"]
+    assert second["equipment"][0]["match_status"] == "matched"
+    assert second["equipment"][0]["source_floor_id"] == "floor-2"
+    assert second["equipment"][0]["rect"] == {"x": 60.0, "y": 80.0, "width": 42.0, "height": 42.0}
+    assert [item["label"] for item in second["regions"]] == ["E6-210-01"]
+    assert [item["label"] for item in payload["fixed_equipment"]] == ["EQ-FIX"]
+    assert payload["fixed_equipment"][0]["source_floor_id"] == "floor-1"
+
+
 def test_pods_and_rooms_are_regions_not_equipment_or_match_diagnostics(tmp_path):
     config, equipment = inputs(tmp_path, regions=True)
     payload = build_layout_plan(config, tmp_path, equipment, tmp_path / "layout.json")
@@ -88,6 +121,71 @@ def test_pods_and_rooms_are_regions_not_equipment_or_match_diagnostics(tmp_path)
     assert len(payload["fixed_regions"]) == 2
     assert all(item["kind"] == "pod" and item["fixed"] for item in payload["fixed_regions"])
     assert not any(item.get("label") in {"POD", "E6-110-01", "E-1-2"} for item in payload["diagnostics"])
+
+
+@pytest.mark.parametrize("rooms", [True, False])
+def test_floor_alignment_translates_local_geometry_and_keeps_fixed_layer(tmp_path, rooms):
+    config, equipment = inputs(tmp_path, regions=rooms)
+    baseline = build_layout_plan(config, tmp_path, equipment, tmp_path / "before.json")
+    # Give the second page a different boundary origin and scale-independent offset.
+    with fitz.open(tmp_path / "floor.pdf") as document:
+        page = document[0]
+        for annotation in page.annots():
+            if annotation.info.get("content") == "boundary":
+                annotation.set_rect(fitz.Rect(10, 10, 250, 250))
+                annotation.update()
+        document.saveIncr()
+    unaligned = build_layout_plan(config, tmp_path, equipment, tmp_path / "unaligned.json")
+    specs = json.loads(config.read_text())
+    specs["floors"][0]["file_name"] = "reference.pdf"
+    make_pdf(tmp_path / "reference.pdf", regions=rooms)
+    specs["floors"][1]["align_to_floor_id"] = "floor-1"
+    config.write_text(json.dumps(specs))
+    payload = build_layout_plan(config, tmp_path, equipment, tmp_path / "aligned.json")
+    assert payload["floors"][0] == {**baseline["floors"][0], "file_name": "reference.pdf"}
+    for kind in ["equipment", "regions"]:
+        assert payload["floors"][1][kind] == baseline["floors"][1][kind]
+    assert payload["fixed_equipment"][0] == baseline["fixed_equipment"][0]
+    assert payload["fixed_equipment"][1] == unaligned["fixed_equipment"][1]
+    if rooms:
+        assert payload["fixed_regions"][0] == baseline["fixed_regions"][0]
+        assert payload["fixed_regions"][1] == unaligned["fixed_regions"][1]
+
+
+@pytest.mark.parametrize("target_id", ["missing-floor", "floor-2"])
+def test_alignment_requires_an_earlier_available_reference_floor(tmp_path, target_id):
+    config, equipment = inputs(tmp_path)
+    specs = json.loads(config.read_text())
+    specs["floors"][1]["align_to_floor_id"] = target_id
+    config.write_text(json.dumps(specs))
+    with pytest.raises(ValueError, match="earlier available floor"):
+        build_layout_plan(config, tmp_path, equipment, tmp_path / "layout.json")
+
+
+def test_alignment_anchors_room_right_edge_with_different_room_widths(tmp_path):
+    config, equipment = inputs(tmp_path, regions=True)
+    (tmp_path / "reference.pdf").write_bytes((tmp_path / "floor.pdf").read_bytes())
+    with fitz.open(tmp_path / "floor.pdf") as document:
+        page = document[0]
+        for annotation in page.annots():
+            if annotation.info.get("content") in {"E6-110-01", "E-1-2"}:
+                annotation.set_rect(fitz.Rect(100, 90, 190, 220))
+                annotation.update()
+        document.saveIncr()
+    before = build_layout_plan(config, tmp_path, equipment, tmp_path / "before.json")
+    specs = json.loads(config.read_text())
+    specs["floors"][0]["file_name"] = "reference.pdf"
+    specs["floors"][1]["align_to_floor_id"] = "floor-1"
+    config.write_text(json.dumps(specs))
+    after = build_layout_plan(config, tmp_path, equipment, tmp_path / "after.json")
+    reference_rooms = after["floors"][0]["regions"]
+    aligned_rooms = after["floors"][1]["regions"]
+    assert max(r["rect"]["x"] + r["rect"]["width"] for r in aligned_rooms) == max(r["rect"]["x"] + r["rect"]["width"] for r in reference_rooms)
+    assert min(r["rect"]["y"] for r in aligned_rooms) == min(r["rect"]["y"] for r in reference_rooms)
+    for old, new in zip(before["floors"][1]["equipment"] + before["floors"][1]["regions"], after["floors"][1]["equipment"] + aligned_rooms):
+        assert new["rect"] == {**old["rect"], "x": old["rect"]["x"] + 30, "y": old["rect"]["y"] - 15}
+    assert after["fixed_equipment"] == before["fixed_equipment"]
+    assert after["fixed_regions"] == before["fixed_regions"]
 
 
 def test_missing_boundary_fails_explicitly(tmp_path):

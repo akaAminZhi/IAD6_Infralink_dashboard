@@ -30,6 +30,23 @@ def rect_record(rect: fitz.Rect, origin: fitz.Rect) -> dict[str, float]:
     }
 
 
+def floor_alignment_bounds(floor: dict[str, Any]) -> fitz.Rect | None:
+    """Use room outlines as anchors, falling back to all floor-local geometry."""
+    regions = floor["regions"]
+    records = [region for region in regions if region["kind"] == "room"]
+    if not records:
+        records = floor["equipment"] + regions
+    if not records:
+        return None
+    rects = [record["rect"] for record in records]
+    return fitz.Rect(
+        min(rect["x"] for rect in rects),
+        min(rect["y"] for rect in rects),
+        max(rect["x"] + rect["width"] for rect in rects),
+        max(rect["y"] + rect["height"] for rect in rects),
+    )
+
+
 def build_layout_plan(
     config_path: Path = PROJECT_ROOT / "config" / "layout_plans.json",
     source_dir: Path = PROJECT_ROOT / "raw_data" / "power_plan",
@@ -130,6 +147,28 @@ def build_layout_plan(
                 "equipment": records,
                 "regions": regions,
             })
+    available_floors = {floor["floor_id"]: floor for floor in floors}
+    aligned_floors: dict[str, dict[str, Any]] = {}
+    for spec in config["floors"]:
+        floor = available_floors.get(spec["floor_id"])
+        if floor is None:
+            continue
+        target_id = spec.get("align_to_floor_id")
+        if target_id:
+            target = aligned_floors.get(target_id)
+            if target is None:
+                raise ValueError(f"{spec['floor_id']} align_to_floor_id must reference an earlier available floor: {target_id}")
+            source_bounds = floor_alignment_bounds(floor)
+            target_bounds = floor_alignment_bounds(target)
+            if source_bounds is None or target_bounds is None:
+                raise ValueError(f"Cannot align empty floor geometry: {spec['floor_id']} -> {target_id}")
+            dx = target_bounds.x1 - source_bounds.x1
+            dy = target_bounds.y0 - source_bounds.y0
+            # Translate local devices/regions together; shared fix geometry never moves.
+            for record in floor["equipment"] + floor["regions"]:
+                rect = record["rect"]
+                record["rect"] = {**rect, "x": round(rect["x"] + dx, 3), "y": round(rect["y"] + dy, 3)}
+        aligned_floors[spec["floor_id"]] = floor
     # Preserve all placements; the UI chooses the first fixed source floor per ID.
     payload = {
         "generated_at": datetime.now().astimezone().isoformat(),

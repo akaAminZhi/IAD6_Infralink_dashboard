@@ -35,7 +35,7 @@ API; no database is required.
 ## Layout
 
 Open `/layout` (Layout in the sidebar) for equipment rectangles extracted from
-`raw_data/power_plan/First_Floor_Layout_Plan.pdf`. Rectangle comments provide
+`raw_data/power_plan/Floor_Layout_Plan.pdf`. Rectangle comments provide
 equipment IDs. Only devices fully inside `boundary` are shown; devices fully
 inside `fix` remain visible on every floor. The control rectangles are hidden.
 Search provides suggestions across floors. Click a suggestion or choose it with
@@ -69,8 +69,8 @@ with electrical status. All breathing lightning is drawn in the last SVG layer,
 above equipment, room names and the selection rectangle. Energized devices use
 a stronger red fill and dark red border/marker for visibility.
 PODs within fix remain visible across floors.
-Equipment rectangles have a small inset for spacing while their source centers
-and stored PDF coordinates are preserved.
+Equipment rectangles have a small inset for spacing. Floor alignment translates
+equipment and rooms together while preserving device dimensions and spacing.
 
 The default Energized state requires a date in SystemElements' exact
 `Energized: Completed` column. N/A, Completed without a date, and the separate
@@ -80,9 +80,25 @@ this browser only. Reset device or Reset all statuses restores workbook values;
 the global reset includes floors not currently displayed.
 
 To add floors, append unique `floor_id`, `label`, `file_name`, and one-based
-`page_number` entries to `config/layout_plans.json`. Each configured PDF page
-needs exactly one boundary rectangle; fix rectangles are optional. Keep boundary
-origins aligned between floor drawings so the shared fixed layer aligns.
+`page_number` entries to `config/layout_plans.json`. The current two-page PDF
+maps page 1 to First Floor and page 2 to Second Floor. New PDF pages must be
+registered here and the Layout builder rerun before appearing in the dropdown.
+Each configured PDF page needs exactly one boundary rectangle; fix rectangles
+are optional. Second Floor has `"align_to_floor_id": "first-floor"`: its room
+area's top and right edges align with First Floor by translation, without moving
+fixed equipment/PODs. Add this optional field to future floors to align them to
+an earlier configured, available floor. When no rooms exist on a floor, its
+floor-local equipment/region bounds provide the alignment anchor. Source PDF
+geometry and boundary dimensions are retained; generated local coordinates
+include the translation. Floors without this field keep boundary-relative
+coordinates. Rebuild the Layout dataset after changing alignment settings.
+When renaming a layout PDF, update `file_name` in every floor entry using that PDF
+in `config/layout_plans.json` to match the file under `raw_data/power_plan/`.
+Keep `floor_id`, `label`, and `page_number` unchanged for a filename-only change,
+then run `python scripts/etl/build_layout_plan.py` from the root and reload
+`/layout`. Python/React source changes are not needed. The general power-plan
+builder discovers all PDFs by extension; a normal full ETL refreshes its source
+metadata too, or run `python scripts/etl/build_power_plan.py` separately.
 Refresh from the repository root after saving/closing the source files:
 
 ```powershell

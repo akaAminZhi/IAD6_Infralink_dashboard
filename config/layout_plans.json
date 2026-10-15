@@ -3,8 +3,15 @@
     {
       "floor_id": "first-floor",
       "label": "First Floor",
-      "file_name": "First_Floor_Layout_Plan.pdf",
+      "file_name": "Floor_Layout_Plan.pdf",
       "page_number": 1
+    },
+    {
+      "floor_id": "second-floor",
+      "label": "Second Floor",
+      "file_name": "Floor_Layout_Plan.pdf",
+      "page_number": 2,
+      "align_to_floor_id": "first-floor"
     }
   ]
 }

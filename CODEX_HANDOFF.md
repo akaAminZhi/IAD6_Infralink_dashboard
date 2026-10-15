@@ -1,10 +1,10 @@
 ﻿# Codex Handoff
 
-## Current Status (2026-10-14): Layout route
+## Current Status (2026-10-15): Layout route, two PDF floors
 
 Implemented `/layout`, with a Layout sidebar entry and lazy-loaded route. It
 renders equipment rectangle annotations from
-`raw_data/power_plan/First_Floor_Layout_Plan.pdf` as rounded SVG rectangles using
+`raw_data/power_plan/Floor_Layout_Plan.pdf` as rounded SVG rectangles using
 their PDF geometry, with a small visual inset for spacing. PODs and numbered
 rooms are shown as noninteractive reference regions. Boundary and fix control rectangles are never drawn, and
 the underlying PDF/background drawing is not included. Existing Power Plan,
@@ -14,8 +14,24 @@ PDM hierarchy, readiness, tracking exclusions and case evidence were unchanged.
 
 - `config/layout_plans.json` is the extension interface: each floor has a unique
   `floor_id`, display `label`, PDF `file_name`, and one-based `page_number`.
-  Currently it contains First Floor, page 1 of the supplied PDF. Additional
+  Currently it contains First Floor (page 1) and Second Floor (page 2) of
+  `Floor_Layout_Plan.pdf`. The second page was previously absent from this
+  config, so rebuilding only generated the first floor. Additional PDF pages
+  must be registered here before rebuilding. Additional
   floors can use separate PDFs or additional pages of one PDF.
+  The source PDF was renamed to `Floor_Layout_Plan.pdf`; `file_name` in this
+  config is the runtime filename setting. Future renames need that field changed
+  in every floor entry using the renamed PDF, the Layout builder rerun, and the browser reloaded. Keep the
+  floor ID/label/page mapping unchanged for a filename-only rename.
+- Second Floor now sets `align_to_floor_id: "first-floor"`. The builder
+  translates floor-local equipment and regions together so the room area's
+  top/right edges match the reference floor. Room bounds are the anchor; without
+  rooms, use all floor-local equipment/regions. References must name an earlier
+  configured, available floor; invalid references or empty geometry fail before
+  writing output. No scaling occurs. Fixed equipment and POD regions are never
+  translated. Floors without this optional config field keep their old geometry.
+  The generated manifest contract is unchanged: rectangles contain the final
+  display coordinates, while floor width/height remain source boundary sizes.
 - `scripts/etl/build_layout_plan.py` emits `frontend/public/data/layout_plan.json`.
   It is registered after equipment normalization in the normal ETL and its
   output is included in ETL output metadata. It also runs independently from
@@ -37,13 +53,15 @@ PDM hierarchy, readiness, tracking exclusions and case evidence were unchanged.
   outlines. Room names now have a fixed centered position near the top inside
   each room, drawn in the background below all equipment. `layoutRoomLabels`
   depends only on region geometry; planning/energisation never moves names.
-- Equipment centers and stored coordinates remain unchanged. A visual inset
+- Equipment source dimensions and relative spacing are preserved; configured
+  alignment translates only floor-local display coordinates. A visual inset
   of up to 0.8 PDF units per edge (bounded to 12% for small devices) creates
   separation. Labels, hit areas and lightning follow the inset rectangles.
 - Devices fully inside a fix rectangle form a shared layer visible on every
-  floor. The updated real PDF contains one fix rectangle. A common SVG frame
-  across floors preserves fixed positions; floor drawings should use aligned
-  boundary origins. All distinct rectangles for repeated equipment IDs are
+  floor. The updated real PDF contains one fix rectangle on page 1; page 2
+  has its own boundary and no fix control. A common SVG frame
+  across floors preserves fixed positions; optional floor alignment handles
+  different local boundary origins for floor equipment. All distinct rectangles for repeated equipment IDs are
   retained. If an ID is fixed on multiple source floors, the first configured
   source floor supplies all its fixed placements; later floor copies do not
   duplicate that equipment. Fixed placements take precedence over floor-local
@@ -124,26 +142,32 @@ PDM hierarchy, readiness, tracking exclusions and case evidence were unchanged.
 
 ### Real local data
 
-Latest read-only inspection in the button-lock/readability follow-up sees the
-independently refreshed local manifest generated at 2026-10-14 09:58 EDT:
-173 device rectangles, 172 unique IDs, 88 fixed placements, zero diagnostics.
-The following counts describe the earlier floor/region implementation snapshot.
-No ETL or source/data regeneration was performed in this UI-only follow-up.
+Latest two-floor manifest was generated on 2026-10-15 against the user's updated
+two-page PDF and the existing local equipment dataset.
 
-- Latest user-updated PDF: one page, 194 annotations comprising 175 equipment
-  rectangles, 14 POD regions, 3 room regions, boundary and fix controls.
-- Rendered all 175 equipment rectangles, representing 159 distinct IDs:
-  85 floor-specific placements and 90 fixed placements (74 distinct fixed IDs).
-  Rooms: `E6-110-01`, `E6-110-02`, `E6-110-03`.
-- All 175 placements matched, zero ambiguous/unmatched and zero diagnostics.
-  This supersedes the initial PDF's 178 rectangles and three unmatched IDs.
-- Normalized 13,122 equipment records from the latest selected export,
-  `SystemElements_10-14-2026_08-13-AM.xlsx`, and regenerated equipment JSON/CSV
-  plus the initial layout manifest. The follow-up rebuilt only the layout
-  manifest against the updated PDF. One placement is date-confirmed Energized:
-  `IAD06-CDS6-01A`, completed `2025-01-14T14:22:00`.
+- Latest alignment rebuild: translated all 83 Second Floor equipment placements
+  and 3 rooms by x +657.700, y +400.157 PDF units. The two room areas now share
+  top y 430.766 and right x 1222.898. First Floor geometry, 88 fixed equipment
+  placements, 14 fixed POD regions and all matching diagnostics were verified
+  identical to the pre-alignment manifest. Source PDFs were not edited.
+- Page 1: 192 rectangle annotations, comprising 85 floor-specific equipment
+  placements, 88 fixed placements, 14 fixed POD regions, 3 rooms, boundary/fix.
+- Page 2: 87 rectangle annotations, comprising 83 floor-specific equipment
+  placements, 3 rooms and boundary. All device/region annotations are inside
+  their respective page boundary. Rooms are `E6-210-01`, `E6-210-02`, `E6-210-03`.
+- Generated 256 equipment placements across both floors/shared layer, 255
+  distinct IDs. The browser displays 173 placements on First Floor and 171 on
+  Second Floor, with the same 88 fixed placements and 14 POD regions on both.
+- Four page-2 IDs are unmatched: `CUPP6-01R-3A`, `CDS6-01F-7`, `TX-`,
+  `CRAH6-210-03-2`. They remain visible as Unknown and are diagnosed; no ambiguous
+  matches. No completed energisation dates are present in this regenerated
+  manifest from the current local equipment dataset. Prior snapshot counts and
+  the previously confirmed CDS date below describe earlier verification only.
+- Rebuilt Layout and Power Plan only. Power Plan now has 5 pages across its
+  discovered PDFs, 382/409 equipment annotations matched, 37 ATP links and zero
+  missing required ATP files. Equipment normalization was not rerun this turn.
 - No raw PDF or workbook was modified by Codex. Generated datasets, screenshots
-  and browser smoke script remain gitignored. Full ETL was not run; unrelated
+  and browser smoke scripts remain gitignored. Full ETL was not run; unrelated
   dashboard datasets/header ETL metadata retain their previous refresh time.
 
 ### Relevant files
@@ -155,7 +179,7 @@ No ETL or source/data regeneration was performed in this UI-only follow-up.
   `frontend/src/types/data.ts`: completed-date and layout contracts.
 - `frontend/src/pages/LayoutPlanPage.tsx`,
   `frontend/src/utils/layoutPlanUtils.ts`: map, search, camera interaction,
-  regions, collision-free label bands, spacing, electrical status/persistence.
+  regions, fixed background room labels, spacing, electrical status/persistence.
 - `frontend/src/App.tsx`, `frontend/src/components/layout/Sidebar.tsx`: route/nav.
 - `scripts/tests/test_build_layout_plan.py`,
   `scripts/tests/test_normalize_equipment.py`, `scripts/tests/test_run_etl.py`,
@@ -164,6 +188,63 @@ No ETL or source/data regeneration was performed in this UI-only follow-up.
 - `frontend/README.md`, `ARCHITECTURE.md`: operation and architecture notes.
 
 ### Tests actually performed
+
+Latest floor-position alignment:
+
+- `python -m pytest scripts/tests/test_build_layout_plan.py scripts/tests/test_run_etl.py -q`:
+  15 passed (12 builder, 3 ETL). Coverage includes different room widths/origins,
+  right/top alignment, translation of equipment with rooms, equipment-only
+  fallback, unchanged shared fixed equipment/PODs, invalid/self references,
+  and prior extraction/ETL integration. PyMuPDF deprecation warnings only.
+- `python scripts/etl/build_layout_plan.py`: rebuilt the real two-floor dataset
+  successfully (256 placements, 4 existing unmatched diagnostics). Compared
+  pre/post manifests: only second-floor local positions and generation time
+  changed; all translated rectangles share exactly the same x/y displacement.
+- Local Playwright against Vite verified room-area top/right screen positions
+  match within 0.01 px on both floors, including after panning and wheel zoom.
+  Switching retains the viewBox and all fixed device screen bounds. Rechecked
+  floor-specific IDs/counts, shared PODs, Unknown devices and second-floor search;
+  no page errors. Updated ignored `runtime/automation/layout_two_floors_smoke.py`;
+  captured and visually inspected `runtime/automation/layout-aligned-second-floor.png`.
+- From `frontend/`, `npm run build` with `IAD6_PREVIEW_BUILD=1`: passed;
+  existing large-chunk/plugin timing warnings only. Preserved the previously
+  modified `tsconfig.tsbuildinfo` bytes across the build. No React runtime code
+  changed, so frontend unit tests were not rerun. No full ETL, commit or deploy.
+- Scoped `git diff --check` passed; temporary Vite server closed. Pre-existing
+  prompt and other uncommitted edits preserved. README documents the optional
+  alignment config, reference ordering and geometry fallback.
+
+Latest second-floor fix:
+
+- `python -m pytest scripts/tests/test_build_layout_plan.py -q`: 7 passed.
+  Added a real two-page fixture with different floor-specific equipment/rooms,
+  page-specific coordinates and a fixed layer sourced only from page 1. An
+  initial expected-coordinate error in the new fixture was corrected to account
+  for annotation border expansion on the boundary as well as on equipment;
+  the final complete targeted file passed. PyMuPDF deprecation warnings only.
+- `python scripts/etl/build_layout_plan.py` and
+  `python scripts/etl/build_power_plan.py`: both succeeded against real inputs;
+  inspected page numbers, record counts, shared layer and unmatched diagnostics.
+- Local headless Playwright against temporary Vite on port 5185 verified the
+  real two-floor manifest: dropdown options, 173/171 visible placements, exact
+  second-floor annotation IDs, second-floor room names replacing first-floor
+  names, unchanged fixed device/POD markup and camera frame, unmatched devices
+  visible as Unknown, and first-to-second-floor search confirmation for MDB6-01R.
+  No page errors. Script: `runtime/automation/layout_two_floors_smoke.py` (ignored).
+  Temporary Vite server closed after verification. Scoped `git diff --check`
+  passed for all four changed config/test/documentation files.
+- No Python builder/React runtime logic changed; frontend build, frontend unit
+  tests and full ETL were not rerun. Existing prompt/build-info edits preserved.
+
+Previous PDF filename rename: updated `config/layout_plans.json`, current README,
+handoff and task-note filename references to `Floor_Layout_Plan.pdf`. Ran the real
+Layout and Power Plan builders from the project root; both succeeded. Verified
+the new source name in both generated manifests, no old name in the Power Plan
+manifest, and identical Layout geometry/matching/status payload hashes before
+and after the rename (173 device rectangles, zero diagnostics). Source PDF was
+already renamed by the user. No Python/React logic changed, so no tests/frontend
+build/full ETL were rerun. Scoped diff check passed; unrelated prompt changes
+and its existing whitespace were retained.
 
 Latest layering/bulk-selection update:
 
