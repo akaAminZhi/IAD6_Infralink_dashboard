@@ -29,7 +29,7 @@ import type {
 import type { MvEquipmentComment } from "../types/automation";
 import { enrichPowerPlanEquipment, POWER_PLAN_STATUS_COLORS } from "../utils/powerPlanUtils";
 import { formatDateTime } from "../utils/formatters";
-import { CABLE_TEST_STATES, cableTestState, isCableInfralinkUpdated, isMvDailyTestFailed, isMvDailyTestPassed } from "../utils/cableTestUtils";
+import { CABLE_TEST_STATES, cableTestState, hasInfralinkCableTestReport, isCableInfralinkUpdated, isMvDailyTestFailed, isMvDailyTestPassed } from "../utils/cableTestUtils";
 import { requiresEquipmentTestTracking } from "../utils/equipmentTrackingUtils";
 import {
   enrichIssuesWithPdmContext,
@@ -310,6 +310,7 @@ function getSystemStatusHighlight(annotation: PowerPlanAnnotation): MvStatusHigh
 function getStatusHighlight(annotation: PowerPlanAnnotation): MvStatusHighlight {
   if (annotation.netaComplete) return "netaComplete";
   if ((annotation.openIssueCount ?? 0) > 0) return "openIssue";
+  if (isConnection(annotation) && hasInfralinkCableTestReport(annotation)) return "cableTestedAndUpdated";
   if (isMvDailyTestFailed(annotation)) return "failed";
   if (isCableTestedAndInfralinkUpdated(annotation)) return "cableTestedAndUpdated";
   if (isConnection(annotation) && isMvDailyTestPassed(annotation)) {
@@ -364,6 +365,9 @@ function cableReadinessLabel(annotation: PowerPlanAnnotation): string {
 }
 
 function cableReadinessTone(annotation: PowerPlanAnnotation): string {
+  if (isConnection(annotation) && hasInfralinkCableTestReport(annotation)) {
+    return "border-emerald-300 bg-emerald-50 text-emerald-800";
+  }
   if (isMvDailyTestFailed(annotation)) return "border-red-300 bg-red-50 text-red-800";
   if (isCableTestedAndInfralinkUpdated(annotation)) {
     return "border-emerald-300 bg-emerald-50 text-emerald-800";

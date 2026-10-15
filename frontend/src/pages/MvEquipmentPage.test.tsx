@@ -324,7 +324,7 @@ describe("MvEquipmentPage", () => {
                   { x: 350, y: 180 },
                 ],
                 matched_equipment_id: "FD01-IAD06-TX6-06B",
-                system_element_status: "L3: Pre Func Testing & Startup",
+                system_element_status: "Pre-Installation Complete",
                 system_element_type: "Feeder Cable - MV",
                 mv_daily_test_status: "tested_and_passed",
                 feeder_cable_atp_names: ["FD01 Cable ATP.pdf"],
@@ -406,7 +406,7 @@ describe("MvEquipmentPage", () => {
     await user.click(updatedCable);
     expect(screen.getByText("Tested + Infralink Updated", { exact: true })).toBeInTheDocument();
     expect(
-      screen.getByText("L3: Pre Func Testing & Startup", { exact: true }),
+      screen.getByText("Pre-Installation Complete", { exact: true }),
     ).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /FD01 Cable ATP\.pdf/ }));
     expect(screen.getByTitle("FD01 Cable ATP.pdf")).toHaveAttribute(

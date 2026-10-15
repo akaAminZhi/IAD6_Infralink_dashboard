@@ -16,6 +16,7 @@ def build_layout_connections(
     layout_keys: set[str],
     mv_test_index: dict[str, list[dict[str, str]]],
     feeder_cable_atp_index: dict[str, list[dict[str, Any]]] | None = None,
+    eps_daily_test_index: dict[str, list[dict[str, str]]] | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Keep unresolved cables as records and diagnostics, without invented paths."""
     assets = {
@@ -55,6 +56,8 @@ def build_layout_connections(
             reason = "endpoint_not_on_layout"
         history = mv_test_index.get(key, [])
         latest = history[-1] if history else None
+        eps_history = (eps_daily_test_index or {}).get(key, [])
+        latest_eps = eps_history[-1] if eps_history else None
         atp_names = split_attachment_names(record.get("feeder_cable_atp"))
         expected_names = {name.casefold() for name in atp_names}
         atp_files = [file_record for file_record in (feeder_cable_atp_index or {}).get(key, [])
@@ -77,6 +80,9 @@ def build_layout_connections(
             "feeder_cable_atp_status": atp_status,
             "mv_daily_test_status": latest["status"] if latest else None,
             "mv_daily_test_date": latest["date"] if latest else None,
+            "eps_daily_test_status": latest_eps["status"] if latest_eps else None,
+            "eps_daily_test_date": latest_eps["date"] if latest_eps else None,
+            "eps_daily_report_name": latest_eps["report_name"] if latest_eps else None,
         })
         if reason:
             diagnostics.append({"cable_id": str(record.get("equipment_id") or key), "reason": reason,

@@ -95,11 +95,14 @@ def test_publishes_cable_endpoints_types_and_latest_daily_evidence(tmp_path):
     reports.mkdir()
     (reports / "2026-10-14.md").write_text(f"# Tested And Passed\n- {cable_id}\n")
     (reports / "2026-10-15.md").write_text(f"# Failed\n- {cable_id}\n")
+    eps_reports = tmp_path / "eps_reports"
+    eps_reports.mkdir()
+    (eps_reports / "2026-10-16.md").write_text(f"# Tested\n- {cable_id}\n", encoding="utf-8")
     atp_dir = tmp_path / "atp"
     cable_folder = atp_dir / cable_id
     cable_folder.mkdir(parents=True)
     (cable_folder / "EQ-1 Cable ATP.pdf").write_bytes(b"%PDF-1.4\n")
-    payload = build_layout_plan(config, tmp_path, equipment, tmp_path / "layout.json", reports, atp_dir)
+    payload = build_layout_plan(config, tmp_path, equipment, tmp_path / "layout.json", reports, atp_dir, eps_reports)
     assert payload["floors"][0]["equipment"][0]["equipment_type"] == "Switchboard"
     assert payload["floors"][0]["equipment"][0]["neta_test_report"] == "EQ-1 - NETA Test Report-01.pdf"
     assert len(payload["cables"]) == 1
@@ -109,9 +112,13 @@ def test_publishes_cable_endpoints_types_and_latest_daily_evidence(tmp_path):
     assert cable["target_equipment_key"] == "EQ-FIX"
     assert cable["mv_daily_test_status"] == "failed"
     assert cable["mv_daily_test_date"] == "2026-10-15"
+    assert cable["eps_daily_test_status"] == "tested"
+    assert cable["eps_daily_test_date"] == "2026-10-16"
+    assert cable["eps_daily_report_name"] == "2026-10-16.md"
     assert cable["feeder_cable_atp_names"] == ["EQ-1 Cable ATP.pdf"]
     assert cable["feeder_cable_atp_files"][0]["url"].endswith("EQ-1%20Cable%20ATP.pdf")
     assert len(payload["mv_daily_report_files"]) == 2
+    assert len(payload["eps_daily_report_files"]) == 1
 
 
 def test_separate_pdf_pages_supply_distinct_floor_equipment_and_share_fixed_layer(tmp_path):

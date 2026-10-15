@@ -12,10 +12,12 @@ import fitz
 
 try:
     from .build_power_plan import FEEDER_CABLE_ATP_DIR, MV_REPORT_DIR, build_feeder_cable_atp_index, build_mv_test_index, normalize_equipment_key
+    from .eps_daily_test import EPS_DAILY_REPORT_DIR, build_eps_daily_test_index
     from .layout_connections import build_layout_connections
     from .json_utils import file_metadata, load_records_json, write_json
 except ImportError:
     from build_power_plan import FEEDER_CABLE_ATP_DIR, MV_REPORT_DIR, build_feeder_cable_atp_index, build_mv_test_index, normalize_equipment_key
+    from eps_daily_test import EPS_DAILY_REPORT_DIR, build_eps_daily_test_index
     from layout_connections import build_layout_connections
     from json_utils import file_metadata, load_records_json, write_json
 
@@ -56,6 +58,7 @@ def build_layout_plan(
     output_path: Path = DATA_DIR / "layout_plan.json",
     mv_report_dir: Path = MV_REPORT_DIR,
     feeder_cable_atp_dir: Path = FEEDER_CABLE_ATP_DIR,
+    eps_daily_report_dir: Path = EPS_DAILY_REPORT_DIR,
 ) -> dict[str, Any]:
     config = json.loads(config_path.read_text(encoding="utf-8"))
     equipment_index: dict[str, list[dict[str, Any]]] = {}
@@ -176,9 +179,12 @@ def build_layout_plan(
                 record["rect"] = {**rect, "x": round(rect["x"] + dx, 3), "y": round(rect["y"] + dy, 3)}
         aligned_floors[spec["floor_id"]] = floor
     mv_test_index, mv_report_files = build_mv_test_index(mv_report_dir)
+    eps_daily_test_index, eps_daily_report_files = build_eps_daily_test_index(eps_daily_report_dir)
     feeder_cable_atp_index = build_feeder_cable_atp_index(feeder_cable_atp_dir)
     layout_keys = {record["equipment_key"] for record in fixed_equipment + [record for floor in floors for record in floor["equipment"]]}
-    cables, cable_diagnostics = build_layout_connections(equipment_index, layout_keys, mv_test_index, feeder_cable_atp_index)
+    cables, cable_diagnostics = build_layout_connections(
+        equipment_index, layout_keys, mv_test_index, feeder_cable_atp_index, eps_daily_test_index,
+    )
     # Preserve all placements; the UI chooses the first fixed source floor per ID.
     payload = {
         "generated_at": datetime.now().astimezone().isoformat(),
@@ -190,6 +196,7 @@ def build_layout_plan(
         "cables": cables,
         "cable_diagnostics": cable_diagnostics,
         "mv_daily_report_files": [file_metadata(path) for path in mv_report_files],
+        "eps_daily_report_files": [file_metadata(path) for path in eps_daily_report_files],
     }
     write_json(output_path, payload)
     return payload

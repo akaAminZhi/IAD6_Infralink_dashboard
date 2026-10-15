@@ -76,6 +76,36 @@ describe("2.5D Layout connections", () => {
     expect(container.querySelector("[data-mv-termination]")).not.toBeInTheDocument();
   });
 
+  it("uses EPS daily cable results even when MV daily has no entry", async () => {
+    const manifest = isometricDataset();
+    manifest.cables![0].eps_daily_test_status = "tested";
+    manifest.cables![0].eps_daily_test_date = "2026-10-14";
+    manifest.cables![0].eps_daily_report_name = "10-14.md";
+    const user = userEvent.setup();
+    const { container } = render(<LayoutPlanPage />);
+    await screen.findByRole("button", { name: "2.5D" });
+    expect(container.querySelector('[data-cable-state="pending"]')).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /FDR-IAD06-EQ-1-IAD06-EQ-FIX:/ }));
+    expect(screen.getByLabelText("Cable details")).toHaveTextContent("Tested - Infralink Update Pending");
+    expect(screen.getByLabelText("Cable details")).toHaveTextContent("EPS daily: tested · 2026-10-14 · 10-14.md");
+  });
+
+  it("treats an Infralink Feeder Cable ATP report as the primary cable test evidence", async () => {
+    const manifest = isometricDataset();
+    manifest.cables![0] = cable({
+      cable_id: "FDR-IAD06-MDB6-01A-IAD06-ATS-TX-HTP6-01A",
+      system_element_status: "Pre-Installation Complete",
+      eps_daily_test_status: "tested",
+      feeder_cable_atp_names: ["FDR-IAD06-MDB6-01A-IAD06-ATS-TX-HTP6-01A.pdf"],
+    });
+    const user = userEvent.setup();
+    const { container } = render(<LayoutPlanPage />);
+    await screen.findByRole("button", { name: "2.5D" });
+    expect(container.querySelector('[data-cable-state="updated"]')).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /FDR-IAD06-MDB6-01A-IAD06-ATS-TX-HTP6-01A:/ }));
+    expect(screen.getByLabelText("Cable details")).toHaveTextContent("Tested + Infralink Updated");
+  });
+
   it("opens equipment and exact-ID cable PDFs from the shared report manifest", async () => {
     const manifest = isometricDataset();
     const equipmentReport = "IAD06-EQ-1 - NETA Test Report-01.pdf";

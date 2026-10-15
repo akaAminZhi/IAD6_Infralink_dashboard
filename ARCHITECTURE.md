@@ -139,24 +139,29 @@ in the existing browser-local storage, with existing global reset behavior.
 
 Layout also offers a default 2.5D orthographic 2:1 SVG projection with illustrative device
 heights and overhead cable routing, while keeping source footprints unchanged.
-`layout_connections.py` adds optional `cables`, `cable_diagnostics`, and MV report
-source metadata to the Layout manifest. Classification uses normalized equipment
+`layout_connections.py` adds optional `cables`, `cable_diagnostics`, and EPS/MV
+daily report source metadata to the Layout manifest. Classification uses normalized equipment
 Type; termination records are excluded. Complete FDR endpoint IDs are matched
 against unique equipment IDs; unresolved/single-ended FD records remain in the
 dataset. The frontend draws only unique endpoint placements visible on the chosen
 floor, avoiding invented cross-floor or duplicate-placement associations.
 `layoutIsometricUtils.ts` owns projection, device kinds, connection placement, and
 overhead paths. Both views share the existing camera and planning state; switching
-views resets the camera/selection geometry. `cableTestUtils.ts` supplies the same
-cable readiness rules to Layout and MV Equipment. Cable test evidence and equipment
+views resets the camera/selection geometry. Layout indexes exact FDR IDs from raw
+EPS `Daily_test_report` files as well as MV daily results. `cableTestUtils.ts`
+first treats a Feeder Cable ATP filename in System Elements as an attached
+Infralink test report, then classifies the latest dated daily outcome when no
+report is attached, using failure first on a same-day tie.
+Cable test evidence and equipment
 energisation remain independent; equipment tracking exclusions do not remove
 physical cable connections. Global dashboard initial loading is unchanged.
 Layout carries equipment NETA report names and cable `Feeder Cable ATP` names
 from normalized System Elements. Its cable builder reuses Power Plan's ATP file
 index, matching each listed filename within the exact cable ID folder. The
 frontend previews those local PDFs; cable NETA PDFs are additionally resolved
-by exact full FDR filename in the shared report manifest. Missing files remain
-references without clickable links or inferred test completion.
+by exact full FDR filename in the shared report manifest. A missing local PDF
+remains an unclickable report reference, while its Infralink attachment field
+still confirms that the report was entered there.
 Linked ATP/NETA names are shown once; equipment PDF previews prefer GC-renamed
 links. In 2.5D, selection only changes emphasis and detail state; explicit
 Zoom actions own camera changes.

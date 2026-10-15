@@ -528,7 +528,7 @@ export function LayoutPlanPage() {
           <p className="mt-1 text-xs text-muted-foreground">{inspected.fixed ? "Fixed across floors" : "Floor equipment"} · Select for details</p>
         </div> : null}
       </div>
-      <aside className="space-y-4 rounded-lg border bg-card p-4">
+      <aside className="h-[68vh] min-h-[400px] space-y-4 overflow-y-auto overscroll-contain rounded-lg border bg-card p-4 [scrollbar-gutter:stable]">
         {isometric && selectedCable ? <div className="space-y-3 border-b pb-4" aria-label="Cable details">
           <div className="flex items-start justify-between gap-2"><h3 className="text-sm font-semibold">Cable connection</h3>
             <Button variant="ghost" aria-label="Close cable details" onClick={() => setSelectedCableId(null)}><X className="h-4 w-4" /></Button></div>
@@ -540,13 +540,16 @@ export function LayoutPlanPage() {
           <p className="text-sm font-medium" style={{ color: CABLE_TEST_STATES[cableTestState(selectedCable)].color }}>{CABLE_TEST_STATES[cableTestState(selectedCable)].label}</p>
           <p className="text-xs">Type: {selectedCable.equipment_type}</p>
           <p className="text-xs">Infralink: {selectedCable.system_element_status ?? "Unknown"}</p>
+          <p className="text-xs">EPS daily: {selectedCable.eps_daily_test_status?.replace(/_/g, " ") ?? "No test evidence"}{selectedCable.eps_daily_test_date ? ` · ${selectedCable.eps_daily_test_date}` : ""}{selectedCable.eps_daily_report_name ? ` · ${selectedCable.eps_daily_report_name}` : ""}</p>
           <p className="text-xs">MV daily: {selectedCable.mv_daily_test_status?.replace(/_/g, " ") ?? "No test evidence"}{selectedCable.mv_daily_test_date ? ` · ${selectedCable.mv_daily_test_date}` : ""}</p>
           <p className="text-xs">NETA: {selectedCable.neta_complete ? "Complete" : "Not confirmed"}</p>
           <FeederCableAtpReports key={selectedCable.cable_id} files={selectedCable.feeder_cable_atp_files ?? []}
             names={selectedCable.feeder_cable_atp_names ?? []} required={selectedCable.feeder_cable_atp_required ?? false} />
           {selectedCableReports.length ? <section className="space-y-2" aria-label="Cable test reports">
             <h4 className="text-xs font-medium uppercase text-muted-foreground">Cable NETA reports</h4>
-            <NetaReportChips reports={selectedCableReports} showLinkedFileNames stackedCompact />
+            <div className="max-h-48 overflow-y-auto pr-1 [scrollbar-gutter:stable]" role="region" aria-label="Cable NETA report list" tabIndex={0}>
+              <NetaReportChips reports={selectedCableReports} showLinkedFileNames stackedCompact />
+            </div>
           </section> : null}
           {selectedCable.neta_complete && !selectedCable.neta_test_report ? <p className="text-xs text-red-700">Data quality: NETA complete but report is missing.</p> : null}
           {!connectionIds.has(selectedCable.cable_id) ? <p className="text-xs text-amber-700">Connection is not drawn: {selectedCable.connection_status === "resolved" ? "endpoint is on another floor or has multiple placements" : selectedCable.connection_status.replace(/_/g, " ")}.</p> : null}
@@ -571,7 +574,9 @@ export function LayoutPlanPage() {
           <p className="text-sm font-medium">{LAYOUT_STATUS_LABELS[statusOf(selected)]}</p>
           {selectedEquipmentReports.length ? <section className="space-y-2" aria-label="Equipment test reports">
             <h4 className="text-xs font-medium uppercase text-muted-foreground">NETA test reports</h4>
-            <NetaReportChips reports={selectedEquipmentReports} compactNameMode="gc" showLinkedFileNames stackedCompact />
+            <div className="h-48 overflow-y-auto pr-1 [scrollbar-gutter:stable]" role="region" aria-label="Equipment NETA report list" tabIndex={0}>
+              <NetaReportChips reports={selectedEquipmentReports} compactNameMode="gc" showLinkedFileNames stackedCompact />
+            </div>
           </section> : null}
           <p className="text-xs text-muted-foreground">{overrides[selected.equipment_key] && !selected.energized_completed_at ? "Manual override · saved in this browser" : "From SystemElements Excel"}</p>
           <div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => focusDevice(selected)}>Zoom to device</Button>

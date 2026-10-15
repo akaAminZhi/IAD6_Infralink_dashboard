@@ -1,11 +1,11 @@
 from scripts.etl.layout_connections import build_layout_connections
 
 
-def build(records, keys=None, history=None, atp=None):
+def build(records, keys=None, history=None, atp=None, eps=None):
     index = {}
     for record in records:
         index.setdefault(record["equipment_id"].removeprefix("IAD06-"), []).append(record)
-    return build_layout_connections(index, keys or {"TX-UPP6-06A", "UPP6-06A"}, history or {}, atp or {})
+    return build_layout_connections(index, keys or {"TX-UPP6-06A", "UPP6-06A"}, history or {}, atp or {}, eps or {})
 
 
 def assets():
@@ -83,3 +83,14 @@ def test_feeder_cable_atp_uses_excel_filenames_and_exact_cable_folder():
     cables, _ = build(assets() + [cable])
     assert cables[0]["feeder_cable_atp_files"] == []
     assert cables[0]["feeder_cable_atp_status"] == "missing_required"
+
+
+def test_eps_daily_evidence_joins_only_the_full_cable_id():
+    cable = {"equipment_id": CABLE_ID, "equipment_type": "Feeder Cable - LV"}
+    cables, _ = build(assets() + [cable], eps={
+        CABLE_ID: [{"date": "2026-10-14", "status": "tested", "report_name": "10-14.md"}],
+        f"{CABLE_ID}-1": [{"date": "2026-10-15", "status": "failed", "report_name": "10-15.md"}],
+    })
+    assert cables[0]["eps_daily_test_status"] == "tested"
+    assert cables[0]["eps_daily_test_date"] == "2026-10-14"
+    assert cables[0]["eps_daily_report_name"] == "10-14.md"

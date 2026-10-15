@@ -279,6 +279,9 @@ export interface LayoutCableRecord {
   feeder_cable_atp_status?: string;
   mv_daily_test_status: string | null;
   mv_daily_test_date: string | null;
+  eps_daily_test_status?: "tested" | "failed" | "retested_and_passed" | null;
+  eps_daily_test_date?: string | null;
+  eps_daily_report_name?: string | null;
 }
 
 export interface LayoutRegionRecord {
@@ -310,6 +313,7 @@ export interface LayoutPlanManifest {
   cables?: LayoutCableRecord[];
   cable_diagnostics?: { cable_id: string; reason: string; source_equipment_key: string | null; target_equipment_key: string | null }[];
   mv_daily_report_files?: SourceFileMetadata[];
+  eps_daily_report_files?: SourceFileMetadata[];
   diagnostics: { floor_id: string; label?: string; reason: string; candidate_equipment_ids?: string[] }[];
 }
 

@@ -90,16 +90,23 @@ once. Equipment reports prefer the GC-renamed PDF link. In 2.5D, selecting
 equipment, a cable, or a search result keeps the current camera; the detail
 panel's Zoom buttons change it only when clicked.
 
-Cable testing uses the shared MV Equipment readiness rule: a latest failed daily
-result takes precedence; exact `L3: Pre Func Testing & Startup` means tested and
-Infralink updated; a passed/retested-and-passed MV daily result means tested with
-Infralink update pending; otherwise partial and unconfirmed remain distinct.
+Cable testing uses the shared cable readiness rule. Layout matches complete FDR
+IDs in the EPS `Daily_test_report` Tested, Failed and Retested And Passed sections;
+it also keeps MV daily evidence where available. A Feeder Cable ATP filename
+listed in System Elements takes first priority as evidence that the test report
+is attached in Infralink, even when the lifecycle status has not reached L3.
+Without an attached report, the latest dated daily result wins, with a same-day
+failure taking precedence; exact `L3: Pre Func Testing & Startup` means tested
+and Infralink updated; a passed EPS or MV daily result means tested with
+Infralink update pending.
+Otherwise partial and unconfirmed remain distinct.
 Installation Complete alone does not confirm testing. Green/blue solid and
 amber/red/gray dashed lines distinguish these states, with text labels in the
 legend and details. NETA completion and missing report evidence are shown
-separately. The builder reads the same MV daily report index as Power Plan/MV.
-Rebuild with `python scripts/etl/build_layout_plan.py` after normalized equipment
-or MV daily reports change; normal ETL also performs this step.
+separately. The Layout builder reads raw EPS reports and the same MV daily report
+index as Power Plan/MV. Rebuild with `python scripts/etl/build_layout_plan.py`
+after EPS/MV daily reports or normalized equipment change; normal ETL also
+performs this step. Layout loads the updated generated data on the next page load.
 
 Open `/layout` (Layout in the sidebar) for equipment rectangles extracted from
 `raw_data/power_plan/Floor_Layout_Plan.pdf`. Rectangle comments provide
