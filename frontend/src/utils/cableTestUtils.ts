@@ -19,6 +19,21 @@ export const CABLE_TEST_STATES: Record<CableTestState, { label: string; color: s
   unconfirmed: { label: "Testing Not Confirmed", color: "#64748b", dash: "5 4" },
 };
 
+export type LayoutCableTestState = Exclude<CableTestState, "partial">;
+
+export const LAYOUT_CABLE_TEST_STATES: Record<LayoutCableTestState, { label: string; color: string; dash?: string }> = {
+  updated: CABLE_TEST_STATES.updated,
+  pending: CABLE_TEST_STATES.pending,
+  failed: CABLE_TEST_STATES.failed,
+  unconfirmed: CABLE_TEST_STATES.unconfirmed,
+};
+
+/** Layout only shows completed test outcomes; partial daily evidence stays in the detail fields. */
+export function layoutCableTestState(evidence: CableTestEvidence): LayoutCableTestState {
+  const state = cableTestState(evidence);
+  return state === "partial" ? "unconfirmed" : state;
+}
+
 export function isMvDailyTestPassed(evidence: CableTestEvidence): boolean {
   return ["tested_and_passed", "retested_and_passed"].includes(evidence.mv_daily_test_status ?? "");
 }

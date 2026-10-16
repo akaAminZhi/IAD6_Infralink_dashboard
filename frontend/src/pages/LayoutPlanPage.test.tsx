@@ -165,7 +165,7 @@ describe("2.5D Layout connections", () => {
     expect(container.querySelector("iframe")).toHaveAttribute("src", `/feeder-cable-atp/${report}`);
   });
 
-  it("traces a device's cables, distinguishes failed/partial/daily passed, and preserves missing-report problems", async () => {
+  it("traces a device's cables, treats partial as unconfirmed, and preserves missing-report problems", async () => {
     const manifest = isometricDataset();
     manifest.cables![0] = cable({ mv_daily_test_status: "failed", system_element_status: "L3: Pre Func Testing & Startup",
       neta_complete: true });
@@ -176,7 +176,8 @@ describe("2.5D Layout connections", () => {
     const list = screen.getByLabelText("Connected cables");
     expect(list).toHaveTextContent("Connected cables (2)");
     expect(list).toHaveTextContent("Test Failed");
-    expect(list).toHaveTextContent("Partially Tested");
+    expect(list).toHaveTextContent("Testing Not Confirmed");
+    expect(screen.queryByText("Partially Tested")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /↔ EQ-FIX/ }));
     expect(screen.getByLabelText("Cable details")).toHaveTextContent("NETA complete but report is missing");
     await user.click(screen.getByRole("button", { name: /↔ EQ-2/ }));

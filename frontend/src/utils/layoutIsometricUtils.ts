@@ -64,20 +64,85 @@ export function placedLayoutCables(cables: LayoutCableRecord[], rows: LayoutEqui
 }
 
 export function overheadCablePoints(connection: PlacedLayoutCable, lane = 0): PowerPlanPoint[] {
-  const { source, target } = connection;
+  // Reversed feeder pairs share one base curve before their lane offsets are applied.
+  const { source, target } = connection.source.equipment_key <= connection.target.equipment_key
+    ? connection : { source: connection.target, target: connection.source };
   const a = insetEquipmentRect(source.rect), b = insetEquipmentRect(target.rect);
   const ax = a.x + a.width / 2, ay = a.y + a.height / 2;
   const bx = b.x + b.width / 2, by = b.y + b.height / 2;
   const ah = layoutDeviceHeight(source), bh = layoutDeviceHeight(target);
+  const roomConnection = !source.fixed && !target.fixed;
   if (isNearbyCable(connection)) {
     const start = projectLayoutPoint(ax, ay, ah), end = projectLayoutPoint(bx, by, bh);
-    const lift = Math.max(3, Math.min(12, Math.hypot(ax - bx, ay - by) * 0.18));
-    return [start, { x: start.x + (end.x - start.x) * 0.28, y: start.y - lift },
-      { x: end.x - (end.x - start.x) * 0.28, y: end.y - lift }, end];
+    const lift = roomConnection
+      ? Math.max(8, Math.min(14, Math.hypot(ax - bx, ay - by) * 0.18))
+      : Math.max(3, Math.min(12, Math.hypot(ax - bx, ay - by) * 0.18));
+    const controlY = Math.min(start.y, end.y) - lift + lane;
+    return [start, { x: start.x + (end.x - start.x) * 0.28, y: controlY },
+      { x: end.x - (end.x - start.x) * 0.28, y: controlY }, end];
   }
-  const elevation = Math.max(ah, bh) + 6 + (lane % 4) * 1.2;
-  return [projectLayoutPoint(ax, ay, ah), projectLayoutPoint(ax, ay, elevation),
-    projectLayoutPoint(bx, ay, elevation), projectLayoutPoint(bx, by, elevation), projectLayoutPoint(bx, by, bh)];
+  const start = projectLayoutPoint(ax, ay, ah), end = projectLayoutPoint(bx, by, bh);
+  if (roomConnection) {
+    // One 2:1 isometric cable-tray direction keeps distant room runs parallel above the cabinet rows.
+    const intercept = Math.min(start.y - start.x * 0.5, end.y - end.x * 0.5) - 15 + lane;
+    const direction = Math.sign(end.x - start.x) || 1;
+    const bend = Math.min(18, Math.abs(end.x - start.x) * 0.22);
+    const trayStartX = start.x + direction * bend, trayEndX = end.x - direction * bend;
+    return [start, { x: trayStartX, y: trayStartX * 0.5 + intercept },
+      { x: trayEndX, y: trayEndX * 0.5 + intercept }, end];
+  }
+  const lift = Math.max(8, Math.min(22, Math.hypot(ax - bx, ay - by) * 0.12));
+  const controlY = Math.min(start.y, end.y) - lift + lane;
+  return [start, { x: start.x + (end.x - start.x) * 0.28, y: controlY },
+    { x: end.x - (end.x - start.x) * 0.28, y: controlY }, end];
+}
+
+/** Stable symmetric lanes keep separate cables between the same devices visible. */
+export function layoutCableLanes(connections: PlacedLayoutCable[]): number[] {
+  const bundles = new Map<string, number[]>();
+  connections.forEach(({ source, target }, index) => {
+    const pair = [source.equipment_key, target.equipment_key].sort().join("\u0000");
+    const indexes = bundles.get(pair) ?? [];
+    indexes.push(index);
+    bundles.set(pair, indexes);
+  });
+  const lanes = Array(connections.length).fill(0) as number[];
+  for (const indexes of bundles.values()) {
+    indexes.sort((a, b) => connections[a].cable.cable_id.localeCompare(connections[b].cable.cable_id));
+    indexes.forEach((index, position) => {
+      const { source, target } = connections[index];
+      // Every paired route rises above its endpoints; the second cable never drops below the cabinets.
+      lanes[index] = indexes.length > 1 ? -(position + 1) * (source.fixed && target.fixed ? 6 : 4) : 0;
+    });
+  }
+  const roomLongIndexes = connections.flatMap((connection, index) =>
+    !connection.source.fixed && !connection.target.fixed && !isNearbyCable(connection) ? [index] : []);
+  const degree = new Map<string, number>();
+  for (const index of roomLongIndexes) {
+    for (const key of [connections[index].source.equipment_key, connections[index].target.equipment_key]) {
+      degree.set(key, (degree.get(key) ?? 0) + 1);
+    }
+  }
+  const roomHubs = new Map<string, number[]>();
+  for (const index of roomLongIndexes) {
+    const { source, target } = connections[index];
+    const sourceDegree = degree.get(source.equipment_key) ?? 0, targetDegree = degree.get(target.equipment_key) ?? 0;
+    const hub = sourceDegree > targetDegree || (sourceDegree === targetDegree && source.equipment_key < target.equipment_key)
+      ? source.equipment_key : target.equipment_key;
+    const indexes = roomHubs.get(hub) ?? [];
+    indexes.push(index);
+    roomHubs.set(hub, indexes);
+  }
+  for (const [hub, indexes] of roomHubs) {
+    const otherX = (index: number) => {
+      const { source, target } = connections[index];
+      const other = source.equipment_key === hub ? target : source;
+      return other.rect.x + other.rect.width / 2 - other.rect.y - other.rect.height / 2;
+    };
+    indexes.sort((a, b) => otherX(a) - otherX(b) || connections[a].cable.cable_id.localeCompare(connections[b].cable.cable_id));
+    indexes.forEach((index, position) => { lanes[index] = -position * 2.5; });
+  }
+  return lanes;
 }
 
 export function isNearbyCable({ source, target }: PlacedLayoutCable): boolean {
@@ -86,29 +151,18 @@ export function isNearbyCable({ source, target }: PlacedLayoutCable): boolean {
   return distance <= Math.max(28, Math.min(90, Math.max(a.width, a.height, b.width, b.height) * 2.4));
 }
 
-export function layoutConnectionBounds(connection: PlacedLayoutCable): PowerPlanRect {
-  const points = [...overheadCablePoints(connection, 3), ...[connection.source, connection.target].flatMap((row) =>
+export function layoutConnectionBounds(connection: PlacedLayoutCable, lane = 0): PowerPlanRect {
+  const points = [...overheadCablePoints(connection, lane), ...[connection.source, connection.target].flatMap((row) =>
     [...projectedRectPoints(row.rect), ...projectedRectPoints(row.rect, layoutDeviceHeight(row) + 3)])];
   const x = Math.min(...points.map((p) => p.x)), y = Math.min(...points.map((p) => p.y));
   return { x, y, width: Math.max(...points.map((p) => p.x)) - x, height: Math.max(...points.map((p) => p.y)) - y };
 }
 
 export function layoutCablePath(connection: PlacedLayoutCable, lane = 0): string {
-  const points = overheadCablePoints(connection, lane);
-  if (isNearbyCable(connection)) {
-    const [a, b, c, d] = points;
-    return `M ${a.x} ${a.y} C ${b.x} ${b.y}, ${c.x} ${c.y}, ${d.x} ${d.y}`;
+  const [a, b, c, d] = overheadCablePoints(connection, lane);
+  if (!connection.source.fixed && !connection.target.fixed && !isNearbyCable(connection)) {
+    return `M ${a.x} ${a.y} L ${a.x} ${b.y + 5} Q ${a.x} ${b.y} ${b.x} ${b.y}` +
+      ` L ${c.x} ${c.y} Q ${d.x} ${c.y} ${d.x} ${c.y + 5} L ${d.x} ${d.y}`;
   }
-  const commands = [`M ${points[0].x} ${points[0].y}`];
-  for (let i = 1; i < points.length - 1; i++) {
-    const previous = points[i - 1], current = points[i], next = points[i + 1];
-    const incoming = Math.hypot(current.x - previous.x, current.y - previous.y);
-    const outgoing = Math.hypot(next.x - current.x, next.y - current.y);
-    if (!incoming || !outgoing) continue;
-    const radius = Math.min(4, incoming * 0.35, outgoing * 0.35);
-    commands.push(`L ${current.x + (previous.x - current.x) / incoming * radius} ${current.y + (previous.y - current.y) / incoming * radius}`,
-      `Q ${current.x} ${current.y} ${current.x + (next.x - current.x) / outgoing * radius} ${current.y + (next.y - current.y) / outgoing * radius}`);
-  }
-  const last = points[points.length - 1];
-  return [...commands, `L ${last.x} ${last.y}`].join(" ");
+  return `M ${a.x} ${a.y} C ${b.x} ${b.y}, ${c.x} ${c.y}, ${d.x} ${d.y}`;
 }

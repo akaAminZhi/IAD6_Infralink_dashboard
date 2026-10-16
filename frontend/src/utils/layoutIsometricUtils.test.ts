@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { LayoutCableRecord, LayoutEquipmentRecord } from "../types/data";
-import { isNearbyCable, layoutCablePath, layoutConnectionBounds, layoutDeviceKind, overheadCablePoints, placedLayoutCables, projectLayoutPoint, projectedLayoutBounds } from "./layoutIsometricUtils";
+import { isNearbyCable, layoutCableLanes, layoutCablePath, layoutConnectionBounds, layoutDeviceKind, overheadCablePoints, placedLayoutCables, projectLayoutPoint, projectedLayoutBounds } from "./layoutIsometricUtils";
 
 const device = (key: string, x = 0): LayoutEquipmentRecord => ({ equipment_key: key, label: key, annotation_id: key,
   rect: { x, y: 20, width: 10, height: 8 }, fixed: false, source_floor_id: "first", match_status: "matched",
@@ -25,11 +25,17 @@ describe("2.5D geometry", () => {
     expect(start.y - control.y).toBeLessThanOrEqual(12);
   });
 
-  it("fits long cable bends as well as both equipment footprints", () => {
+  it("fits long room cable trays as well as both equipment footprints", () => {
     const connection = { cable, source: { ...device("A"), rect: { x: 0, y: 100, width: 10, height: 8 } }, target: device("B", 200) };
     expect(isNearbyCable(connection)).toBe(false);
     expect(layoutCablePath(connection)).toContain(" Q ");
-    const bounds = layoutConnectionBounds(connection);
+    const [start, trayStart, trayEnd, end] = overheadCablePoints(connection);
+    expect(layoutCablePath(connection)).toContain(`L ${start.x} ${trayStart.y + 5}`);
+    expect(layoutCablePath(connection)).toContain(`L ${end.x} ${end.y}`);
+    const intercept = Math.min(start.y - start.x * 0.5, end.y - end.x * 0.5) - 15;
+    expect(trayStart.y - trayStart.x * 0.5).toBeCloseTo(intercept);
+    expect(trayEnd.y - trayEnd.x * 0.5).toBeCloseTo(intercept);
+    const bounds = layoutConnectionBounds(connection, 3);
     for (const point of overheadCablePoints(connection, 3)) {
       expect(point.x).toBeGreaterThanOrEqual(bounds.x);
       expect(point.y).toBeGreaterThanOrEqual(bounds.y);
@@ -42,16 +48,24 @@ describe("2.5D geometry", () => {
     expect(layoutDeviceKind(device(key))).toBe(kind);
   });
 
-  it("raises cable runs above both device tops and reserves height in projected bounds", () => {
+  it("raises long room cable trays above both device tops and reserves height in projected bounds", () => {
     const connection = { cable, source: device("A"), target: device("B", 100) };
     const points = overheadCablePoints(connection);
     expect(points[1].y).toBeLessThan(points[0].y);
-    expect(points[3].y).toBeLessThan(points[4].y);
-    expect(points[0].x).toBe(points[1].x);
-    expect(points[3].x).toBe(points[4].x);
+    expect(points[2].y).toBeLessThan(points[3].y);
     const bounds = projectedLayoutBounds(connection.source.rect, 42);
     expect(bounds.y).toBe(projectLayoutPoint(0, 20, 42).y);
     expect(bounds.height).toBeGreaterThan(42);
+  });
+
+  it("separates reverse feeders into upward lanes on the same base route", () => {
+    const forward = { cable, source: device("A"), target: device("B", 100) };
+    const reverse = { cable: { ...cable, cable_id: "FDR-IAD06-B-IAD06-A" }, source: forward.target, target: forward.source };
+    const lanes = layoutCableLanes([forward, reverse]);
+    expect(lanes[0]).not.toBe(lanes[1]);
+    expect(lanes.every((lane) => lane <= 0)).toBe(true);
+    expect(layoutCablePath(forward, lanes[0])).not.toBe(layoutCablePath(reverse, lanes[1]));
+    expect(layoutCablePath(forward, lanes[0])).toBe(layoutCablePath(reverse, lanes[0]));
   });
 
   it("does not choose arbitrary repeated positions, missing floors, or unresolved endpoint pairs", () => {

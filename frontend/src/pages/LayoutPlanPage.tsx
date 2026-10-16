@@ -14,11 +14,11 @@ import { useFrameState } from "../hooks/useFrameState";
 import { useNetaReportManifest } from "../contexts/NetaReportManifestContext";
 import type { LayoutCableRecord, LayoutEquipmentRecord, LayoutPlanManifest, PowerPlanRect } from "../types/data";
 import { fetchJson } from "../utils/dataLoaders";
-import { CABLE_TEST_STATES, cableTestState } from "../utils/cableTestUtils";
+import { LAYOUT_CABLE_TEST_STATES, layoutCableTestState } from "../utils/cableTestUtils";
 import { getLayoutCableReportNames } from "../utils/layoutReportUtils";
 import { getNetaReportNames } from "../utils/netaReports";
 import {
-  DEVICE_KIND_LABELS, LAYOUT_VIEW_KEY, isNearbyCable, layoutCablePath, layoutConnectionBounds, layoutDeviceHeight, layoutDeviceKind,
+  DEVICE_KIND_LABELS, LAYOUT_VIEW_KEY, isNearbyCable, layoutCableLanes, layoutCablePath, layoutConnectionBounds, layoutDeviceHeight, layoutDeviceKind,
   placedLayoutCables, projectLayoutPoint, projectedLayoutBounds,
 } from "../utils/layoutIsometricUtils";
 import {
@@ -165,10 +165,15 @@ export function LayoutPlanPage() {
 
   const rows = useMemo(() => manifest ? visibleLayoutEquipment(manifest, floorId) : [], [manifest, floorId]);
   const connections = useMemo(() => placedLayoutCables(manifest?.cables ?? [], rows), [manifest, rows]);
-  const cableGeometry = useMemo(() => connections.map((connection, index) => ({ connection,
-    path: layoutCablePath(connection, index), route: isNearbyCable(connection) ? "arc" as const : "rounded" as const,
-    extent: layoutConnectionBounds(connection),
-  })), [connections]);
+  const cableGeometry = useMemo(() => {
+    const lanes = layoutCableLanes(connections);
+    return connections.map((connection, index) => ({ connection,
+      path: layoutCablePath(connection, lanes[index]), route: isNearbyCable(connection) ? "arc" as const : "long" as const,
+      zone: connection.source.fixed && connection.target.fixed ? "fixed" as const
+        : connection.source.fixed || connection.target.fixed ? "mixed" as const : "room" as const,
+      extent: layoutConnectionBounds(connection, lanes[index]),
+    }));
+  }, [connections]);
   const connectionIds = useMemo(() => new Set(connections.map((item) => item.cable.cable_id)), [connections]);
   const cableIndex = useMemo(() => {
     const byId = new Map<string, LayoutCableRecord>(), byEquipment = new Map<string, LayoutCableRecord[]>();
@@ -200,8 +205,11 @@ export function LayoutPlanPage() {
     const allRegions = manifest.floors.flatMap((floor) => visibleLayoutRegions(manifest, floor.floor_id));
     const labels = layoutRoomLabels(allRegions);
     const records = [...allRecords, ...allRegions, ...labels];
-    const cableBounds = manifest.floors.flatMap((floor) => placedLayoutCables(manifest.cables ?? [], visibleLayoutEquipment(manifest, floor.floor_id)))
-      .map((connection) => ({ rect: layoutConnectionBounds(connection) }));
+    const cableBounds = manifest.floors.flatMap((floor) => {
+      const floorConnections = placedLayoutCables(manifest.cables ?? [], visibleLayoutEquipment(manifest, floor.floor_id));
+      const lanes = layoutCableLanes(floorConnections);
+      return floorConnections.map((connection, index) => ({ rect: layoutConnectionBounds(connection, lanes[index]) }));
+    });
     return { plan: layoutBounds(records), isometric: layoutBounds([...records.map((record) => ({ rect: projectedLayoutBounds(record.rect, 32) })), ...cableBounds]) };
   }, [manifest]);
   const fullBounds = isometric ? allBounds.isometric : allBounds.plan;
@@ -453,13 +461,25 @@ export function LayoutPlanPage() {
   function focusCable(cableId: string) {
     setSelectedCableId(cableId); setInspection(null); setSelectionMode(false); setSelectionKeys(new Set()); setSearch(""); setSearchOpen(false);
     const connection = connections.find((item) => item.cable.cable_id === cableId);
-    if (connection) setViewport(isometric ? layoutBounds([{ rect: layoutConnectionBounds(connection) }])
+    if (connection) setViewport(isometric ? layoutBounds([{ rect: cableGeometry.find(({ connection: item }) => item.cable.cable_id === cableId)?.extent
+      ?? layoutConnectionBounds(connection) }])
       : layoutBounds([connection.source, connection.target]));
   }
 
   if (loading) return <LoadingState />;
   if (!manifest) return <ErrorState message="Layout data could not be loaded. Run the Layout ETL builder and retry." onRetry={() => setRetry((value) => value + 1)} />;
   if (!manifest.floors.length) return <EmptyState title="No layout floors available" description="No configured floor drawing is available. Refresh the layout data after adding it." />;
+
+  const isCableActive = (cable: LayoutCableRecord) => selectedCableId ? selectedCableId === cable.cable_id : !!selected &&
+    [cable.source_equipment_key, cable.target_equipment_key].includes(selected.equipment_key);
+  const renderCable = ({ connection, path, route, zone }: (typeof cableGeometry)[number]) => {
+    const cable = connection.cable;
+    const active = isCableActive(cable);
+    const dimmed = ((!!selectedCableId || !!selected) && !active) || (!!query && !active &&
+      ![cable.cable_id, cable.source_equipment_key ?? "", cable.target_equipment_key ?? ""].some((key) => key.toUpperCase().includes(query)));
+    return <LayoutCable key={cable.cable_id} cable={cable} path={path} route={route} zone={zone} selected={selectedCableId === cable.cable_id}
+      active={active} dimmed={dimmed} selectionMode={selectionMode} onSelect={selectCable} />;
+  };
 
   return <div className="space-y-4">
     <div className="flex flex-wrap items-center justify-between gap-3">
@@ -525,8 +545,8 @@ export function LayoutPlanPage() {
         {showCables ? <EyeOff className="mr-2 h-4 w-4" /> : <Eye className="mr-2 h-4 w-4" />}
         {showCables ? "Hide all cables" : "Show all cables"}
       </Button>
-      {Object.entries(CABLE_TEST_STATES).map(([key, state]) => <span key={key} className="inline-flex items-center gap-2">
-        <svg width="22" height="8" aria-hidden="true"><line x1="0" x2="22" y1="4" y2="4" stroke={state.color} strokeWidth="2" strokeDasharray={state.dash} /></svg>{state.label}
+      {Object.entries(LAYOUT_CABLE_TEST_STATES).map(([key, state]) => <span key={key} className="inline-flex items-center gap-2">
+        <svg width="22" height="8" aria-hidden="true"><line x1="0" x2="22" y1="4" y2="4" stroke={state.color} strokeWidth="2.5" strokeDasharray={state.dash} /></svg>{state.label}
       </span>)}
       <Button variant="ghost" className={selected || selectedCable ? undefined : "invisible"}
         disabled={!selected && !selectedCable} onClick={clearFocus}><X className="mr-2 h-4 w-4" />Clear focus</Button>
@@ -588,15 +608,7 @@ export function LayoutPlanPage() {
             })}
           </g>
           {isometric && showCables ? <g id="layout-cables" data-layout-layer="cables">
-            {drawnCables.map(({ connection, path, route }) => {
-              const cable = connection.cable;
-              const active = selectedCableId ? selectedCableId === cable.cable_id : !!selected &&
-                [cable.source_equipment_key, cable.target_equipment_key].includes(selected.equipment_key);
-              const dimmed = (!!selectedCableId || !!selected) && !active || !!query && !active &&
-                ![cable.cable_id, cable.source_equipment_key ?? "", cable.target_equipment_key ?? ""].some((key) => key.toUpperCase().includes(query));
-              return <LayoutCable key={cable.cable_id} cable={cable} path={path} route={route} selected={selectedCableId === cable.cable_id}
-                active={active} dimmed={dimmed} selectionMode={selectionMode} onSelect={selectCable} />;
-            })}
+            {drawnCables.map(renderCable)}
           </g> : null}
           <g pointerEvents="none" data-layout-layer="selection">
             {selectionBox ? <rect {...selectionBox} fill="#2563eb" fillOpacity={0.12} stroke="#2563eb"
@@ -626,7 +638,7 @@ export function LayoutPlanPage() {
             <p className="break-all">From: {selectedCable.source_equipment_key ?? "Unresolved"}</p>
             <p className="break-all">To: {selectedCable.target_equipment_key ?? "Unresolved"}</p>
           </div>
-          <p className="text-sm font-medium" style={{ color: CABLE_TEST_STATES[cableTestState(selectedCable)].color }}>{CABLE_TEST_STATES[cableTestState(selectedCable)].label}</p>
+          <p className="text-sm font-medium" style={{ color: LAYOUT_CABLE_TEST_STATES[layoutCableTestState(selectedCable)].color }}>{LAYOUT_CABLE_TEST_STATES[layoutCableTestState(selectedCable)].label}</p>
           <p className="text-xs">Type: {selectedCable.equipment_type}</p>
           <p className="text-xs">Infralink: {selectedCable.system_element_status ?? "Unknown"}</p>
           <p className="text-xs">EPS daily: {selectedCable.eps_daily_test_status?.replace(/_/g, " ") ?? "No test evidence"}{selectedCable.eps_daily_test_date ? ` · ${selectedCable.eps_daily_test_date}` : ""}{selectedCable.eps_daily_report_name ? ` · ${selectedCable.eps_daily_report_name}` : ""}</p>
@@ -677,7 +689,7 @@ export function LayoutPlanPage() {
           <h3 className="text-sm font-semibold">Connected cables ({selectedConnections.length})</h3>
           <div className="max-h-80 space-y-2 overflow-auto">
             {selectedConnections.map((cable) => {
-              const state = CABLE_TEST_STATES[cableTestState(cable)];
+              const state = LAYOUT_CABLE_TEST_STATES[layoutCableTestState(cable)];
               const other = cable.source_equipment_key === selected.equipment_key ? cable.target_equipment_key : cable.source_equipment_key;
               return <button key={cable.cable_id} type="button" onClick={() => { setSelectedCableId(cable.cable_id); setInspection(null); }}
                 aria-pressed={selectedCableId === cable.cable_id} className={`w-full space-y-1 rounded-md border p-2 text-left hover:bg-accent ${selectedCableId === cable.cable_id ? "border-blue-500 bg-blue-50" : ""}`}>

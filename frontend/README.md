@@ -50,8 +50,13 @@ backgrounds are transparent, with restrained outlines and ground shadows.
 the fitted camera. **Escape** does the same outside box
 selection. Clicking empty map space or **Clear focus** removes focus/search
 without moving the camera. Planning overrides are unaffected. Nearby cables
-use low cubic arcs; longer routes use rounded bends with less clearance.
-Lines are 3 screen pixels normally and 4.5 pixels when highlighted.
+use low cubic arcs. FIX-to-FIX routes keep taller arcs; longer room routes rise
+straight from each cabinet to a rounded overhead band along the cabinet rows.
+Tested routes use solid green or blue
+lines; failed and unconfirmed routes remain dashed. Room lines are
+lighter than FIX lines. Multiple cables between the
+same two devices run in separate upward lanes. Selecting a cable or connected
+device widens its route.
 
 **Hide all cables / Show all cables** is an explicit visibility control. Hidden
 cables stay hidden through Global view, equipment/connection inspection, floor
@@ -108,9 +113,10 @@ Without an attached report, the latest dated daily result wins, with a same-day
 failure taking precedence; exact `L3: Pre Func Testing & Startup` means tested
 and Infralink updated; a passed EPS or MV daily result means tested with
 Infralink update pending.
-Otherwise partial and unconfirmed remain distinct.
+In Layout, partial daily evidence stays visible in the details but uses the
+unconfirmed line style until a completed test result is available.
 Installation Complete alone does not confirm testing. Green/blue solid and
-amber/red/gray dashed lines distinguish these states, with text labels in the
+red/gray dashed lines distinguish these states, with text labels in the
 legend and details. NETA completion and missing report evidence are shown
 separately. The Layout builder reads raw EPS reports and the same MV daily report
 index as Power Plan/MV. Rebuild with `python scripts/etl/build_layout_plan.py`

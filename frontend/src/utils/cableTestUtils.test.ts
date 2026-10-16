@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cableTestState } from "./cableTestUtils";
+import { cableTestState, layoutCableTestState } from "./cableTestUtils";
 
 describe("shared cable readiness", () => {
   it.each([
@@ -23,4 +23,11 @@ describe("shared cable readiness", () => {
     [{ eps_daily_test_status: "tested", feeder_cable_atp_names: [] }, "pending"],
     [{}, "unconfirmed"],
   ])("classifies %j as %s", (evidence, expected) => expect(cableTestState(evidence)).toBe(expected));
+
+  it("shows partial daily cable evidence as unconfirmed in Layout while keeping the shared result", () => {
+    const evidence = { mv_daily_test_status: "partially_tested" };
+    expect(cableTestState(evidence)).toBe("partial");
+    expect(layoutCableTestState(evidence)).toBe("unconfirmed");
+    expect(layoutCableTestState({ ...evidence, feeder_cable_atp_names: ["Cable ATP.pdf"] })).toBe("updated");
+  });
 });
