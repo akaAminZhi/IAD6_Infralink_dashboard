@@ -1,7 +1,7 @@
 import { render } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { LayoutEquipmentRecord } from "../../types/data";
-import { IsometricEquipment } from "./IsometricEquipment";
+import { IsometricEquipment, SimpleIsometricSymbols } from "./IsometricEquipment";
 import * as geometry from "../../utils/layoutIsometricUtils";
 
 function record(key: string): LayoutEquipmentRecord {
@@ -11,6 +11,23 @@ function record(key: string): LayoutEquipmentRecord {
 }
 
 describe("industrial isometric equipment models", () => {
+  it("reuses one shared silhouette for compact dense-floor equipment", () => {
+    const { container } = render(<svg><SimpleIsometricSymbols /><IsometricEquipment record={record("TX6-01A")}
+      status="notEnergized" selected={false} detailed={false} compact showLabel={false} /></svg>);
+    expect(container.querySelector('[data-device-detail="compact"] use')).toHaveAttribute("href", "#layout-simple-mvTransformer-notEnergized");
+    expect(container.querySelectorAll('[data-device-detail="compact"] *')).toHaveLength(1);
+    expect(container.querySelectorAll('#layout-simple-mvTransformer-notEnergized polygon')).toHaveLength(3);
+  });
+  it("keeps the shaded 2.5D enclosure while reducing distant model detail", () => {
+    const device = record("TX6-01A");
+    const { container, rerender } = render(<svg><IsometricEquipment record={device} status="notEnergized" selected={false} /></svg>);
+    const fullNodes = container.querySelectorAll("[data-device-model] *").length;
+    rerender(<svg><IsometricEquipment record={device} status="notEnergized" selected={false} detailed={false} showLabel={false} /></svg>);
+    expect(container.querySelector('[data-device-detail="simple"]')).toBeInTheDocument();
+    expect(container.querySelectorAll("[data-enclosure-face]").length).toBeGreaterThanOrEqual(3);
+    expect(container.querySelectorAll("[data-device-model] *").length).toBeLessThan(fullNodes / 2);
+    expect(container.querySelector("text")).not.toBeInTheDocument();
+  });
   it("updates selection without rebuilding the static model, while still updating equipment status", () => {
     const device = record("TX6-01A");
     const heightSpy = vi.spyOn(geometry, "layoutDeviceHeight");

@@ -253,9 +253,12 @@ describe("2.5D Layout connections", () => {
     await user.pointer([
       { target: line, keys: "[MouseLeft>]", coords: { clientX: 200, clientY: 150 } },
       { target: line, coords: { clientX: 250, clientY: 180 } },
-      { target: line, keys: "[/MouseLeft]", coords: { clientX: 250, clientY: 180 } },
     ]);
+    expect(map).toHaveAttribute("viewBox", original);
+    expect(map.closest("[data-layout-pan]")).toHaveStyle({ transform: "translate(50px, 30px)" });
+    await user.pointer({ target: line, keys: "[/MouseLeft]", coords: { clientX: 250, clientY: 180 } });
     expect(map.getAttribute("viewBox")).not.toBe(original);
+    expect(map.closest("[data-layout-pan]")).not.toHaveStyle({ transform: "translate(50px, 30px)" });
     expect(screen.queryByLabelText("Cable details")).not.toBeInTheDocument();
   });
 
@@ -277,6 +280,19 @@ describe("2.5D Layout connections", () => {
     expect(screen.queryByLabelText("Connected cables")).not.toBeInTheDocument();
     expect([...container.querySelectorAll("[data-equipment-key]")].every((element) => element.getAttribute("opacity") === "1")).toBe(true);
     expect(readLayoutOverrides()).toEqual({ "EQ-FIX": "energizeToday" });
+  });
+
+  it("omits offscreen 2.5D models after zoom and restores them in the global view", async () => {
+    const manifest = isometricDataset();
+    manifest.floors[0].equipment.push(device("EQ-FAR", { rect: { x: 4000, y: 4000, width: 30, height: 20 } }));
+    const user = userEvent.setup();
+    render(<LayoutPlanPage />);
+    expect(await screen.findByRole("button", { name: "EQ-FAR: Not Energized" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "EQ-1: Energized" }));
+    await user.click(screen.getByRole("button", { name: "Zoom to device" }));
+    expect(screen.queryByRole("button", { name: "EQ-FAR: Not Energized" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Global view" }));
+    expect(screen.getByRole("button", { name: "EQ-FAR: Not Energized" })).toBeInTheDocument();
   });
 
   it("clears focus from empty space and restores the full camera with Escape", async () => {
@@ -488,7 +504,7 @@ describe("LayoutPlanPage", () => {
     const { container } = render(<LayoutPlanPage />);
     await screen.findByRole("button", { name: "EQ-1: Energized" });
     const map = screen.getByRole("img", { name: "First Floor equipment layout" });
-    expect([...map.children].map((element) => element.getAttribute("data-layout-layer"))).toEqual([
+    expect([...map.querySelector("[data-layout-scene]")!.children].map((element) => element.getAttribute("data-layout-layer"))).toEqual([
       "regions", "room-labels", "equipment", "selection", "lightning",
     ]);
     const before = container.querySelector('[data-room-label="E6-110-01"]')?.outerHTML;

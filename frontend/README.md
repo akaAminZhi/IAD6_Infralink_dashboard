@@ -59,12 +59,21 @@ changes and 2D/2.5D switching until Show all cables is clicked. Connections and
 test evidence remain accessible in the side panel. The preference lasts for the
 current page visit.
 
-After the first 2.5D visit, equipment models for the current floor stay mounted
-and are hidden in 2D, so repeated view switches reuse their SVG nodes. Static
+After the first 2.5D visit, visible equipment models stay mounted when switching
+to 2D, so repeated view switches can reuse their SVG nodes. Static
 models, background regions and cable components are memoized; cable paths and
-both fit frames are cached. Camera motion is combined into one update per
-animation frame, with final drag positions flushed on release and pending motion
-cancelled by Global view/search commands. The models retain their full detail.
+both fit frames are cached. During a 2.5D drag, a bounded SVG canvas moves with a
+temporary compositor transform and the camera commits on release. Only models
+and cables near the visible camera are drawn. Small models use simpler 2.5D
+enclosures; dense floors reuse shared 2.5D silhouettes instead of repeated
+shapes. Selected and inspected equipment keeps its full detail. The 2D view
+continues to use its existing camera updates.
+
+For a repeatable dense-floor check, start the dashboard preview and run
+`python scripts/perf_layout.py --factor 8 --dpr 2`. The script duplicates the
+local Layout manifest in the browser request only, then compares 2D and 2.5D
+SVG node counts, drag frames and camera updates. `--zoom-clicks 5 --drag-step 8`
+exercises a zoomed view and a longer drag across the culling margin.
 
 The Layout builder reads normalized SystemElements `equipment_type` to include
 feeder cables and exclude terminations. FDR IDs with two complete equipment IDs

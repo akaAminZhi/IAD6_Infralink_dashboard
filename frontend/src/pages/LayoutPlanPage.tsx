@@ -1,12 +1,12 @@
 import { Box, Cable, Eye, EyeOff, Maximize, MousePointer2, RotateCcw, Search, X, Zap, ZoomIn, ZoomOut } from "lucide-react";
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 
 import { EmptyState } from "../components/common/EmptyState";
 import { ErrorState } from "../components/common/ErrorState";
 import { LoadingState } from "../components/common/LoadingState";
 import { NetaReportChips } from "../components/common/NetaReportChips";
 import { Button } from "../components/ui/button";
-import { IsometricEquipment } from "../components/layout/IsometricEquipment";
+import { IsometricEquipment, SimpleIsometricSymbols } from "../components/layout/IsometricEquipment";
 import { FeederCableAtpReports } from "../components/layout/FeederCableAtpReports";
 import { LayoutCable } from "../components/layout/LayoutCable";
 import { LayoutBackground } from "../components/layout/LayoutBackground";
@@ -28,7 +28,7 @@ import {
   visibleLayoutEquipment, visibleLayoutRegions, zoomLayoutViewport, type LayoutStatus,
 } from "../utils/layoutPlanUtils";
 
-const EquipmentRectangle = memo(function EquipmentRectangle({ record, status, selected, dimmed, tooltipVisible, isometric, hasIsometric, onSelect, onInspect, onLeave }: {
+const EquipmentRectangle = memo(function EquipmentRectangle({ record, status, selected, dimmed, tooltipVisible, isometric, hasIsometric, detailed, showLabel, compact, onSelect, onInspect, onLeave }: {
   record: LayoutEquipmentRecord;
   status: LayoutStatus;
   selected: boolean;
@@ -36,6 +36,9 @@ const EquipmentRectangle = memo(function EquipmentRectangle({ record, status, se
   tooltipVisible: boolean;
   isometric: boolean;
   hasIsometric: boolean;
+  detailed: boolean;
+  showLabel: boolean;
+  compact: boolean;
   onSelect: (record: LayoutEquipmentRecord) => void;
   onInspect: (record: LayoutEquipmentRecord, element: SVGGElement) => void;
   onLeave: (annotationId: string) => void;
@@ -56,13 +59,13 @@ const EquipmentRectangle = memo(function EquipmentRectangle({ record, status, se
       }} className="cursor-pointer outline-none focus:drop-shadow-md" opacity={dimmed ? 0.2 : 1}>
       <title>{`${record.label} · ${LAYOUT_STATUS_LABELS[status]}${record.fixed ? " · Fixed across floors" : ""}`}</title>
       {hasIsometric ? <g data-equipment-view="isometric" style={isometric ? undefined : { display: "none" }}>
-        <IsometricEquipment record={record} status={status} selected={selected} />
+        <IsometricEquipment record={record} status={status} selected={selected} detailed={detailed} showLabel={showLabel} compact={compact} />
       </g> : null}
-      <g data-equipment-view="plan" style={isometric ? { display: "none" } : undefined}><rect x={x} y={y} width={width} height={height} rx={Math.min(2, width / 4, height / 4)}
+      {!isometric ? <g data-equipment-view="plan"><rect x={x} y={y} width={width} height={height} rx={Math.min(2, width / 4, height / 4)}
         fill={colors.fill} stroke={selected ? "#2563eb" : colors.stroke} strokeWidth={selected || status === "energized" ? 0.65 : 0.35} />
       {lines.map((line, index) => <text key={index} x={x + width / 2}
         y={y + height / 2 + (index - (lines.length - 1) / 2) * fontSize * 1.15}
-        textAnchor="middle" dominantBaseline="middle" fontSize={fontSize} fill="#0f172a" pointerEvents="none">{line}</text>)}</g>
+        textAnchor="middle" dominantBaseline="middle" fontSize={fontSize} fill="#0f172a" pointerEvents="none">{line}</text>)}</g> : null}
     </g>
   );
 });
@@ -96,6 +99,11 @@ interface PanState {
   additive: boolean;
 }
 
+function overlapsViewport(rect: PowerPlanRect, viewport: PowerPlanRect): boolean {
+  return rect.x <= viewport.x + viewport.width && rect.x + rect.width >= viewport.x &&
+    rect.y <= viewport.y + viewport.height && rect.y + rect.height >= viewport.y;
+}
+
 export function LayoutPlanPage() {
   const netaReportManifest = useNetaReportManifest();
   const [isometric, setIsometric] = useState(() => {
@@ -115,13 +123,17 @@ export function LayoutPlanPage() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [activeSearchIndex, setActiveSearchIndex] = useState(0);
   const [viewport, setViewport, queueViewport, flushViewport] = useFrameState<PowerPlanRect | null>(null);
+  const [panCullViewport, setPanCullViewport] = useState<PowerPlanRect | null>(null);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectionKeys, setSelectionKeys] = useState<Set<string>>(new Set());
   const [selectionBox, setSelectionBox] = useState<PowerPlanRect | null>(null);
   const [inspection, setInspection] = useState<{ annotationId: string; left: number; top: number } | null>(null);
+  const [mapSize, setMapSize] = useState({ width: 0, height: 0 });
   const mapRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
+  const panLayerRef = useRef<HTMLDivElement>(null);
   const panRef = useRef<PanState | null>(null);
+  const panCullOffsetRef = useRef({ x: 0, y: 0 });
   const suppressClickRef = useRef(false);
 
   useEffect(() => {
@@ -137,10 +149,25 @@ export function LayoutPlanPage() {
     return () => { active = false; };
   }, [retry]);
 
+  useEffect(() => {
+    const element = mapRef.current;
+    if (loading || !element) return;
+    const update = () => {
+      const { width, height } = element.getBoundingClientRect();
+      setMapSize((current) => current.width === width && current.height === height ? current : { width, height });
+    };
+    update();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(update);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [loading]);
+
   const rows = useMemo(() => manifest ? visibleLayoutEquipment(manifest, floorId) : [], [manifest, floorId]);
   const connections = useMemo(() => placedLayoutCables(manifest?.cables ?? [], rows), [manifest, rows]);
   const cableGeometry = useMemo(() => connections.map((connection, index) => ({ connection,
     path: layoutCablePath(connection, index), route: isNearbyCable(connection) ? "arc" as const : "rounded" as const,
+    extent: layoutConnectionBounds(connection),
   })), [connections]);
   const connectionIds = useMemo(() => new Set(connections.map((item) => item.cable.cable_id)), [connections]);
   const cableIndex = useMemo(() => {
@@ -158,6 +185,9 @@ export function LayoutPlanPage() {
     ? getLayoutCableReportNames(selectedCable, netaReportManifest) : [], [selectedCable, netaReportManifest]);
   const sortedRows = useMemo(() => [...rows].sort((a, b) =>
     a.rect.x + a.rect.y + a.rect.width + a.rect.height - b.rect.x - b.rect.y - b.rect.width - b.rect.height), [rows]);
+  const projectedRows = useMemo(() => sortedRows.map((row) => ({
+    row, extent: projectedLayoutBounds(row.rect, layoutDeviceHeight(row) + 4),
+  })), [sortedRows]);
   const selectionRows = useMemo(() => isometric ? rows.map((row) => ({ ...row,
     rect: projectedLayoutBounds(insetEquipmentRect(row.rect), layoutDeviceHeight(row)),
   })) : rows, [rows, isometric]);
@@ -176,6 +206,25 @@ export function LayoutPlanPage() {
   }, [manifest]);
   const fullBounds = isometric ? allBounds.isometric : allBounds.plan;
   const bounds = viewport ?? fullBounds;
+  const overscan = 0.4;
+  const cullCenter = panCullViewport ?? bounds;
+  const renderBounds = { x: cullCenter.x - cullCenter.width * overscan, y: cullCenter.y - cullCenter.height * overscan,
+    width: cullCenter.width * (1 + overscan * 2), height: cullCenter.height * (1 + overscan * 2) };
+  const svgBounds = isometric ? { x: bounds.x - bounds.width * overscan, y: bounds.y - bounds.height * overscan,
+    width: bounds.width * (1 + overscan * 2), height: bounds.height * (1 + overscan * 2) } : bounds;
+  const drawnRows = isometric ? projectedRows.filter(({ extent }) => overlapsViewport(extent, renderBounds)).map(({ row }) => row) : rows;
+  const drawnCables = isometric ? cableGeometry.filter(({ extent }) => overlapsViewport(extent, renderBounds)) : [];
+  const pixelsPerUnit = mapSize.width && mapSize.height
+    ? Math.min(mapSize.width / bounds.width, mapSize.height / bounds.height)
+    : Number.POSITIVE_INFINITY;
+  const detailThreshold = drawnRows.length > 400 ? Number.POSITIVE_INFINITY : 24;
+  const compact = drawnRows.length > 400;
+  useLayoutEffect(() => {
+    if (!panRef.current && panLayerRef.current) {
+      panLayerRef.current.style.transform = "";
+      panLayerRef.current.style.willChange = "";
+    }
+  }, [viewport]);
   const zoom = fullBounds.width / bounds.width;
   const selected = rows.find((row) => row.annotation_id === selectedId);
   const selectedEquipmentReports = useMemo(() => getNetaReportNames(selected?.neta_test_report), [selected]);
@@ -211,6 +260,11 @@ export function LayoutPlanPage() {
       a.record.label.localeCompare(b.record.label, undefined, { numeric: true })).slice(0, 12);
   }, [manifest, query, floorId]);
 
+  function canvasRect(): DOMRect | undefined {
+    const map = mapRef.current?.getBoundingClientRect();
+    return map?.width && map.height ? map : svgRef.current?.getBoundingClientRect();
+  }
+
   useEffect(() => {
     const svg = svgRef.current;
     if (!svg || loading) return;
@@ -218,7 +272,7 @@ export function LayoutPlanPage() {
       event.preventDefault();
       if (!event.deltaY || panRef.current) return;
       setInspection(null);
-      const canvas = svg!.getBoundingClientRect();
+      const canvas = canvasRect() ?? svg!.getBoundingClientRect();
       queueViewport((current) => {
         const view = current ?? fullBounds;
         return zoomLayoutViewport(view, fullBounds, event.deltaY < 0 ? 0.86 : 1.16,
@@ -272,11 +326,15 @@ export function LayoutPlanPage() {
       cableId: (event.target as Element).closest("[data-cable-id][role=button]")?.getAttribute("data-cable-id") ?? null,
       mode: selectionMode ? "select" : "pan", additive: event.shiftKey,
     };
+    panCullOffsetRef.current = { x: 0, y: 0 };
+    if (isometric && !selectionMode && panLayerRef.current) {
+      panLayerRef.current.style.willChange = "transform";
+    }
   }
 
   function handlePointerMove(event: ReactPointerEvent<SVGSVGElement>) {
     const pan = panRef.current;
-    const canvas = svgRef.current?.getBoundingClientRect();
+    const canvas = canvasRect();
     if (!pan || pan.pointerId !== event.pointerId || !canvas) return;
     if (!pan.moved && Math.hypot(event.clientX - pan.x, event.clientY - pan.y) < 4) return;
     pan.moved = true;
@@ -287,6 +345,17 @@ export function LayoutPlanPage() {
       ));
       return;
     }
+    if (isometric && panLayerRef.current) {
+      const dx = event.clientX - pan.x, dy = event.clientY - pan.y;
+      panLayerRef.current.style.transform = `translate(${dx}px, ${dy}px)`;
+      if (Math.abs(dx - panCullOffsetRef.current.x) > canvas.width * (overscan - 0.05) ||
+        Math.abs(dy - panCullOffsetRef.current.y) > canvas.height * (overscan - 0.05)) {
+        const scale = Math.max(Number.EPSILON, Math.min(canvas.width / pan.viewport.width, canvas.height / pan.viewport.height));
+        setPanCullViewport({ ...pan.viewport, x: pan.viewport.x - dx / scale, y: pan.viewport.y - dy / scale });
+        panCullOffsetRef.current = { x: dx, y: dy };
+      }
+      return;
+    }
     const scale = Math.max(Number.EPSILON, Math.min(canvas.width / pan.viewport.width, canvas.height / pan.viewport.height));
     queueViewport({ ...pan.viewport, x: pan.viewport.x - (event.clientX - pan.x) / scale, y: pan.viewport.y - (event.clientY - pan.y) / scale });
   }
@@ -294,14 +363,20 @@ export function LayoutPlanPage() {
   function endPan(event: ReactPointerEvent<SVGSVGElement>, cancelled = false) {
     const pan = panRef.current;
     if (!pan || pan.pointerId !== event.pointerId) return;
-    flushViewport();
+    if (isometric && pan.mode === "pan" && pan.moved) {
+      const canvas = canvasRect() ?? event.currentTarget.getBoundingClientRect();
+      const scale = Math.max(Number.EPSILON, Math.min(canvas.width / pan.viewport.width, canvas.height / pan.viewport.height));
+      setViewport({ ...pan.viewport, x: pan.viewport.x - (event.clientX - pan.x) / scale,
+        y: pan.viewport.y - (event.clientY - pan.y) / scale });
+    } else flushViewport();
     if (event.currentTarget.hasPointerCapture?.(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
     panRef.current = null;
+    setPanCullViewport(null);
     suppressClickRef.current = pan.moved || cancelled || pan.mode === "select";
     setSelectionBox(null);
     if (cancelled) return;
     if (pan.mode === "select") {
-      const canvas = event.currentTarget.getBoundingClientRect();
+      const canvas = canvasRect() ?? event.currentTarget.getBoundingClientRect();
       if (pan.moved) {
         const found = equipmentInLayoutSelection(selectionRows, layoutSelectionRect(
           layoutCanvasPoint(pan.viewport, canvas, pan.x, pan.y),
@@ -360,6 +435,8 @@ export function LayoutPlanPage() {
     if (next) setHasIsometric(true);
     setIsometric(next); setViewport(null); setInspection(null); setSelectionKeys(new Set()); setSelectionBox(null);
     panRef.current = null;
+    setPanCullViewport(null);
+    if (panLayerRef.current) { panLayerRef.current.style.transform = ""; panLayerRef.current.style.willChange = ""; }
     try { localStorage.setItem(LAYOUT_VIEW_KEY, next ? "isometric" : "plan"); } catch { /* View works without persistence. */ }
   }
 
@@ -483,25 +560,35 @@ export function LayoutPlanPage() {
     {storageError ? <p role="alert" className="text-sm text-amber-700">Browser storage is unavailable. Changes apply for this visit only.</p> : null}
     <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
       <div ref={mapRef} className="relative h-[68vh] min-h-[400px] overflow-hidden rounded-lg border bg-white" aria-label="Layout map">
+        <div ref={panLayerRef} data-layout-pan="true" className="relative h-full w-full">
         <svg ref={svgRef} role="img" tabIndex={0} aria-label={`${manifest.floors.find((floor) => floor.floor_id === floorId)?.label} equipment layout`}
-          viewBox={`${bounds.x} ${bounds.y} ${bounds.width} ${bounds.height}`} preserveAspectRatio="xMidYMid meet"
-          className={`h-full w-full select-none ${selectionMode ? "cursor-crosshair" : "cursor-grab active:cursor-grabbing"}`} style={{ touchAction: "none" }}
+          viewBox={`${svgBounds.x} ${svgBounds.y} ${svgBounds.width} ${svgBounds.height}`} preserveAspectRatio="xMidYMid meet"
+          className={`${isometric ? "absolute -left-[40%] -top-[40%] h-[180%] w-[180%]" : "h-full w-full"} select-none outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600 ${selectionMode ? "cursor-crosshair" : "cursor-grab active:cursor-grabbing"}`} style={{ touchAction: "none" }}
           onPointerDown={handlePointerDown} onPointerMove={handlePointerMove}
           onPointerUp={(event) => endPan(event)} onPointerCancel={(event) => endPan(event, true)}
           onKeyDown={(event) => { if (event.key === "Escape") {
             if (isometric && !selectionMode) restoreGlobalView(); else { setInspection(null); cancelSelectionGesture(); }
           } }}
           onClickCapture={(event) => { if (suppressClickRef.current && event.detail !== 0) { event.preventDefault(); event.stopPropagation(); } }}>
+          {hasIsometric ? <SimpleIsometricSymbols /> : null}
+          <g data-layout-scene="true">
           <LayoutBackground regions={regions} roomLabels={roomLabels} isometric={isometric} />
           <g data-layout-layer="equipment">
-            {(isometric ? sortedRows : rows).map((row) => <EquipmentRectangle key={row.annotation_id} record={row} status={statusOf(row)} isometric={isometric} hasIsometric={hasIsometric}
-              selected={selectionMode ? selectionKeys.has(row.equipment_key) : selectedId === row.annotation_id || (isometric && cableEndpointKeys.includes(row.equipment_key))}
-              dimmed={rowIsDimmed(row)}
-              tooltipVisible={inspection?.annotationId === row.annotation_id} onInspect={inspectDevice}
-              onLeave={leaveDevice} onSelect={selectDevice} />)}
+            {drawnRows.map((row) => {
+              const selected = selectionMode ? selectionKeys.has(row.equipment_key)
+                : selectedId === row.annotation_id || (isometric && cableEndpointKeys.includes(row.equipment_key));
+              const inspected = inspection?.annotationId === row.annotation_id;
+              const projectedWidthPixels = (row.rect.width + row.rect.height) * pixelsPerUnit;
+              return <EquipmentRectangle key={row.annotation_id} record={row} status={statusOf(row)} isometric={isometric} hasIsometric={hasIsometric}
+                selected={selected} dimmed={rowIsDimmed(row)} tooltipVisible={inspected}
+                detailed={(!selectionMode && selected) || inspected || projectedWidthPixels >= detailThreshold}
+                showLabel={(!selectionMode && selected) || inspected || projectedWidthPixels >= 12}
+                compact={compact}
+                onInspect={inspectDevice} onLeave={leaveDevice} onSelect={selectDevice} />;
+            })}
           </g>
           {isometric && showCables ? <g id="layout-cables" data-layout-layer="cables">
-            {cableGeometry.map(({ connection, path, route }) => {
+            {drawnCables.map(({ connection, path, route }) => {
               const cable = connection.cable;
               const active = selectedCableId ? selectedCableId === cable.cable_id : !!selected &&
                 [cable.source_equipment_key, cable.target_equipment_key].includes(selected.equipment_key);
@@ -516,10 +603,12 @@ export function LayoutPlanPage() {
               strokeWidth={1.5} strokeDasharray="5 3" vectorEffect="non-scaling-stroke" /> : null}
           </g>
           <g pointerEvents="none" data-layout-layer="lightning">
-            {rows.map((row) => <EquipmentLightning key={row.annotation_id} record={row} status={statusOf(row)}
+            {drawnRows.map((row) => <EquipmentLightning key={row.annotation_id} record={row} status={statusOf(row)}
               isometric={isometric} dimmed={rowIsDimmed(row)} />)}
           </g>
+          </g>
         </svg>
+        </div>
         {inspected && inspection ? <div id="layout-equipment-tooltip" role="tooltip"
           className="pointer-events-none absolute z-10 w-72 max-w-[calc(100%-24px)] rounded-lg border bg-card p-3 text-card-foreground shadow-lg"
           style={{ left: inspection.left, top: inspection.top }}>

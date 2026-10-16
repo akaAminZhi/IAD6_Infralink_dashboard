@@ -1,16 +1,42 @@
 import { memo, type ReactNode } from "react";
 import type { LayoutEquipmentRecord } from "../../types/data";
 import { insetEquipmentRect, type LayoutStatus } from "../../utils/layoutPlanUtils";
-import { layoutDeviceHeight, layoutDeviceKind, projectLayoutPoint, projectedRectPoints, svgPoints } from "../../utils/layoutIsometricUtils";
+import { layoutDeviceHeight, layoutDeviceKind, projectLayoutPoint, projectedLayoutBounds, projectedRectPoints, svgPoints,
+  type LayoutDeviceKind } from "../../utils/layoutIsometricUtils";
 
 interface EnclosurePalette { top: string; left: string; right: string }
 const ENCLOSURE: EnclosurePalette = { top: "#e1ebef", left: "#acbec8", right: "#8098a6" };
 const BASE: EnclosurePalette = { top: "#beced5", left: "#8fa5b1", right: "#718a99" };
 const DARK: EnclosurePalette = { top: "#9bb0bd", left: "#7c95a4", right: "#5f7888" };
+const SIMPLE_KINDS: LayoutDeviceKind[] = ["mvTransformer", "utility", "generator", "lvTransformer", "cabinet"];
+const SIMPLE_STATUSES: LayoutStatus[] = ["notEnergized", "energizeToday", "energized", "unknown"];
+
+/** Shared silhouettes keep dense floors to one SVG shape per unselected device. */
+export function SimpleIsometricSymbols() {
+  return <defs>{SIMPLE_STATUSES.flatMap((status) => SIMPLE_KINDS.map((kind) => {
+    const colors = status === "energized" ? { top: "#ffe0dd", left: "#edaaa6", right: "#d78480" }
+      : status === "energizeToday" ? { top: "#fff0dd", left: "#e5c8a4", right: "#c4a27f" } : ENCLOSURE;
+    return <symbol key={`${kind}-${status}`} id={`layout-simple-${kind}-${status}`} viewBox="0 0 100 100">
+      <path d="M 12 76 L 55 96 L 99 74 L 56 53 Z" fill="#526a78" opacity="0.12" />
+      <polygon points="7,37 52,57 52,91 7,70" fill={colors.left} stroke="#8197a4" strokeWidth="0.8" />
+      <polygon points="52,57 93,36 93,69 52,91" fill={colors.right} stroke="#8197a4" strokeWidth="0.8" />
+      <polygon points="7,37 48,17 93,36 52,57" fill={colors.top} stroke="#8197a4" strokeWidth="0.8" />
+      {kind === "mvTransformer" ? <>
+        <path d="M 27 28 V 5 M 48 37 V 11 M 69 30 V 7" stroke="#81522f" strokeWidth="3" />
+        <path d="M 12 43 L 48 60 M 12 53 L 48 70" stroke="#718a99" strokeWidth="1.4" />
+      </> : kind === "utility" ? <path d="M 21 46 V 68 M 36 53 V 75 M 66 51 V 76" stroke="#718a99" strokeWidth="1.6" />
+        : kind === "generator" ? <>
+          <path d="M 70 25 V 3" stroke="#5f7888" strokeWidth="3" />
+          <circle cx="43" cy="37" r="5" fill="#8fa5b1" />
+        </> : kind === "lvTransformer" ? <path d="M 13 49 L 46 65 M 13 57 L 46 73 M 13 65 L 46 81" stroke="#718a99" strokeWidth="1.4" />
+          : <path d="M 15 45 L 43 58 V 79 L 15 66 Z M 39 64 V 68" fill="none" stroke="#718a99" strokeWidth="1.2" />}
+    </symbol>;
+  }))}</defs>;
+}
 
 /** Five industrial illustrations built in the same world-space grid as their cables. */
-const EquipmentModel = memo(function EquipmentModel({ record, status }: {
-  record: LayoutEquipmentRecord; status: LayoutStatus;
+const EquipmentModel = memo(function EquipmentModel({ record, status, detailed, showLabel, compact }: {
+  record: LayoutEquipmentRecord; status: LayoutStatus; detailed: boolean; showLabel: boolean; compact: boolean;
 }) {
   const rect = insetEquipmentRect(record.rect);
   const { x, y, width: w, height: d } = rect;
@@ -65,6 +91,48 @@ const EquipmentModel = memo(function EquipmentModel({ record, status }: {
       <circle r={radius * 0.2} fill="#d5e0e5" />
     </g>;
   };
+  const base = projectedRectPoints(rect);
+  const label = p(0.5, 1.05, -Math.max(1.3, s * 0.08));
+  const labelText = record.label.replace(/^IAD06-/i, "");
+  const labelSize = Math.min(4, Math.max(0.9, s * 0.18), (w + d) * 1.4 / (Math.max(4, labelText.length) * 0.55));
+  if (compact && !detailed) {
+    const extent = projectedLayoutBounds(rect, h);
+    return <g data-device-model={kind} data-device-detail="compact">
+      <use href={`#layout-simple-${kind}-${status}`} x={extent.x} y={extent.y} width={extent.width} height={extent.height} />
+      {showLabel ? <text pointerEvents="none" x={label.x} y={label.y} textAnchor="middle" dominantBaseline="hanging"
+        fontSize={labelSize} fill="#344c5c" paintOrder="stroke" stroke="#ffffff" strokeWidth={labelSize * 0.32} strokeLinejoin="round">
+        {labelText}
+      </text> : null}
+    </g>;
+  }
+  if (!detailed) {
+    const simpleModel = kind === "mvTransformer" ? <>
+      {box(0.1, 0.12, 0.8, 0.76, 0, h * 0.08, BASE)}
+      {box(0.2, 0.18, 0.68, 0.65, h * 0.08, h * 0.66)}
+      {[0.35, 0.55, 0.75].map((v) => <g key={v}>{line([0.58, v, h * 0.74], [0.58, v, h * 0.97], "#81522f", s * 0.045)}</g>)}
+    </> : kind === "utility" ? <>
+      {box(0.08, 0.08, 0.84, 0.84, 0, h * 0.82)}
+      {[0.34, 0.61].map((u) => <g key={u}>{line([u, 0.92, h * 0.12], [u, 0.92, h * 0.75])}</g>)}
+    </> : kind === "generator" ? <>
+      {box(0.08, 0.08, 0.84, 0.84, 0, h * 0.72)}
+      {line([0.75, 0.18, h * 0.72], [0.75, 0.18, h * 1.04], detail, s * 0.06)}
+    </> : kind === "lvTransformer" ? <>
+      {box(0.1, 0.1, 0.8, 0.8, 0, h * 0.84)}
+      {line([0.2, 0.91, h * 0.26], [0.78, 0.91, h * 0.26])}
+      {line([0.2, 0.91, h * 0.38], [0.78, 0.91, h * 0.38])}
+    </> : <>
+      {box(0.12, 0.12, 0.76, 0.76, 0, h * 0.9)}
+      {line([0.8, 0.88, h * 0.24], [0.8, 0.88, h * 0.45])}
+    </>;
+    return <g data-device-model={kind} data-device-detail="simple">
+      <polygon points={svgPoints(base.map((point) => ({ x: point.x + s * 0.16, y: point.y + s * 0.1 })))} fill="#526a78" opacity={0.12} />
+      {simpleModel}
+      {showLabel ? <text pointerEvents="none" x={label.x} y={label.y} textAnchor="middle" dominantBaseline="hanging"
+        fontSize={labelSize} fill="#344c5c" paintOrder="stroke" stroke="#ffffff" strokeWidth={labelSize * 0.32} strokeLinejoin="round">
+        {labelText}
+      </text> : null}
+    </g>;
+  }
   let model: ReactNode;
   if (kind === "mvTransformer") {
     model = <>
@@ -120,26 +188,22 @@ const EquipmentModel = memo(function EquipmentModel({ record, status }: {
       {box(0.1, 0.1, 0.8, 0.78, h * 0.9, h * 0.035, ENCLOSURE, "cabinet-roof")}
     </>;
   }
-  const base = projectedRectPoints(rect);
-  const label = p(0.5, 1.05, -Math.max(1.3, s * 0.08));
-  const labelText = record.label.replace(/^IAD06-/i, "");
-  const labelSize = Math.min(4, Math.max(0.9, s * 0.18), (w + d) * 1.4 / (Math.max(4, labelText.length) * 0.55));
-  return <g data-device-model={kind}>
+  return <g data-device-model={kind} data-device-detail="full">
     <polygon points={svgPoints(base.map((point) => ({ x: point.x + s * 0.16, y: point.y + s * 0.1 })))} fill="#526a78" opacity={0.12} />
     {model}
-    <text pointerEvents="none" x={label.x} y={label.y} textAnchor="middle" dominantBaseline="hanging"
+    {showLabel ? <text pointerEvents="none" x={label.x} y={label.y} textAnchor="middle" dominantBaseline="hanging"
       fontSize={labelSize} fill="#344c5c" paintOrder="stroke" stroke="#ffffff" strokeWidth={labelSize * 0.32} strokeLinejoin="round">
       {labelText}
-    </text>
+    </text> : null}
   </g>;
 });
 
-export const IsometricEquipment = memo(function IsometricEquipment({ record, status, selected }: {
-  record: LayoutEquipmentRecord; status: LayoutStatus; selected: boolean;
+export const IsometricEquipment = memo(function IsometricEquipment({ record, status, selected, detailed = true, showLabel = true, compact = false }: {
+  record: LayoutEquipmentRecord; status: LayoutStatus; selected: boolean; detailed?: boolean; showLabel?: boolean; compact?: boolean;
 }) {
   return <g data-device-kind={layoutDeviceKind(record)}>
     {selected ? <polygon points={svgPoints(projectedRectPoints(insetEquipmentRect(record.rect)))}
       fill="#dbeafe" fillOpacity={0.35} stroke="#2563eb" strokeWidth={0.7} /> : null}
-    <EquipmentModel record={record} status={status} />
+    <EquipmentModel record={record} status={status} detailed={detailed} showLabel={showLabel} compact={compact} />
   </g>;
 });
