@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -183,6 +183,49 @@ describe("2.5D Layout connections", () => {
     await user.click(screen.getByRole("button", { name: /↔ EQ-2/ }));
     expect(screen.getByLabelText("Cable details")).toHaveTextContent("another floor");
     expect(screen.getByRole("button", { name: "Zoom to connection" })).toBeDisabled();
+  });
+
+  it("counts tested, failed, and unconfirmed connected cables from the displayed test states", async () => {
+    const manifest = isometricDataset();
+    manifest.cables = [
+      cable({ cable_id: "FDR-UPDATED", feeder_cable_atp_names: ["FDR-UPDATED.pdf"] }),
+      cable({ cable_id: "FDR-PENDING", eps_daily_test_status: "tested" }),
+      cable({ cable_id: "FDR-FAILED", mv_daily_test_status: "failed" }),
+      cable({ cable_id: "FDR-PARTIAL", mv_daily_test_status: "partially_tested" }),
+    ];
+    const user = userEvent.setup();
+    render(<LayoutPlanPage />);
+    await user.click(await screen.findByRole("button", { name: "EQ-1: Energized" }));
+    const list = screen.getByLabelText("Connected cables");
+    expect(list).toHaveTextContent("Connected cables (4)");
+    expect(screen.getByLabelText("Tested: 2")).toHaveClass("text-green-700");
+    expect(screen.getByLabelText("Test failed: 1")).toHaveClass("text-red-700");
+    expect(screen.getByLabelText("Testing not confirmed: 1")).toBeInTheDocument();
+  });
+
+  it("keeps the connected cable list in place while inspecting several cables", async () => {
+    isometricDataset();
+    const user = userEvent.setup();
+    render(<LayoutPlanPage />);
+    await user.click(await screen.findByRole("button", { name: "EQ-1: Energized" }));
+    const list = screen.getByLabelText("Connected cable list");
+    const sidebar = list.closest("aside")!;
+    sidebar.scrollTop = 120;
+    list.scrollTop = 40;
+
+    await user.click(within(list).getByRole("button", { name: /EQ-FIX/ }));
+    expect(screen.getByLabelText("Cable inspector")).toContainElement(screen.getByLabelText("Cable details"));
+    expect(sidebar).not.toContainElement(screen.getByLabelText("Cable details"));
+    expect(sidebar.scrollTop).toBe(120);
+    expect(list.scrollTop).toBe(40);
+
+    await user.click(within(list).getByRole("button", { name: /EQ-2/ }));
+    expect(screen.getByLabelText("Cable details")).toHaveTextContent("FDR-IAD06-EQ-1-IAD06-EQ-2");
+    expect(sidebar.scrollTop).toBe(120);
+    expect(list.scrollTop).toBe(40);
+    await user.click(screen.getByRole("button", { name: "Close cable details" }));
+    expect(screen.queryByLabelText("Cable inspector")).not.toBeInTheDocument();
+    expect(sidebar.scrollTop).toBe(120);
   });
 
   it("can hide cables, switch to the preserved plan, and clears cable selection on floor changes", async () => {

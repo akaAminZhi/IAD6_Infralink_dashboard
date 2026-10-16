@@ -90,6 +90,8 @@ Only connections with one visible placement per endpoint are drawn on a floor.
 Select equipment to highlight its connections and see cable IDs, remote equipment
 IDs, and test evidence in the side panel; select a cable to highlight its endpoints
 and zoom to the connection. The cable toggle hides/shows overhead connections.
+Opening a cable from a device's Connected cables list shows its details in a
+separate inspector, leaving the list at its current scroll position for browsing.
 Terminations are not drawn. Existing search, pan/zoom, floor switching and planning
 controls work in both views; 2.5D box selection uses projected device bounds.
 
