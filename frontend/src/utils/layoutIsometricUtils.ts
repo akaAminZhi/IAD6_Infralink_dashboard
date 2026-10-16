@@ -97,7 +97,7 @@ export function overheadCablePoints(connection: PlacedLayoutCable, lane = 0): Po
     { x: end.x - (end.x - start.x) * 0.28, y: controlY }, end];
 }
 
-/** Stable symmetric lanes keep separate cables between the same devices visible. */
+/** Stable upward lanes keep paired feeders and long room branches visible. */
 export function layoutCableLanes(connections: PlacedLayoutCable[]): number[] {
   const bundles = new Map<string, number[]>();
   connections.forEach(({ source, target }, index) => {
@@ -129,18 +129,32 @@ export function layoutCableLanes(connections: PlacedLayoutCable[]): number[] {
     const sourceDegree = degree.get(source.equipment_key) ?? 0, targetDegree = degree.get(target.equipment_key) ?? 0;
     const hub = sourceDegree > targetDegree || (sourceDegree === targetDegree && source.equipment_key < target.equipment_key)
       ? source.equipment_key : target.equipment_key;
-    const indexes = roomHubs.get(hub) ?? [];
+    const hubRow = source.equipment_key === hub ? source : target;
+    const other = source.equipment_key === hub ? target : source;
+    const projectedX = (row: LayoutEquipmentRecord) => row.rect.x + row.rect.width / 2 - row.rect.y - row.rect.height / 2;
+    // Each side of a hub fans out independently, including mirrored cabinet rows.
+    const branch = `${hub}\u0000${Math.sign(projectedX(other) - projectedX(hubRow))}`;
+    const indexes = roomHubs.get(branch) ?? [];
     indexes.push(index);
-    roomHubs.set(hub, indexes);
+    roomHubs.set(branch, indexes);
   }
-  for (const [hub, indexes] of roomHubs) {
-    const otherX = (index: number) => {
+  for (const indexes of roomHubs.values()) {
+    const span = (index: number) => {
       const { source, target } = connections[index];
-      const other = source.equipment_key === hub ? target : source;
-      return other.rect.x + other.rect.width / 2 - other.rect.y - other.rect.height / 2;
+      return Math.abs(source.rect.x + source.rect.width / 2 - source.rect.y - source.rect.height / 2
+        - target.rect.x - target.rect.width / 2 + target.rect.y + target.rect.height / 2);
     };
-    indexes.sort((a, b) => otherX(a) - otherX(b) || connections[a].cable.cable_id.localeCompare(connections[b].cable.cable_id));
-    indexes.forEach((index, position) => { lanes[index] = -position * 2.5; });
+    const baseIntercept = (index: number) => {
+      const [, trayStart] = overheadCablePoints(connections[index]);
+      return trayStart.y - trayStart.x * 0.5;
+    };
+    const commonIntercept = Math.min(...indexes.map(baseIntercept));
+    indexes.sort((a, b) => span(a) - span(b) || connections[a].cable.cable_id.localeCompare(connections[b].cable.cable_id));
+    indexes.forEach((index, position) => {
+      // Farther branches pass above nearer drops instead of cutting through them.
+      // Normalize different cabinet heights/depths to one parallel tray band.
+      lanes[index] = commonIntercept - baseIntercept(index) - position * 2.5;
+    });
   }
   return lanes;
 }
@@ -151,8 +165,15 @@ export function isNearbyCable({ source, target }: PlacedLayoutCable): boolean {
   return distance <= Math.max(28, Math.min(90, Math.max(a.width, a.height, b.width, b.height) * 2.4));
 }
 
+function roomCableCorners([start, trayStart, trayEnd, end]: PowerPlanPoint[]): PowerPlanPoint[] {
+  return [{ x: start.x, y: trayStart.y - (trayStart.x - start.x) * 0.5 },
+    { x: end.x, y: trayEnd.y + (end.x - trayEnd.x) * 0.5 }];
+}
+
 export function layoutConnectionBounds(connection: PlacedLayoutCable, lane = 0): PowerPlanRect {
-  const points = [...overheadCablePoints(connection, lane), ...[connection.source, connection.target].flatMap((row) =>
+  const route = overheadCablePoints(connection, lane);
+  const corners = !connection.source.fixed && !connection.target.fixed && !isNearbyCable(connection) ? roomCableCorners(route) : [];
+  const points = [...route, ...corners, ...[connection.source, connection.target].flatMap((row) =>
     [...projectedRectPoints(row.rect), ...projectedRectPoints(row.rect, layoutDeviceHeight(row) + 3)])];
   const x = Math.min(...points.map((p) => p.x)), y = Math.min(...points.map((p) => p.y));
   return { x, y, width: Math.max(...points.map((p) => p.x)) - x, height: Math.max(...points.map((p) => p.y)) - y };
@@ -161,8 +182,11 @@ export function layoutConnectionBounds(connection: PlacedLayoutCable, lane = 0):
 export function layoutCablePath(connection: PlacedLayoutCable, lane = 0): string {
   const [a, b, c, d] = overheadCablePoints(connection, lane);
   if (!connection.source.fixed && !connection.target.fixed && !isNearbyCable(connection)) {
-    return `M ${a.x} ${a.y} L ${a.x} ${b.y + 5} Q ${a.x} ${b.y} ${b.x} ${b.y}` +
-      ` L ${c.x} ${c.y} Q ${d.x} ${c.y} ${d.x} ${c.y + 5} L ${d.x} ${d.y}`;
+    // Round the intersection of the vertical drop and the sloping tray. Using
+    // horizontal controls here can hook a bend above its lane into a neighbor.
+    const [{ y: startCornerY }, { y: endCornerY }] = roomCableCorners([a, b, c, d]);
+    return `M ${a.x} ${a.y} L ${a.x} ${startCornerY + 5} Q ${a.x} ${startCornerY} ${b.x} ${b.y}` +
+      ` L ${c.x} ${c.y} Q ${d.x} ${endCornerY} ${d.x} ${endCornerY + 5} L ${d.x} ${d.y}`;
   }
   return `M ${a.x} ${a.y} C ${b.x} ${b.y}, ${c.x} ${c.y}, ${d.x} ${d.y}`;
 }

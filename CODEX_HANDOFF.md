@@ -1,5 +1,19 @@
 ﻿# Codex Handoff
 
+## Current update (2026-10-16): Room cable drops
+
+- Long 2.5D room branches now share a tray-height baseline on each side of a
+  hub. Farther branches occupy higher lanes so they clear nearer cabinet drops.
+  Rounded bends follow the sloping tray, with their controls included in bounds.
+- Real first-floor CDS6-01R-8 / ATS6-01B fan: sampled crossings fell from 6 to 0;
+  before/after screenshots are under ignored `runtime/automation/` as
+  `layout-room-cables-{before,after}.png`. No ETL or data contract changes.
+- Validation: geometry tests 14 passed, Layout page tests 35 passed, and the
+  preview production build passed. Geometry required a forks retry after thread
+  worker startup timeouts; the Layout tests passed in the combined thread run.
+- Rebuilt 5173 preview smoke passed: four updated paths, both floors, 2D/2.5D
+  switching and cable visibility, with no page errors. Temporary 5185 stopped.
+
 ## Current update (2026-10-15): 2.5D Layout and overhead cable tracing
 
 - Cable readiness follow-up: a System Elements `Feeder Cable ATP` report
