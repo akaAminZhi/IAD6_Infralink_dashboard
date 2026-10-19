@@ -20,7 +20,7 @@ import { getLayoutCableReportNames } from "../utils/layoutReportUtils";
 import { getNetaReportNames } from "../utils/netaReports";
 import {
   DEVICE_KIND_LABELS, LAYOUT_VIEW_KEY, isNearbyCable, layoutCableLanes, layoutCablePath, layoutConnectionBounds, layoutDeviceHeight, layoutDeviceKind,
-  placedLayoutCables, projectLayoutPoint, projectedLayoutBounds,
+  placedLayoutCables, projectLayoutPoint, projectedLayoutBounds, projectedLayoutRoomLabel,
 } from "../utils/layoutIsometricUtils";
 import {
   equipmentInLayoutSelection, insetEquipmentRect, layoutBounds, layoutCanvasPoint, layoutEquipmentStatus, layoutRoomLabels,
@@ -74,10 +74,11 @@ const EquipmentRectangle = memo(function EquipmentRectangle({ record, status, se
 const EquipmentLightning = memo(function EquipmentLightning({ record, status, dimmed, isometric }: { record: LayoutEquipmentRecord; status: LayoutStatus; dimmed: boolean; isometric: boolean }) {
   if (status !== "energizeToday" && status !== "energized") return null;
   const { x, y, width } = insetEquipmentRect(record.rect);
-  const size = Math.min(6, Math.max(3, width * 0.6));
+  // One world-space size for both states and every 2.5D device footprint.
+  const size = isometric ? 9 : Math.min(6, Math.max(3, width * 0.6));
   const color = LAYOUT_STATUS_COLORS[status].stroke;
   const anchor = isometric ? projectLayoutPoint(x + width / 2, y, layoutDeviceHeight(record)) : { x: x + width / 2, y };
-  return <g transform={`translate(${anchor.x - size / 2}, ${anchor.y - size - 1})`} data-lightning-key={record.equipment_key} opacity={dimmed ? 0.2 : 1}>
+  return <g transform={`translate(${anchor.x - size / 2}, ${anchor.y - size - 1})`} data-lightning-key={record.equipment_key} opacity={dimmed ? (isometric ? 0.75 : 0.2) : 1}>
     <Zap x={0} y={0} width={size} height={size} fill={color} color={color}
       className="animate-energisation-breathe" role="img" aria-label={`${record.label} ${LAYOUT_STATUS_LABELS[status]} lightning`} />
   </g>;
@@ -211,7 +212,8 @@ export function LayoutPlanPage() {
       const lanes = layoutCableLanes(floorConnections);
       return floorConnections.map((connection, index) => ({ rect: layoutConnectionBounds(connection, lanes[index]) }));
     });
-    return { plan: layoutBounds(records), isometric: layoutBounds([...records.map((record) => ({ rect: projectedLayoutBounds(record.rect, 32) })), ...cableBounds]) };
+    const roomCallouts = allRegions.filter((region) => region.kind === "room").map(projectedLayoutRoomLabel);
+    return { plan: layoutBounds(records), isometric: layoutBounds([...records.map((record) => ({ rect: projectedLayoutBounds(record.rect, 32) })), ...roomCallouts, ...cableBounds]) };
   }, [manifest]);
   const fullBounds = isometric ? allBounds.isometric : allBounds.plan;
   const bounds = viewport ?? fullBounds;
@@ -610,6 +612,10 @@ export function LayoutPlanPage() {
       </span>)}
       <span className="text-muted-foreground">PODs and rooms are reference areas</span>
     </div>
+    {isometric ? <p className="flex items-center gap-2 text-sm font-semibold text-amber-950">
+      <Zap className="h-5 w-5 shrink-0 fill-red-700 text-red-700" aria-hidden="true" />
+      Electrical hazard: breathing lightning marks energized equipment and equipment scheduled to energize today.
+    </p> : null}
     <p className="text-xs text-muted-foreground">{isometric
       ? "Click equipment or a cable to trace it. Click empty space to clear focus. Global view or Esc restores the full layout. Drag to pan; scroll to zoom."
       : "Hover or focus equipment to read its full ID. Drag to pan; scroll to zoom. Confirm a search suggestion to zoom to the device. Energized equipment cannot be planned again. Reset restores Excel values for all floors."}</p>
@@ -670,6 +676,11 @@ export function LayoutPlanPage() {
         {!selected && cableDetails ? <div className="border-b pb-4">{cableDetails}</div> : null}
         {selected ? <div className="space-y-3">
           <h3 className="break-all font-semibold">{selected.matched_equipment_id ?? selected.label}</h3>
+          {isometric && (statusOf(selected) === "energized" || statusOf(selected) === "energizeToday") ?
+            <div className="rounded-md border-2 border-amber-700 bg-yellow-100 p-3 text-amber-950" aria-label="Electrical hazard warning">
+              <p className="flex items-center gap-2 text-sm font-bold"><Zap className="h-5 w-5 shrink-0" aria-hidden="true" />Electrical hazard</p>
+              <p className="mt-1 text-sm">{statusOf(selected) === "energized" ? "Energized equipment." : "Scheduled to energize today; confirmation pending."} Verify isolation before work.</p>
+            </div> : null}
           <Button className="w-full gap-2" aria-pressed={statusOf(selected) === "energizeToday"}
             disabled={statusOf(selected) === "energized"}
             variant={statusOf(selected) === "energizeToday" ? "secondary" : "default"}

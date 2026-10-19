@@ -120,8 +120,10 @@ across floors, and stores manual electrical-status overrides in browser storage.
 Overrides are keyed by equipment ID and never modify workbook or server data.
 POD and E-number room annotations are separate noninteractive regions, with
 optional shared fixed regions. Equipment gets a bounded visual inset; source
-geometry remains intact. Room labels have fixed positions in the background,
-equipment is drawn above them, and all lightning markers are drawn together in
+geometry remains intact. Room labels have fixed positions in the background;
+2.5D uses larger external callouts beyond the room back edges with leader lines,
+included in the shared fit bounds. The 2D labels keep their inside positions.
+Equipment is drawn above them, and all lightning markers are drawn together in
 the final SVG layer. Energized has a stronger red fill/border. The SVG uses
 a fixed-size canvas and a movable viewBox, pointer capture for panning, and a
 non-passive wheel handler with cursor-anchored zoom. Global search suggestions

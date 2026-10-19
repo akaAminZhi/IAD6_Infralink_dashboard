@@ -1,6 +1,6 @@
 import { memo } from "react";
 import type { LayoutRegionRecord } from "../../types/data";
-import { projectLayoutPoint, projectedRectPoints, svgPoints } from "../../utils/layoutIsometricUtils";
+import { projectLayoutPoint, projectedLayoutRoomLabel, projectedRectPoints, svgPoints } from "../../utils/layoutIsometricUtils";
 import { layoutRoomLabels } from "../../utils/layoutPlanUtils";
 
 export const LayoutBackground = memo(function LayoutBackground({ regions, roomLabels, isometric }: {
@@ -27,12 +27,15 @@ export const LayoutBackground = memo(function LayoutBackground({ regions, roomLa
       })}
     </g>
     <g pointerEvents="none" data-layout-layer="room-labels">
-      {roomLabels.map(({ region, rect, fontSize }) => {
+      {roomLabels.map((label) => {
+        const { region } = label;
+        const projected = isometric ? projectedLayoutRoomLabel(region) : null;
+        const { rect, fontSize } = projected ?? label;
         const center = { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
-        const anchor = projectLayoutPoint(center.x, center.y);
-        return <g key={region.annotation_id} data-room-label={region.label}
-          transform={isometric ? `translate(${anchor.x - center.x} ${anchor.y - center.y})` : undefined}>
-          <rect {...rect} fill="white" rx={1.5} />
+        return <g key={region.annotation_id} data-room-label={region.label} data-room-label-position={isometric ? "outside" : "inside"}>
+          {projected ? <line x1={projected.anchor.x} y1={projected.anchor.y} x2={center.x} y2={center.y}
+            stroke="#94a3b8" strokeWidth={0.5} /> : null}
+          <rect {...rect} fill="white" rx={1.5} stroke={isometric ? "#94a3b8" : undefined} strokeWidth={isometric ? 0.4 : undefined} />
           <text x={center.x} y={center.y} textAnchor="middle" dominantBaseline="middle" fontSize={fontSize}
             fontWeight={600} fill="#334155">{region.label}</text>
         </g>;

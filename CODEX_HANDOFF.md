@@ -1,5 +1,48 @@
 ﻿# Codex Handoff
 
+## Current update (2026-10-19): External 2.5D room labels
+
+- 2.5D room names now sit beyond the back edge with 8-unit horizontal text,
+  white badges and thin leaders to their rooms, avoiding cabinet roofs. The 2D
+  room-label positions and POD labels are unchanged. Shared all-floor fit bounds
+  include the projected callouts. Status changes do not move room names.
+- Geometry lives in `projectedLayoutRoomLabel`; background rendering and camera
+  fitting use the same helper. No equipment geometry, data or ETL changes.
+- Ignored browser QA: `runtime/automation/layout_room_labels_smoke.py` checks both
+  real floors for label/equipment overlap and 2D restoration, and saves overview
+  and detail screenshots as `layout-room-labels-{floor}-{overview,detail}.png`.
+- Validation: 14 geometry tests and 38 Page tests passed; the combined run hit
+  a Page fork-worker startup timeout, then the isolated Page rerun passed.
+  Preview production build passed. Rebuilt 5173 browser check found zero device
+  overlaps for all six room labels, verified 2D restoration and no page errors;
+  first-floor detail screenshot visually reviewed. No ETL or service restart.
+
+## Current update (2026-10-19): 2.5D electrical hazard visibility
+
+- Energize today and Energized share a 9-unit lightning regardless of equipment
+  footprint. User follow-up removed the yellow warning triangles and restored
+  the original 2.2-second scale/opacity breathing animation. Reduced motion stops it.
+  Unrelated search/connection focus retains 75% marker opacity. 2D keeps its
+  existing markers and animation.
+- Shared status palettes now color visible roofs and enclosure faces across all
+  five device types and full/simple/compact models. Detailed lids previously
+  covered the colored body with a neutral top. Doors also follow status shading.
+- A map warning key and selected-device hazard card explain energized versus
+  scheduled-today equipment; plans remain pending confirmation. Source status,
+  browser-local overrides, camera, connections and data contracts are unchanged.
+- Browser QA uses ignored `runtime/automation/layout_hazard_smoke.py`, with
+  browser-only fixtures for 15 models (five kinds x three states), plus real-data
+  loading. Screenshots: `layout-hazard-{models,fixture,real}.png`. No dataset edits.
+- Validation: 51 targeted frontend tests passed using one fork worker; the first
+  thread run passed 13 model tests but timed out starting the Page worker. Final
+  preview production build and rebuilt 5173 browser smoke passed, including
+  equal sizes, warning opacity during search, reduced motion and no page errors.
+  Existing large-chunk warning remains. No ETL, Python suites, commit or service
+  restart; the running local preview reads the rebuilt assets on refresh.
+- Triangle-removal follow-up: 38 Layout page tests, the preview build and updated
+  browser smoke passed. Verified 10 enlarged breathing bolts, zero triangle icons,
+  reduced motion and real-data loading; screenshots regenerated without triangles.
+
 ## Current update (2026-10-16): Room cable drops
 
 - Long 2.5D room branches now share a tray-height baseline on each side of a

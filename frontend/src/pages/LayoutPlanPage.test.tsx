@@ -42,6 +42,36 @@ beforeEach(() => {
 });
 
 describe("2.5D Layout connections", () => {
+  it("shows equal enlarged breathing lightning without warning triangles for planned and energized devices of different sizes", async () => {
+    localStorage.removeItem(LAYOUT_VIEW_KEY);
+    localStorage.setItem(LAYOUT_OVERRIDES_KEY, JSON.stringify({ "EQ-FIX": "energizeToday" }));
+    const manifest = dataset();
+    manifest.fixed_equipment[0].rect = { x: 10, y: 20, width: 5, height: 8 };
+    fetchMock.mockResolvedValue(manifest);
+    const user = userEvent.setup();
+    const { container } = render(<LayoutPlanPage />);
+    const energized = await screen.findByRole("img", { name: "EQ-1 Energized lightning" });
+    const planned = screen.getByRole("img", { name: "EQ-FIX Energize today lightning" });
+    for (const icon of [energized, planned]) {
+      expect(icon).toHaveAttribute("width", "9");
+      expect(icon).toHaveAttribute("height", "9");
+      expect(icon).toHaveClass("animate-energisation-breathe");
+      expect(icon).toHaveAttribute("x", "0");
+      expect(icon).toHaveAttribute("y", "0");
+    }
+    expect(container.querySelector(".lucide-triangle, .lucide-triangle-alert")).not.toBeInTheDocument();
+    await user.type(screen.getByLabelText("Find equipment"), "EQ-UNKNOWN");
+    expect(energized.closest("[data-lightning-key]")).toHaveAttribute("opacity", "0.75");
+    expect(planned.closest("[data-lightning-key]")).toHaveAttribute("opacity", "0.75");
+    await user.clear(screen.getByLabelText("Find equipment"));
+    await user.click(screen.getByRole("button", { name: "EQ-FIX: Energize today" }));
+    expect(screen.getByLabelText("Electrical hazard warning")).toHaveTextContent("Scheduled to energize today; confirmation pending.");
+    await user.click(screen.getByRole("button", { name: "EQ-1: Energized" }));
+    expect(screen.getByLabelText("Electrical hazard warning")).toHaveTextContent("Energized equipment.");
+    await user.click(screen.getByRole("button", { name: "Reset all statuses" }));
+    expect(screen.queryByRole("img", { name: "EQ-FIX Energize today lightning" })).not.toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "EQ-1 Energized lightning" })).toBeInTheDocument();
+  });
   function cable(values: Partial<LayoutCableRecord> = {}): LayoutCableRecord {
     return { cable_id: "FDR-IAD06-EQ-1-IAD06-EQ-FIX", equipment_type: "Feeder Cable - LV",
       source_equipment_key: "EQ-1", target_equipment_key: "EQ-FIX", connection_status: "resolved",
@@ -561,6 +591,18 @@ describe("LayoutPlanPage", () => {
     expect(container.querySelector('[data-layout-region="pod"]')).toBeInTheDocument();
     expect(container.querySelector('[data-room-label="E6-110-01"] text')).toHaveTextContent("E6-110-01");
     expect(screen.queryByRole("button", { name: /POD|E6-110-01/ })).not.toBeInTheDocument();
+    const planLabel = container.querySelector('[data-room-label="E6-110-01"]')!.outerHTML;
+    await user.click(screen.getByRole("button", { name: "2.5D" }));
+    const callout = container.querySelector('[data-room-label="E6-110-01"]')!;
+    expect(callout).toHaveAttribute("data-room-label-position", "outside");
+    expect(callout.querySelector("line")).toBeInTheDocument();
+    const badge = callout.querySelector("rect")!;
+    const left = Number(badge.getAttribute("x")), top = Number(badge.getAttribute("y"));
+    const right = left + Number(badge.getAttribute("width")), bottom = top + Number(badge.getAttribute("height"));
+    // Inverse ground projection: every badge corner lies beyond the room's back edge.
+    for (const x of [left, right]) for (const y of [top, bottom]) expect(y - x / 2).toBeLessThan(10);
+    await user.click(screen.getByRole("button", { name: "2D plan" }));
+    expect(container.querySelector('[data-room-label="E6-110-01"]')!.outerHTML).toBe(planLabel);
     await user.selectOptions(screen.getByLabelText("Floor"), "second");
     expect(container.querySelector('[data-layout-region="pod"]')).toBeInTheDocument();
     expect(container.querySelector('[data-layout-region="room"]')).not.toBeInTheDocument();

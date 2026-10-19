@@ -11,6 +11,25 @@ function record(key: string): LayoutEquipmentRecord {
 }
 
 describe("industrial isometric equipment models", () => {
+  it.each([
+    ["TX6-01A", "tank-lid"], ["UTILITY6-01", "switchgear-bay"],
+    ["GEN6-01A", "generator-roof"], ["TX-UPP6-01A", "overhanging-cover"], ["MDS6-01A", "cabinet-roof"],
+  ])("colors the visible roof of %s in both electrical hazard states at every detail level", (key, roof) => {
+    const device = record(key);
+    const { container, rerender } = render(<svg />);
+    const tops = new Set<string>();
+    for (const status of ["notEnergized", "energizeToday", "energized"] as const) {
+      rerender(<svg><IsometricEquipment record={device} status={status} selected={false} /></svg>);
+      const fullTop = container.querySelector(`[data-model-part="${roof}"] [data-enclosure-face="top"]`)!.getAttribute("fill")!;
+      tops.add(fullTop);
+      rerender(<svg><IsometricEquipment record={device} status={status} selected={false} detailed={false} /></svg>);
+      expect([...container.querySelectorAll('[data-enclosure-face="top"]')].some((face) => face.getAttribute("fill") === fullTop)).toBe(true);
+      rerender(<svg><SimpleIsometricSymbols /><IsometricEquipment record={device} status={status} selected={false} detailed={false} compact /></svg>);
+      const symbolId = container.querySelector("use")!.getAttribute("href")!;
+      expect(container.querySelector(`${symbolId} polygon:last-of-type`)).toHaveAttribute("fill", fullTop);
+    }
+    expect(tops.size).toBe(3);
+  });
   it("reuses one shared silhouette for compact dense-floor equipment", () => {
     const { container } = render(<svg><SimpleIsometricSymbols /><IsometricEquipment record={record("TX6-01A")}
       status="notEnergized" selected={false} detailed={false} compact showLabel={false} /></svg>);

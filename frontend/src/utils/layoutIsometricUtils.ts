@@ -1,4 +1,4 @@
-import type { LayoutCableRecord, LayoutEquipmentRecord, PowerPlanPoint, PowerPlanRect } from "../types/data";
+import type { LayoutCableRecord, LayoutEquipmentRecord, LayoutRegionRecord, PowerPlanPoint, PowerPlanRect } from "../types/data";
 import { insetEquipmentRect } from "./layoutPlanUtils";
 
 export const LAYOUT_VIEW_KEY = "iad6-layout-view-v1";
@@ -43,6 +43,17 @@ export function projectedLayoutBounds(rect: PowerPlanRect, height = 0): PowerPla
   const points = [...projectedRectPoints(rect), ...projectedRectPoints(rect, height)];
   const x = Math.min(...points.map((p) => p.x)), y = Math.min(...points.map((p) => p.y));
   return { x, y, width: Math.max(...points.map((p) => p.x)) - x, height: Math.max(...points.map((p) => p.y)) - y };
+}
+
+/** Horizontal room callout beyond the back edge, clear of cabinet roofs. */
+export function projectedLayoutRoomLabel(region: LayoutRegionRecord) {
+  const centerX = region.rect.x + region.rect.width / 2;
+  const anchor = projectLayoutPoint(centerX, region.rect.y);
+  const center = projectLayoutPoint(centerX, region.rect.y - 60);
+  const fontSize = 8;
+  const width = region.label.length * fontSize * 0.65 + fontSize;
+  const height = fontSize + 4;
+  return { region, anchor, fontSize, rect: { x: center.x - width / 2, y: center.y - height / 2, width, height } };
 }
 
 export interface PlacedLayoutCable {

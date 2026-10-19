@@ -6,6 +6,12 @@ import { layoutDeviceHeight, layoutDeviceKind, projectLayoutPoint, projectedLayo
 
 interface EnclosurePalette { top: string; left: string; right: string }
 const ENCLOSURE: EnclosurePalette = { top: "#e1ebef", left: "#acbec8", right: "#8098a6" };
+const STATUS_PALETTES: Record<LayoutStatus, EnclosurePalette> = {
+  notEnergized: ENCLOSURE,
+  unknown: ENCLOSURE,
+  energizeToday: { top: "#ffd09a", left: "#edb675", right: "#cf9153" },
+  energized: { top: "#f9a8a2", left: "#e68c87", right: "#c76964" },
+};
 const BASE: EnclosurePalette = { top: "#beced5", left: "#8fa5b1", right: "#718a99" };
 const DARK: EnclosurePalette = { top: "#9bb0bd", left: "#7c95a4", right: "#5f7888" };
 const SIMPLE_KINDS: LayoutDeviceKind[] = ["mvTransformer", "utility", "generator", "lvTransformer", "cabinet"];
@@ -14,8 +20,7 @@ const SIMPLE_STATUSES: LayoutStatus[] = ["notEnergized", "energizeToday", "energ
 /** Shared silhouettes keep dense floors to one SVG shape per unselected device. */
 export function SimpleIsometricSymbols() {
   return <defs>{SIMPLE_STATUSES.flatMap((status) => SIMPLE_KINDS.map((kind) => {
-    const colors = status === "energized" ? { top: "#ffe0dd", left: "#edaaa6", right: "#d78480" }
-      : status === "energizeToday" ? { top: "#fff0dd", left: "#e5c8a4", right: "#c4a27f" } : ENCLOSURE;
+    const colors = STATUS_PALETTES[status];
     return <symbol key={`${kind}-${status}`} id={`layout-simple-${kind}-${status}`} viewBox="0 0 100 100">
       <path d="M 12 76 L 55 96 L 99 74 L 56 53 Z" fill="#526a78" opacity="0.12" />
       <polygon points="7,37 52,57 52,91 7,70" fill={colors.left} stroke="#8197a4" strokeWidth="0.8" />
@@ -42,8 +47,7 @@ const EquipmentModel = memo(function EquipmentModel({ record, status, detailed, 
   const { x, y, width: w, height: d } = rect;
   const h = layoutDeviceHeight(record), kind = layoutDeviceKind(record), s = Math.min(w, d);
   const outline = "#8197a4", detail = "#5f7888", lineWidth = Math.max(0.055, Math.min(0.2, s * 0.009));
-  const palette = status === "energized" ? { top: "#ffe0dd", left: "#edaaa6", right: "#d78480" }
-    : status === "energizeToday" ? { top: "#fff0dd", left: "#e5c8a4", right: "#c4a27f" } : ENCLOSURE;
+  const palette = STATUS_PALETTES[status];
   const p = (u: number, v: number, z: number) => projectLayoutPoint(x + u * w, y + v * d, z);
   const polygon = (coords: [number, number, number][], fill: string, extra = {}) =>
     <polygon points={svgPoints(coords.map(([u, v, z]) => p(u, v, z)))} fill={fill} {...extra} />;
@@ -75,7 +79,7 @@ const EquipmentModel = memo(function EquipmentModel({ record, status, detailed, 
         : line([u, v, z + height * i / 6], [u, v + width, z + height * i / 6])}</g>)}
     </g>;
   const door = (u: number, v: number, width: number, z: number, height: number) => <g data-model-part="cabinet-door">
-    {polygon([[u, v, z], [u + width, v, z], [u + width, v, z + height], [u, v, z + height]], "#bbccd4", { stroke: outline, strokeWidth: lineWidth })}
+    {polygon([[u, v, z], [u + width, v, z], [u + width, v, z + height], [u, v, z + height]], status === "energized" || status === "energizeToday" ? palette.left : "#bbccd4", { stroke: outline, strokeWidth: lineWidth })}
     {polygon([[u + width * 0.17, v, z + height * 0.68], [u + width * 0.6, v, z + height * 0.68],
       [u + width * 0.6, v, z + height * 0.84], [u + width * 0.17, v, z + height * 0.84]], "#6e8999")}
     {line([u + width * 0.83, v, z + height * 0.31], [u + width * 0.83, v, z + height * 0.48], "#e9eef0", lineWidth * 2.8)}
@@ -141,7 +145,7 @@ const EquipmentModel = memo(function EquipmentModel({ record, status, detailed, 
       {box(0.06, 0.21, 0.22, 0.64, h * 0.1, h * 0.39, BASE, "radiator-bank")}
       {Array.from({ length: 8 }, (_, i) => <g key={i}>{box(0.055, 0.24 + i * 0.073, 0.23, 0.021, h * 0.11, h * 0.37, ENCLOSURE)}</g>)}
       {box(0.87, 0.53, 0.1, 0.29, h * 0.08, h * 0.36, ENCLOSURE, "connection-cabinet")}
-      {box(0.31, 0.17, 0.59, 0.7, h * 0.605, h * 0.045, ENCLOSURE, "tank-lid")}
+      {box(0.31, 0.17, 0.59, 0.7, h * 0.605, h * 0.045, palette, "tank-lid")}
       {[0.35, 0.53, 0.71].map((v) => <g key={v}>{bushing(0.62, v, h * 0.65, h * 0.28, s * 0.041)}</g>)}
       {line([0.4, 0.28, h * 0.65], [0.4, 0.28, h * 0.83], "#94aab7", s * 0.06)}
       {line([0.35, 0.23, h * 0.84], [0.35, 0.75, h * 0.84], "#a5bac6", s * 0.17)}
@@ -163,7 +167,7 @@ const EquipmentModel = memo(function EquipmentModel({ record, status, detailed, 
       {box(0.1, 0.75, 0.8, 0.18, h * 0.12, h * 0.63, DARK, "generator-radiator")}
       {vent(0.16, 0.935, h * 0.22, 0.68, h * 0.43)}
       {vent(0.905, 0.18, h * 0.23, 0.22, h * 0.3, "right")}
-      {box(0.08, 0.05, 0.84, 0.7, h * 0.7, h * 0.055, ENCLOSURE, "generator-roof")}
+      {box(0.08, 0.05, 0.84, 0.7, h * 0.7, h * 0.055, palette, "generator-roof")}
       {fan(0.5, 0.28, h * 0.76, s * 0.2)}
       {fan(0.5, 0.57, h * 0.76, s * 0.2)}
       {line([0.74, 0.13, h * 0.76], [0.74, 0.13, h * 0.96], "#718b9b", s * 0.075)}
@@ -174,7 +178,7 @@ const EquipmentModel = memo(function EquipmentModel({ record, status, detailed, 
     model = <>
       {box(0.08, 0.08, 0.84, 0.84, 0, h * 0.08, BASE, "transformer-base")}
       {box(0.16, 0.16, 0.68, 0.68, h * 0.08, h * 0.66, palette, "dry-transformer-enclosure")}
-      {box(0.12, 0.12, 0.76, 0.76, h * 0.74, h * 0.1, ENCLOSURE, "overhanging-cover")}
+      {box(0.12, 0.12, 0.76, 0.76, h * 0.74, h * 0.1, palette, "overhanging-cover")}
       {vent(0.24, 0.845, h * 0.21, 0.52, h * 0.38)}
       {vent(0.845, 0.23, h * 0.21, 0.5, h * 0.38, "right")}
       {line([0.36, 0.16, h * 0.86], [0.36, 0.3, h * 0.86], "#889fac", s * 0.06)}
@@ -185,7 +189,7 @@ const EquipmentModel = memo(function EquipmentModel({ record, status, detailed, 
       {box(0.12, 0.1, 0.76, 0.8, 0, h * 0.07, DARK, "cabinet-plinth")}
       {box(0.12, 0.12, 0.76, 0.74, h * 0.07, h * 0.83, palette, "cabinet-enclosure")}
       {door(0.17, 0.864, 0.66, h * 0.12, h * 0.72)}
-      {box(0.1, 0.1, 0.8, 0.78, h * 0.9, h * 0.035, ENCLOSURE, "cabinet-roof")}
+      {box(0.1, 0.1, 0.8, 0.78, h * 0.9, h * 0.035, palette, "cabinet-roof")}
     </>;
   }
   return <g data-device-model={kind} data-device-detail="full">

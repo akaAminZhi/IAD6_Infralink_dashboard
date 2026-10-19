@@ -154,11 +154,22 @@ in 16px text and its electrical status without zooming. Escape dismisses the car
 dragging/zooming/floor changes also dismiss it. Click/tap for the details panel.
 
 POD rectangles and room comments such as `E6-110-01` or `E-1-2` are reference
-areas, not selectable equipment. Room names stay centered near the top inside
-each room, in the background below equipment. Their positions do not change
+areas, not selectable equipment. In 2D, room names stay centered near the top
+inside each room. In 2.5D, larger horizontal labels sit outside the back edge,
+with a thin leader pointing to the room. External labels are included in the
+fitted camera bounds. Their positions do not change
 with electrical status. All breathing lightning is drawn in the last SVG layer,
 above equipment, room names and the selection rectangle. Energized devices use
 a stronger red fill and dark red border/marker for visibility.
+In 2.5D, energized and planned-for-today devices use the same enlarged 9-unit
+lightning regardless of device footprint, with the original 2.2-second scaling
+and opacity breathing animation. No warning triangle is drawn.
+Lightning markers retain at least 75% opacity when search or connection focus dims
+other equipment, keeping electrical hazards visible during inspection.
+Roofs and enclosure faces use matching red/orange shading in full, simplified
+and dense-floor models.
+The equipment inspector shows an electrical hazard warning and distinguishes
+planned energization awaiting confirmation from confirmed energized equipment.
 PODs within fix remain visible across floors.
 Equipment rectangles have a small inset for spacing. Floor alignment translates
 equipment and rooms together while preserving device dimensions and spacing.
