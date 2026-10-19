@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -55,6 +55,33 @@ describe("2.5D Layout connections", () => {
     fetchMock.mockResolvedValue(manifest);
     return manifest;
   }
+
+
+  it.each(["plan", "isometric"])("matches a standard notch with 34 small wheel events in %s view", async (view) => {
+    localStorage.setItem(LAYOUT_VIEW_KEY, view);
+    render(<LayoutPlanPage />);
+    const map = await screen.findByRole("img", { name: "First Floor equipment layout" });
+    vi.spyOn(map, "getBoundingClientRect").mockReturnValue({ left: 0, top: 0, width: 600, height: 400 } as DOMRect);
+    const readView = () => map.getAttribute("viewBox")!.split(" ").map(Number);
+    const initial = readView();
+    for (const direction of [-1, 1]) {
+      fireEvent.wheel(map, { deltaY: direction * 100, clientX: 180, clientY: 140 });
+      await waitFor(() => expect(readView()[2] / initial[2]).toBeCloseTo(Math.pow(1.16, direction), 10));
+      const single = readView();
+      fireEvent.click(screen.getByRole("button", { name: /^(Global view|Fit layout)$/ }));
+      for (let i = 0; i < 34; i++) {
+        await act(async () => {
+          fireEvent.wheel(map, { deltaY: direction * 100 / 34, clientX: 180, clientY: 140 });
+          await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+        });
+      }
+      readView().forEach((value, index) => expect(value).toBeCloseTo(single[index], 8));
+      fireEvent.click(screen.getByRole("button", { name: /^(Global view|Fit layout)$/ }));
+    }
+    fireEvent.wheel(map, { deltaY: 0, deltaX: 100 });
+    await act(async () => { await new Promise<void>((resolve) => requestAnimationFrame(() => resolve())); });
+    expect(readView()).toEqual(initial);
+  });
 
   it("defaults to 2.5D, only draws same-view unique endpoints, and shows cable IDs and test evidence", async () => {
     const manifest = isometricDataset();

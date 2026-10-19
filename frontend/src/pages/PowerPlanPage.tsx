@@ -25,6 +25,8 @@ import {
   Zap,
 } from "lucide-react";
 
+import { wheelZoomFactor } from "../utils/wheelZoom";
+import { useFrameState } from "../hooks/useFrameState";
 import { EmptyState } from "../components/common/EmptyState";
 import { EnergisationMarker } from "../components/pdms/EnergisationMarker";
 import { ENERGISATION_COLORS, getEnergisationLabel, getEnergisationStage } from "../utils/energisation";
@@ -1285,7 +1287,7 @@ export function PowerPlanPage({ data }: PowerPlanPageProps) {
     [data.cases, data.equipment, data.pdms],
   );
   const layout = useMemo(() => getPdmCombinationLayout(rows), [rows]);
-  const [viewport, setViewport] = useState<SchematicViewport>({
+  const [viewport, setViewport, queueViewport] = useFrameState<SchematicViewport>({
     x: 0,
     y: 0,
     width: layout.width,
@@ -1433,16 +1435,18 @@ export function PowerPlanPage({ data }: PowerPlanPageProps) {
       event.preventDefault();
       event.stopPropagation();
       const bounds = svg.getBoundingClientRect();
+      const factor = wheelZoomFactor(event, bounds.height);
+      if (factor === 1) return;
       const anchorX = Math.max(0, Math.min(1, (event.clientX - bounds.left) / bounds.width));
       const anchorY = Math.max(0, Math.min(1, (event.clientY - bounds.top) / bounds.height));
-      setViewport((current) =>
-        zoomViewport(current, layout, event.deltaY < 0 ? 0.86 : 1.16, anchorX, anchorY),
+      queueViewport((current) =>
+        zoomViewport(current, layout, factor, anchorX, anchorY),
       );
     };
 
     svg.addEventListener("wheel", handleCanvasWheel, { passive: false });
     return () => svg.removeEventListener("wheel", handleCanvasWheel);
-  }, [layout]);
+  }, [layout, queueViewport]);
 
   if (allRows.length === 0) {
     return (

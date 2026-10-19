@@ -1,6 +1,7 @@
 import { Box, Cable, Eye, EyeOff, Maximize, MousePointer2, RotateCcw, Search, X, Zap, ZoomIn, ZoomOut } from "lucide-react";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 
+import { wheelZoomFactor } from "../utils/wheelZoom";
 import { EmptyState } from "../components/common/EmptyState";
 import { ErrorState } from "../components/common/ErrorState";
 import { LoadingState } from "../components/common/LoadingState";
@@ -288,9 +289,10 @@ export function LayoutPlanPage() {
       if (!event.deltaY || panRef.current) return;
       setInspection(null);
       const canvas = canvasRect() ?? svg!.getBoundingClientRect();
+      const factor = wheelZoomFactor(event, canvas.height);
       queueViewport((current) => {
         const view = current ?? fullBounds;
-        return zoomLayoutViewport(view, fullBounds, event.deltaY < 0 ? 0.86 : 1.16,
+        return zoomLayoutViewport(view, fullBounds, factor,
           layoutCanvasPoint(view, canvas, event.clientX, event.clientY));
       });
     }

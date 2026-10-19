@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -60,6 +60,36 @@ describe("MvEquipmentPage", () => {
     await user.click(screen.getByRole("button", { name: `${label}, MV ${label.startsWith("TX") ? "transformer" : "equipment"}` }));
     expect(screen.getByText("Completion date unavailable")).toBeInTheDocument();
     expect(screen.getByLabelText(`${label}: 1 failed test items`)).toHaveTextContent("1");
+  });
+
+
+  it("matches a standard notch with 34 small wheel events across frames", async () => {
+    render(<MvEquipmentPage data={makeDashboardData({ powerPlanManifest: { pages: [{
+      page_id: "mv", page_label: "MV", document_name: "Electrical-IAD6-MV.pdf", page_number: 1,
+      width: 1000, height: 700, annotations: [{ annotation_id: "mv-1", kind: "equipment", label: "TX6-01A",
+        rect: { x: 100, y: 100, width: 180, height: 90 }, center: { x: 190, y: 145 } }],
+    }] } })} />);
+    const map = await screen.findByRole("img", { name: "Unified MV equipment annotation schematic" });
+    vi.spyOn(map, "getBoundingClientRect").mockReturnValue({ left: 0, top: 0, width: 600, height: 400 } as DOMRect);
+    const readView = () => map.getAttribute("viewBox")!.split(" ").map(Number);
+    const initial = readView();
+    for (const direction of [-1, 1]) {
+      fireEvent.wheel(map, { deltaY: direction * 100, clientX: 180, clientY: 140 });
+      await waitFor(() => expect(readView()[2] / initial[2]).toBeCloseTo(Math.pow(1.18, direction), 10));
+      const single = readView();
+      fireEvent.click(screen.getByRole("button", { name: "Reset MV plan view" }));
+      for (let i = 0; i < 34; i++) {
+        await act(async () => {
+          fireEvent.wheel(map, { deltaY: direction * 100 / 34, clientX: 180, clientY: 140 });
+          await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+        });
+      }
+      readView().forEach((value, index) => expect(value).toBeCloseTo(single[index], 8));
+      fireEvent.click(screen.getByRole("button", { name: "Reset MV plan view" }));
+    }
+    fireEvent.wheel(map, { deltaY: 0, deltaX: 100 });
+    await act(async () => { await new Promise<void>((resolve) => requestAnimationFrame(() => resolve())); });
+    expect(readView()).toEqual(initial);
   });
 
   it("shows open-issue equipment in red until NETA is complete and badges the issue count", () => {

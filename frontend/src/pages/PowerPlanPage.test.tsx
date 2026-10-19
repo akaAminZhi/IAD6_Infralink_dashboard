@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -23,6 +23,35 @@ beforeEach(() => {
 });
 
 describe("PowerPlanPage", () => {
+
+  it("matches a standard notch with 34 small wheel events across frames", async () => {
+    render(<PowerPlanPage data={makeDashboardData({ pdms: [{
+      pdm_name: "IAD06-PDM-E6-110-01-PRIMARY-CDS",
+      equipment: [{ equipment_id: "IAD06-PDU6-01A-1" }],
+    }] })} />);
+    const map = await screen.findByRole("img", { name: "SVG equipment location schematic" });
+    vi.spyOn(map, "getBoundingClientRect").mockReturnValue({ left: 0, top: 0, width: 600, height: 400 } as DOMRect);
+    const readView = () => map.getAttribute("viewBox")!.split(" ").map(Number);
+    const initial = readView();
+    for (const direction of [-1, 1]) {
+      fireEvent.wheel(map, { deltaY: direction * 100, clientX: 180, clientY: 140 });
+      await waitFor(() => expect(readView()[2] / initial[2]).toBeCloseTo(Math.pow(1.16, direction), 10));
+      const single = readView();
+      fireEvent.click(screen.getByRole("button", { name: "Reset view" }));
+      for (let i = 0; i < 34; i++) {
+        await act(async () => {
+          fireEvent.wheel(map, { deltaY: direction * 100 / 34, clientX: 180, clientY: 140 });
+          await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+        });
+      }
+      readView().forEach((value, index) => expect(value).toBeCloseTo(single[index], 8));
+      fireEvent.click(screen.getByRole("button", { name: "Reset view" }));
+    }
+    fireEvent.wheel(map, { deltaY: 0, deltaX: 100 });
+    await act(async () => { await new Promise<void>((resolve) => requestAnimationFrame(() => resolve())); });
+    expect(readView()).toEqual(initial);
+  });
+
   it("marks energised skids and gives onsite priority without changing equipment status", () => {
     const pdms = [
       { pdm_name: "IAD06-PDM-E6-110-01-PRIMARY-CDS", energised_offsite: true,

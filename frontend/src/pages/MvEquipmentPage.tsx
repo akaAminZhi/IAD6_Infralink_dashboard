@@ -17,6 +17,8 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { wheelZoomFactor } from "../utils/wheelZoom";
+import { useFrameState } from "../hooks/useFrameState";
 import { EmptyState } from "../components/common/EmptyState";
 import { IssueDetailDrawer } from "../components/issues/IssueDetailDrawer";
 import { IssueStatusBadge } from "../components/issues/IssueStatusBadge";
@@ -1137,7 +1139,7 @@ export function MvEquipmentPage({ data }: MvEquipmentPageProps) {
     () => currentPage ? annotationBounds(currentPage) : { x: 0, y: 0, width: 1, height: 1 },
     [currentPage],
   );
-  const [viewport, setViewport] = useState<PowerPlanRect>(fullViewport);
+  const [viewport, setViewport, queueViewport] = useFrameState<PowerPlanRect>(fullViewport);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedIssue, setSelectedIssue] = useState<EnrichedIssue | null>(null);
   const [atpPreview, setAtpPreview] = useState<AtpPreview | null>(null);
@@ -1167,7 +1169,7 @@ export function MvEquipmentPage({ data }: MvEquipmentPageProps) {
     setSelectedId(null);
     setSelectedIssue(null);
     setAtpPreview(null);
-  }, [fullViewport]);
+  }, [fullViewport, setViewport]);
 
   useEffect(() => {
     let active = true;
@@ -1202,15 +1204,17 @@ export function MvEquipmentPage({ data }: MvEquipmentPageProps) {
       event.preventDefault();
       event.stopPropagation();
       const bounds = svg.getBoundingClientRect();
+      const factor = wheelZoomFactor(event, bounds.height, 1.18);
+      if (factor === 1) return;
       const anchorX = Math.max(0, Math.min(1, (event.clientX - bounds.left) / bounds.width));
       const anchorY = Math.max(0, Math.min(1, (event.clientY - bounds.top) / bounds.height));
-      setViewport((current) =>
-        zoomViewport(current, fullViewport, event.deltaY < 0 ? 0.84 : 1.18, anchorX, anchorY),
+      queueViewport((current) =>
+        zoomViewport(current, fullViewport, factor, anchorX, anchorY),
       );
     };
     svg.addEventListener("wheel", handleWheel, { passive: false });
     return () => svg.removeEventListener("wheel", handleWheel);
-  }, [fullViewport]);
+  }, [fullViewport, queueViewport]);
 
   if (!currentPage) {
     return (
