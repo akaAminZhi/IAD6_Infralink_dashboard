@@ -78,6 +78,29 @@ def test_failed_history_never_proves_upload(tmp_path):
     assert plan.new_paths == [item.pdf_path]
 
 
+@pytest.mark.parametrize("case", ["not_found", "wrong_answer"])
+def test_invalidated_success_cannot_skip_upload_or_supply_aliases(tmp_path, case):
+    item = report(tmp_path / "report.pdf", "downloads/old.pdf")
+    rows = history([item])
+    if case == "not_found":
+        rows += history([item], status="equipment_not_found")
+    else:
+        rows[0].update(status="skipped_existing_on_site",
+                       error="CxAlloy row already has answer file: ANOTHER-DEVICE.pdf.")
+    rows += history([item], status="skipped_manifest_uploaded")
+    plan = plan_upload([item], rows)
+    assert plan.new_paths == [item.pdf_path]
+    assert not any(plan.aliases.values())
+    # The wrapper must also filter a vendor's potentially stale completed keys.
+    group_hash = combined_sha256([(item.pdf_path, item.sha256)])
+    vendor = SimpleNamespace(
+        completed_upload_keys=lambda values: {(row["target_equipment"].casefold(), row["sha256"]) for row in values},
+        combined_sha256=lambda items: combined_sha256((value.pdf_path, value.sha256) for value in items),
+    )
+    install_guard(vendor, {"pdu6-01a-1": plan}, {"pdu6-01a-1": [item]})
+    assert ("pdu6-01a-1", group_hash) not in vendor.completed_upload_keys(rows)
+
+
 def test_missing_recorded_site_filename_blocks_upload(tmp_path):
     old = report(tmp_path / "report__2.pdf", "downloads/old.pdf")
     plan = plan_upload([old], history([old], ["report.pdf"]))
@@ -162,10 +185,16 @@ def test_browser_guard_only_sends_new_file_and_records_actual_site_names(tmp_pat
 
 @pytest.mark.parametrize("case,expected_code,skipped,new", [
     ("renamed", 0, 1, 0), ("added", 0, 0, 1), ("changed", 1, 0, 0),
+    ("not_found", 0, 0, 1), ("wrong_answer", 0, 0, 1),
 ])
 def test_dry_run_never_opens_browser_or_writes_manifests(tmp_path, monkeypatch, capsys, case, expected_code, skipped, new):
     old = report(tmp_path / "old__2.pdf", "downloads/old.pdf")
     rows = history([old], ["old.pdf"])
+    if case == "not_found":
+        rows += history([old], ["old.pdf"], status="equipment_not_found")
+    elif case == "wrong_answer":
+        rows[0].update(status="skipped_existing_on_site",
+                       error="CxAlloy row already has answer file: WRONG-DEVICE.pdf.")
     files = [old]
     if case == "added":
         files.append(report(tmp_path / "cable.pdf", "downloads/cable.pdf", b"cable"))

@@ -103,9 +103,72 @@ def latest_attempts_by_target(rows: Iterable[dict[str, str]]) -> dict[str, dict[
     return latest
 
 
+def mismatched_site_check(row: dict[str, str]) -> bool:
+    if clean(row.get("status")).casefold() != "skipped_existing_on_site":
+        return False
+    prefix = "CxAlloy row already has answer file:"
+    error = clean(row.get("error"))
+    if not error.startswith(prefix):
+        return False
+    answered_name = error[len(prefix):].strip().removesuffix(".")
+    expected_name = clean(row.get("pdf_path")).split(";", 1)[0].strip().replace("\\", "/").rsplit("/", 1)[-1]
+    return not expected_name or answered_name.casefold() != expected_name.casefold()
+
+
+def valid_upload_history(rows: Iterable[dict[str, str]]) -> list[dict[str, str]]:
+    """Use confirmed successes since the last failed lookup, in append order.
+
+    Cached manifest skips do not independently prove an upload or undo a failed
+    lookup. Legacy site checks naming another PDF do not prove content coverage.
+    """
+    successes: dict[str, list[dict[str, str]]] = defaultdict(list)
+    for row in rows:
+        target = target_equipment(row.get("target_equipment") or row.get("device_name")).casefold()
+        status = clean(row.get("status")).casefold()
+        if not target:
+            continue
+        if status == "equipment_not_found":
+            successes.pop(target, None)
+        elif status in COMPLETED_UPLOAD_STATUSES and not mismatched_site_check(row):
+            successes[target].append(row)
+    return [row for records in successes.values() for row in records]
+
+
+def trusted_prior_status(payload: dict[str, Any], rows: list[dict[str, str]]) -> dict[str, Any]:
+    """Do not let cached package/file hashes resurrect disproven history.
+
+    For affected targets, rebuild coverage from valid raw successes even after a
+    later recovery. Other machines can still reuse unaffected cached evidence.
+    """
+    invalidated = {
+        target_equipment(row.get("target_equipment") or row.get("device_name")).casefold()
+        for row in rows
+        if clean(row.get("status")).casefold() == "equipment_not_found" or mismatched_site_check(row)
+    }
+    records = []
+    for record in payload.get("records") or []:
+        if not isinstance(record, dict):
+            continue
+        target = target_equipment(record.get("target_equipment") or record.get("equipment_id")).casefold()
+        attempt = {"status": clean(record.get("last_attempt_status")),
+                   "error": clean(record.get("last_attempt_error")),
+                   "pdf_path": ";".join(record.get("report_names") or [])}
+        # report_names is sorted, not the original upload order. A cached site
+        # check may name any one of its recorded files.
+        prefix = "CxAlloy row already has answer file:"
+        answered_name = attempt["error"][len(prefix):].strip().removesuffix(".")
+        if any(clean(name).casefold() == answered_name.casefold() for name in record.get("report_names") or []):
+            attempt["pdf_path"] = answered_name
+        if (target not in invalidated
+                and attempt["status"].casefold() != "equipment_not_found"
+                and not mismatched_site_check(attempt)):
+            records.append(record)
+    return {**payload, "records": records}
+
+
 def completed_upload_keys(rows: Iterable[dict[str, str]]) -> set[tuple[str, str]]:
     keys: set[tuple[str, str]] = set()
-    for row in rows:
+    for row in valid_upload_history(rows):
         status = clean(row.get("status")).casefold()
         target = target_equipment(row.get("target_equipment") or row.get("device_name"))
         digest = clean(row.get("sha256"))
@@ -143,7 +206,7 @@ def matches_renamed_upload(
     if len(files) != len(rows) or not all(sources) or len(set(sources)) != len(sources):
         return False
     hashes = dict(zip(sources, (digest for _, digest in files)))
-    for upload in uploads:
+    for upload in valid_upload_history(uploads):
         if clean(upload.get("status")).casefold() not in COMPLETED_UPLOAD_STATUSES:
             continue
         uploaded_sources = [
@@ -186,6 +249,22 @@ def prior_attempts_by_target(payload: dict[str, Any]) -> dict[str, dict[str, str
     return attempts
 
 
+def prior_report_hashes_by_target(payload: dict[str, Any]) -> dict[str, set[str]]:
+    """Retain verified per-file contents when later downloads expand a package."""
+    hashes: dict[str, set[str]] = defaultdict(set)
+    for record in payload.get("records") or []:
+        if not isinstance(record, dict):
+            continue
+        target = target_equipment(record.get("target_equipment") or record.get("equipment_id"))
+        for report in record.get("reports") or []:
+            if not isinstance(report, dict):
+                continue
+            digest = clean(report.get("sha256"))
+            if target and digest and report.get("upload_status") == "uploaded":
+                hashes[target.casefold()].add(digest)
+    return hashes
+
+
 def build_cxalloy_report_status(
     rename_manifest: Path,
     upload_manifest: Path,
@@ -211,11 +290,13 @@ def build_cxalloy_report_status(
         target = target_equipment(row.get("target_equipment") or row.get("device_name"))
         uploads_by_target[target.casefold()].append(row)
     prior_payload = read_status_payload(prior_status_manifest)
+    trusted_prior = trusted_prior_status(prior_payload, upload_rows)
     completed_keys = completed_upload_keys(upload_rows) | completed_status_keys(
-        prior_payload
+        trusted_prior
     )
     latest_attempts = latest_attempts_by_target(upload_rows)
     prior_attempts = prior_attempts_by_target(prior_payload)
+    prior_report_hashes = prior_report_hashes_by_target(trusted_prior)
     records: list[dict[str, Any]] = []
 
     for device_name in sorted(grouped_rows, key=str.casefold):
@@ -225,6 +306,7 @@ def build_cxalloy_report_status(
         report_names: list[str] = []
         missing_report_names: list[str] = []
         report_hashes: dict[str, str | None] = {}
+        report_files: dict[str, dict[str, Any]] = {}
 
         for row in grouped_rows[device_name]:
             report_path = resolve_manifest_path(clean(row.get("output_path")), tracker_root)
@@ -233,6 +315,10 @@ def build_cxalloy_report_status(
             # separately for the conservative per-PDF evidence planner.
             path_key = str(report_path.resolve()).casefold()
             if path_key not in report_hashes:
+                report_files[path_key] = {
+                    "path": report_path,
+                    "report_kind": "equipment",
+                }
                 report_names.append(report_path.name)
                 if report_path.is_file() and report_path.stat().st_size > 0:
                     digest = sha256_file(report_path)
@@ -241,6 +327,8 @@ def build_cxalloy_report_status(
                 else:
                     missing_report_names.append(report_path.name)
                     report_hashes[path_key] = None
+            if clean(row.get("parsed_source")).upper() in {"LV_CABLE", "MV_CABLE"}:
+                report_files[path_key]["report_kind"] = "cable"
             digest = report_hashes[path_key]
             if digest is not None:
                 evidence.append(ReportEvidence(clean(row.get("source_path")), report_path, digest))
@@ -261,6 +349,27 @@ def build_cxalloy_report_status(
                 or (not content_plan.new_paths and not content_plan.review_paths)
             )
         )
+        review_paths = set(content_plan.review_paths)
+        reports: list[dict[str, Any]] = []
+        for path_key, report_file in report_files.items():
+            path = report_file["path"]
+            digest = report_hashes[path_key]
+            reports.append({
+                "report_name": path.name,
+                "report_kind": report_file["report_kind"],
+                "sha256": digest,
+                "upload_status": (
+                    "missing_pdf" if digest is None
+                    else "uploaded" if (
+                        uploaded or content_plan.aliases.get(path)
+                        or digest in prior_report_hashes.get(target.casefold(), set())
+                    )
+                    else "review_required" if path in review_paths
+                    else "pending"
+                ),
+            })
+        reports.sort(key=lambda report: report["report_name"].casefold())
+        uploaded = uploaded or all(report["upload_status"] == "uploaded" for report in reports)
         local_attempt = latest_attempts.get(target.casefold(), {})
         prior_attempt = prior_attempts.get(target.casefold(), {})
         latest_attempt = (
@@ -285,6 +394,7 @@ def build_cxalloy_report_status(
                 "available_report_count": len(existing_files),
                 "report_names": report_names,
                 "missing_report_names": missing_report_names,
+                "reports": reports,
                 "current_sha256": current_hash,
                 "last_attempt_status": clean(latest_attempt.get("status")) or None,
                 "last_attempt_error": clean(latest_attempt.get("error")) or None,

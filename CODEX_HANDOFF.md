@@ -1,5 +1,65 @@
 ﻿# Codex Handoff
 
+## Current update (2026-10-19): Revoke invalid CxAlloy history
+
+- Fixed TX-HTP6-01E's false equipment Uploaded status. Its sole historical site
+  success (2026-06-30) named ATS-TX-HTP6-01E's PDF; subsequent manifest skips
+  repeated that assumption, followed by equipment_not_found on Oct 12, 13 and 19.
+  No actual uploaded row exists for this target in the local manifest.
+- Shared `valid_upload_history` rejects wrong-filename legacy site checks and
+  discards earlier target successes on a later equipment_not_found. Manifest
+  skips cannot reconfirm them. New successful uploads/site checks can restore
+  coverage; auth/upload failures alone preserve valid earlier evidence.
+- Status package hashes, per-PDF planning, and guarded uploader completion
+  checks now use this filter. Affected targets also discard cached dashboard
+  package/file hashes, preventing previous false Uploaded states from returning
+  after reload or repeated status builds. Raw valid later successes are rebuilt.
+- 49 targeted Python status/guard tests passed, including stale aggregate/file
+  caches, repeated builds, wrong Windows-path answer filenames, lookup revocation,
+  recovery and upload dry-run/guard regressions. Original append-only upload
+  history is preserved; no actual CxAlloy uploads or vendor-source edits.
+- Regenerated only CxAlloy status JSON: TX-HTP6-01E's equipment and two cable
+  reports are Pending, retaining its Oct 19 07:21:52 equipment_not_found error.
+  Same-class false site checks also corrected ATS-TX-INV6-01R (wrong TX-INV6 PDF)
+  and HTP6-02E (wrong ATS-TX-HTP6-02E PDF). Overall uploaded/pending is now 417/12.
+  Preview production build passed with existing size/timing warnings; generated
+  tracked build-info restored. No service restart or full ETL.
+- Desktop/mobile fixture smoke and the real TX-HTP6-01E page passed with no page
+  errors, showing no equipment Uploaded badge and retaining two Pending cables.
+  The user's 5173 service was stopped during QA, so verification used a temporary
+  loopback preview on 5187, terminated afterward. Screenshot updated at ignored
+  `runtime/automation/cxalloy-report-panel-real.png`.
+
+## Current update (2026-10-19): Separate equipment and cable CxAlloy status
+
+- Equipment detail's CxAlloy panel now separates Equipment Reports from Cable
+  Reports. Equipment status is independent of cable additions. Uploaded equipment
+  files are collapsed by default; each downloaded cable PDF remains listed with
+  its own Uploaded/Pending/Missing local PDF/Review required status. No expected
+  total, completion ratio, or assumption that all cables have been downloaded.
+- `build_cxalloy_report_status.py` adds `reports` with filename, equipment/cable
+  kind, content hash and per-file status. Classification uses LV_CABLE/MV_CABLE
+  rename metadata rather than filenames; physical PDFs shared by several source
+  references appear once. Existing package verification and the shared upload
+  planner prove successful uploads; failed attempts never prove coverage. Prior
+  per-file hashes preserve proven contents across renames and later downloads.
+  Legacy data without file details prompts a status refresh instead of guessing.
+- Regenerated only `frontend/public/data/cxalloy_report_status.json`; overall
+  uploaded/pending equipment was 419/10 before the history correction above.
+  TX-HTP6-01E's initial Uploaded display was later traced to invalid history.
+  No live CxAlloy connection, upload, full ETL, source
+  report edits, service restart or commit.
+- Validation: 37 targeted Python status/upload-guard tests; 16 frontend panel,
+  equipment utility and EquipmentPage tests passed. Initial combined fork run
+  passed the four panel tests but timed out starting the other two workers;
+  isolated thread retry passed the remaining 12. Preview production build passed
+  with existing chunk-size/plugin-timing warnings; generated tracked build-info
+  restored. Desktop/mobile browser fixtures passed with no page errors; screenshots
+  and repeatable smoke script live in ignored `runtime/automation/` as
+  `cxalloy-report-panel-{desktop,mobile}.png` and `cxalloy_report_panel_smoke.py`.
+  Real-data smoke now expects TX-HTP6-01E equipment and cables Pending after the
+  history correction; screenshot `cxalloy-report-panel-real.png`.
+
 ## Current update (2026-10-19): External 2.5D room labels
 
 - 2.5D room names now sit beyond the back edge with 8-unit horizontal text,

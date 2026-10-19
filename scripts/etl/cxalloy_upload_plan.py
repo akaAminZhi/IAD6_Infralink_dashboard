@@ -7,9 +7,9 @@ from pathlib import Path
 from typing import Any
 
 try:
-    from .build_cxalloy_report_status import COMPLETED_UPLOAD_STATUSES, matches_renamed_upload
+    from .build_cxalloy_report_status import COMPLETED_UPLOAD_STATUSES, matches_renamed_upload, valid_upload_history
 except ImportError:
-    from build_cxalloy_report_status import COMPLETED_UPLOAD_STATUSES, matches_renamed_upload
+    from build_cxalloy_report_status import COMPLETED_UPLOAD_STATUSES, matches_renamed_upload, valid_upload_history
 
 def source_key(value: str) -> str:
     return value.strip().replace("\\", "/")
@@ -40,7 +40,7 @@ def plan_upload(files: list[Any], history: list[dict[str, str]]) -> UploadPlan:
     historical_sources: set[str] = set()
     for item in files:
         by_source[source_key(item.source_path)].append(item)
-    for row in history:
+    for row in valid_upload_history(history):
         if row.get("status", "").strip().casefold() not in COMPLETED_UPLOAD_STATUSES:
             continue
         sources = [source_key(value) for value in row.get("source_path", "").split(";")]

@@ -13,7 +13,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from scripts.etl.build_cxalloy_report_status import get_tracker_root  # noqa: E402
+from scripts.etl.build_cxalloy_report_status import get_tracker_root, valid_upload_history  # noqa: E402
 from scripts.etl.cxalloy_upload_plan import UploadPlan, plan_upload  # noqa: E402
 
 
@@ -108,7 +108,7 @@ def install_guard(uploader, plans: dict[str, UploadPlan], files_by_target: dict[
 
     def verified_completed(rows):
         rows = list(rows)
-        keys = original_completed(rows)
+        keys = original_completed(valid_upload_history(rows))
         for target, files in files_by_target.items():
             history = [row for row in rows if row.get("target_equipment", "").casefold() == target]
             plan = plan_upload(files, history)
@@ -145,7 +145,7 @@ def main(argv: list[str] | None = None) -> int:
     rows = uploader.read_upload_manifest(args.upload_manifest)
     plans = {target: plan_upload(items, [row for row in rows if row.get("target_equipment", "").casefold() == target])
              for target, items in files_by_target.items()}
-    completed = uploader.completed_upload_keys(rows)
+    completed = uploader.completed_upload_keys(valid_upload_history(rows))
     pending, skipped, blocked = [], [], []
     for report in selected:
         plan = plans[report.target_equipment.casefold()]

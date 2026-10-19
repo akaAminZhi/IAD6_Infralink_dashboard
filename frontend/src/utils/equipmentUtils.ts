@@ -1,5 +1,6 @@
 import type {
   CaseIssue,
+  CxalloyReportFileStatus,
   CxalloyReportStatusManifest,
   CxalloyReportStatusRecord,
   Equipment,
@@ -49,6 +50,7 @@ export interface FlattenedEquipmentRow {
   cxalloy_available_report_count: number;
   cxalloy_report_names: string[];
   cxalloy_missing_report_names: string[];
+  cxalloy_reports?: CxalloyReportFileStatus[] | null;
   cxalloy_last_attempt_status: string | null;
   cxalloy_last_attempt_error: string | null;
   cxalloy_last_attempt_at: string | null;
@@ -165,6 +167,7 @@ function cxalloyFields(record: CxalloyReportStatusRecord | undefined) {
     cxalloy_available_report_count: record?.available_report_count ?? 0,
     cxalloy_report_names: record?.report_names ?? [],
     cxalloy_missing_report_names: record?.missing_report_names ?? [],
+    cxalloy_reports: record?.reports ?? null,
     cxalloy_last_attempt_status: firstText(record?.last_attempt_status),
     cxalloy_last_attempt_error: firstText(record?.last_attempt_error),
     cxalloy_last_attempt_at: firstText(record?.last_attempt_at),

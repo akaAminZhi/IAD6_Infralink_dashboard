@@ -34,6 +34,20 @@ Force upload is disabled for this job. Pending equipment includes previously
 uploaded equipment that now needs additional cable PDFs; it is not a count of
 equipment never uploaded.
 
+Equipment details separate **Equipment Reports** from **Cable Reports**.
+Equipment reports have their own upload status; each downloaded cable PDF shows
+its individual CxAlloy status. No expected report total or completion ratio is
+inferred. Cable PDFs are classified using the GC rename manifest's LV/MV cable
+metadata, including shared PDFs and filenames without a cable prefix. Missing
+local PDFs and unverifiable upload history remain visible. Refresh this view with
+`python scripts/etl/build_cxalloy_report_status.py` or the normal ETL; this reads
+local upload evidence and does not contact CxAlloy.
+Historical site checks naming another PDF are ignored. A later
+`equipment_not_found` revokes older success until a subsequent successful upload
+or site check verifies it again; cached dashboard hashes and manifest skips do
+not override this. Login failures or failed cable uploads alone do not revoke
+previously confirmed equipment uploads.
+
 Preview without contacting CxAlloy or changing upload records:
 
 ```powershell

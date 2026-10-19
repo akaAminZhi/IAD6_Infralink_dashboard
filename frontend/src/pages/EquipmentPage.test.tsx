@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -51,6 +51,16 @@ describe("EquipmentPage", () => {
           neta_test_report: "Report-01.pdf",
         },
       ],
+      cxalloyReportStatus: {
+        records: [{
+          equipment_id: "IAD06-PDU6-01D-4",
+          upload_status: "pending",
+          reports: [
+            { report_name: "Report-01.pdf", report_kind: "equipment", upload_status: "uploaded" },
+            { report_name: "FDR-new.pdf", report_kind: "cable", upload_status: "pending" },
+          ],
+        }],
+      },
     });
 
     render(
@@ -73,6 +83,9 @@ describe("EquipmentPage", () => {
     expect(screen.getByText("IEM")).toBeInTheDocument();
     expect(screen.getByText("PDU54SHAM")).toBeInTheDocument();
     expect(screen.getByText("J02PDU000-00032")).toBeInTheDocument();
+    expect(within(screen.getByRole("region", { name: "Equipment Reports" })).queryByText("Pending")).not.toBeInTheDocument();
+    expect(within(screen.getByRole("region", { name: "Equipment Reports" })).getAllByText("Uploaded")).toHaveLength(2);
+    expect(screen.getByText("FDR-new.pdf").closest("li")).toHaveTextContent("Pending");
   });
 
   it("applies an exact KPR lifecycle-stage equipment cohort", () => {

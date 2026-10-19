@@ -195,6 +195,13 @@ export interface NetaReportManifest {
 
 export type CxalloyReportUploadStatus = "uploaded" | "pending" | "missing_pdf";
 
+export interface CxalloyReportFileStatus {
+  report_name: string;
+  report_kind: "equipment" | "cable";
+  upload_status: CxalloyReportUploadStatus | "review_required";
+  sha256?: string | null;
+}
+
 export interface CxalloyReportStatusRecord {
   equipment_id?: string | null;
   target_equipment?: string | null;
@@ -203,6 +210,7 @@ export interface CxalloyReportStatusRecord {
   available_report_count?: number;
   report_names?: string[];
   missing_report_names?: string[];
+  reports?: CxalloyReportFileStatus[];
   current_sha256?: string | null;
   last_attempt_status?: string | null;
   last_attempt_error?: string | null;
