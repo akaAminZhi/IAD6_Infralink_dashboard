@@ -33,6 +33,12 @@ class SchemaRecord:
 
 
 @dataclass(slots=True)
+class InfralinkEquipmentLink(SchemaRecord):
+    equipment_id: str
+    infralink_id: str
+
+
+@dataclass(slots=True)
 class Equipment(SchemaRecord):
     equipment_id: str | None = None
     equipment_type: str | None = None
@@ -180,6 +186,7 @@ class DataQualityReport(SchemaRecord):
 
 
 __all__ = [
+    "InfralinkEquipmentLink",
     "CaseIssue",
     "DataQualityReport",
     "DateValue",

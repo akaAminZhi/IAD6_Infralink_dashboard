@@ -6,6 +6,7 @@ import { EmptyState } from "../components/common/EmptyState";
 import { ErrorState } from "../components/common/ErrorState";
 import { LoadingState } from "../components/common/LoadingState";
 import { NetaReportChips } from "../components/common/NetaReportChips";
+import { InfralinkEquipmentLink } from "../components/common/InfralinkEquipmentLink";
 import { Button } from "../components/ui/button";
 import { IsometricEquipment, SimpleIsometricSymbols } from "../components/layout/IsometricEquipment";
 import { FeederCableAtpReports } from "../components/layout/FeederCableAtpReports";
@@ -496,6 +497,7 @@ export function LayoutPlanPage() {
     <div className="flex items-start justify-between gap-2"><h3 className="text-sm font-semibold">Cable connection</h3>
       <Button variant="ghost" aria-label="Close cable details" onClick={() => setSelectedCableId(null)}><X className="h-4 w-4" /></Button></div>
     <p className="break-all text-sm font-medium">{selectedCable.cable_id}</p>
+    <InfralinkEquipmentLink equipmentId={selectedCable.cable_id} />
     <div className="space-y-1 rounded-md bg-muted p-3 text-sm">
       <p className="break-all">From: {selectedCable.source_equipment_key ?? "Unresolved"}</p>
       <p className="break-all">To: {selectedCable.target_equipment_key ?? "Unresolved"}</p>
@@ -676,6 +678,7 @@ export function LayoutPlanPage() {
         {!selected && cableDetails ? <div className="border-b pb-4">{cableDetails}</div> : null}
         {selected ? <div className="space-y-3">
           <h3 className="break-all font-semibold">{selected.matched_equipment_id ?? selected.label}</h3>
+          <InfralinkEquipmentLink equipmentId={selected.matched_equipment_id} matchStatus={selected.match_status} />
           {isometric && (statusOf(selected) === "energized" || statusOf(selected) === "energizeToday") ?
             <div className="rounded-md border-2 border-amber-700 bg-yellow-100 p-3 text-amber-950" aria-label="Electrical hazard warning">
               <p className="flex items-center gap-2 text-sm font-bold"><Zap className="h-5 w-5 shrink-0" aria-hidden="true" />Electrical hazard</p>

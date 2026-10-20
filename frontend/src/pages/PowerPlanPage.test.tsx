@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { IssueAttachmentManifestProvider } from "../contexts/IssueAttachmentManifestContext";
 import { NetaReportManifestProvider } from "../contexts/NetaReportManifestContext";
+import { InfralinkEquipmentLinksProvider } from "../contexts/InfralinkEquipmentLinksContext";
 import { makeDashboardData } from "../test/fixtures";
 import type { EnrichedPowerPlanEquipment } from "../utils/powerPlanUtils";
 import { PowerPlanPage } from "./PowerPlanPage";
@@ -114,6 +115,9 @@ describe("PowerPlanPage", () => {
           <PowerPlanPage data={data} />
         </NetaReportManifestProvider>
       </IssueAttachmentManifestProvider>,
+      { wrapper: ({ children }) => <InfralinkEquipmentLinksProvider records={[
+        { equipment_id: equipmentId, infralink_id: "12345" },
+      ]}>{children}</InfralinkEquipmentLinksProvider> },
     );
 
     await user.click(
@@ -129,6 +133,7 @@ describe("PowerPlanPage", () => {
       }),
     );
     expect(screen.getByText("Asset Information")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open in Infralink" })).toHaveAttribute("href", "https://jc2.mcdean.com/#:DeviceFullPage;viewModelId=12345");
     expect(screen.getByText("IEM")).toBeInTheDocument();
     expect(screen.getByText("MODEL-POWER")).toBeInTheDocument();
     expect(screen.getByText("SERIAL-POWER")).toBeInTheDocument();

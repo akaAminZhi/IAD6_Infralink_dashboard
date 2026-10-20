@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { IssueAttachmentManifestProvider } from "../contexts/IssueAttachmentManifestContext";
 import { NetaReportManifestProvider } from "../contexts/NetaReportManifestContext";
+import { InfralinkEquipmentLinksProvider } from "../contexts/InfralinkEquipmentLinksContext";
 import { makeDashboardData } from "../test/fixtures";
 import { formatDateTime } from "../utils/formatters";
 import { MvEquipmentPage } from "./MvEquipmentPage";
@@ -49,12 +50,17 @@ describe("MvEquipmentPage", () => {
         }],
       }] },
     });
-    const { container, rerender } = render(<MvEquipmentPage data={data} />);
+    const { container, rerender } = render(<MvEquipmentPage data={data} />, {
+      wrapper: ({ children }) => <InfralinkEquipmentLinksProvider records={[
+        { equipment_id: `IAD06-${label}`, infralink_id: "67890" },
+      ]}>{children}</InfralinkEquipmentLinksProvider>,
+    });
     expect(container.querySelectorAll("[data-mv-equipment='true'] rect")[1]).toHaveAttribute("fill", "#d1fae5");
     expect(screen.getByLabelText(`${label}: 2 failed test items`)).toHaveTextContent("2");
     expect(screen.getByText("NETA Complete 1")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: `${label}, MV ${label.startsWith("TX") ? "transformer" : "equipment"}` }));
     expect(screen.getByText(formatDateTime(completedAt))).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open in Infralink" })).toHaveAttribute("href", "https://jc2.mcdean.com/#:DeviceFullPage;viewModelId=67890");
 
     rerender(<MvEquipmentPage data={{ ...data, equipment: [{ ...data.equipment[0], neta_completed_at: null }], epsTestItems: [] }} />);
     await user.click(screen.getByRole("button", { name: `${label}, MV ${label.startsWith("TX") ? "transformer" : "equipment"}` }));

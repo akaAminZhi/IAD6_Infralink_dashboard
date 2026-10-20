@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { NetaReportManifestProvider } from "../contexts/NetaReportManifestContext";
+import { InfralinkEquipmentLinksProvider } from "../contexts/InfralinkEquipmentLinksContext";
 import type { LayoutCableRecord, LayoutEquipmentRecord, LayoutPlanManifest } from "../types/data";
 import { LAYOUT_VIEW_KEY } from "../utils/layoutIsometricUtils";
 import * as isometricUtils from "../utils/layoutIsometricUtils";
@@ -42,6 +43,18 @@ beforeEach(() => {
 });
 
 describe("2.5D Layout connections", () => {
+  it("opens the selected equipment and cable's own Infralink record", async () => {
+    isometricDataset();
+    const user = userEvent.setup();
+    render(<InfralinkEquipmentLinksProvider records={[
+      { equipment_id: "IAD06-EQ-1", infralink_id: "101" },
+      { equipment_id: "FDR-IAD06-EQ-1-IAD06-EQ-FIX", infralink_id: "202" },
+    ]}><LayoutPlanPage /></InfralinkEquipmentLinksProvider>);
+    await user.click(await screen.findByRole("button", { name: "EQ-1: Energized" }));
+    expect(screen.getByRole("link", { name: "Open in Infralink" })).toHaveAttribute("href", "https://jc2.mcdean.com/#:DeviceFullPage;viewModelId=101");
+    await user.click(screen.getByRole("button", { name: /FDR-IAD06-EQ-1-IAD06-EQ-FIX:/ }));
+    expect(within(screen.getByLabelText("Cable details")).getByRole("link", { name: "Open in Infralink" })).toHaveAttribute("href", "https://jc2.mcdean.com/#:DeviceFullPage;viewModelId=202");
+  });
   it("shows equal enlarged breathing lightning without warning triangles for planned and energized devices of different sizes", async () => {
     localStorage.removeItem(LAYOUT_VIEW_KEY);
     localStorage.setItem(LAYOUT_OVERRIDES_KEY, JSON.stringify({ "EQ-FIX": "energizeToday" }));

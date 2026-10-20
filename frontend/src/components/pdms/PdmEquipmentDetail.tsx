@@ -16,6 +16,7 @@ import {
   isBlank,
 } from "../../utils/pdmUtils";
 import { EpsTestItemsPanel } from "../common/EpsTestItemsPanel";
+import { InfralinkEquipmentLink } from "../common/InfralinkEquipmentLink";
 import { NetaReportChips } from "../common/NetaReportChips";
 import { NetaStatusBadge } from "./NetaStatusBadge";
 import { PdmCaseList } from "./PdmCaseList";
@@ -48,6 +49,7 @@ export function PdmEquipmentDetail({ equipment, epsTestItems }: PdmEquipmentDeta
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <div className="text-sm font-semibold">{getEquipmentDisplayId(equipment)}</div>
+          <InfralinkEquipmentLink equipmentId={equipment.equipment_id} matchStatus={equipment.match_status} />
           <div className="text-xs text-muted-foreground">{equipment.equipment_type ?? "--"}</div>
         </div>
         <NetaStatusBadge equipment={equipment} />

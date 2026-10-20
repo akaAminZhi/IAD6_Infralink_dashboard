@@ -57,6 +57,11 @@ export interface Equipment {
   [key: string]: unknown;
 }
 
+export interface InfralinkEquipmentLink {
+  equipment_id: string;
+  infralink_id: string;
+}
+
 export interface ModuleEquipmentLink {
   pdm_name?: string | null;
   module_type?: string | null;

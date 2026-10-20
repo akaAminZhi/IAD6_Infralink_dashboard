@@ -52,6 +52,16 @@ flowchart LR
 
 ### Data loading
 
+`InfralinkEquipmentLinksProvider` loads the optional generated device-ID
+manifest independently, and reloads it when ETL metadata changes. The shared
+detail-header link component builds JC2's main `DeviceFullPage;viewModelId=...`
+route from a validated numeric ID. The main application handles sign-in and
+hosts the embedded detail; linking directly to the embedded Angular application
+can produce a blank Session-401 page in signed-out browsers. Automation storage
+state is never transferred to browser links. Exact equipment references resolve links; missing and
+ambiguous identities stay unavailable. This covers nested PDM details and
+Layout cable inspectors as well as the equipment/map routes.
+
 `frontend/src/hooks/useDashboardData.ts` loads data in two tiers:
 
 - Initial operational data: PDMs, summary/metadata, EPS datasets, manifests,
@@ -184,6 +194,16 @@ Hide all cables removes cable marks/hit targets without changing connection data
 Global view, search and floor/view changes preserve the user's visibility choice.
 
 ### Pipeline
+
+`build_infralink_equipment_links.py` joins normalized equipment names to a local
+project-scoped JC2 identity snapshot. Its optional CLI `--refresh --auth-state`
+reads the same project contract scope used by the sibling NETA downloader and
+queries JC2's paginated device grid using the saved session. Only names and
+numeric IDs are retained. Complete snapshots replace the local cache atomically;
+authentication errors, pagination inconsistencies and invalid identities fail
+before replacement. Normal ETL stays offline and reports missing/ambiguous
+links in the generated manifest. Existing published identities can be reused
+when a deployment does not have the local cache.
 
 `scripts/etl/run_etl.py` is the orchestrator. It runs, in order:
 

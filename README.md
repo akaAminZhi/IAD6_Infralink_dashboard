@@ -25,6 +25,35 @@ frontend/src/         Future React + TypeScript application source.
 
 ## Local Dashboard And Data Operations
 
+Equipment details include **Open in Infralink** at the top in Equipment, PDMs
+(including Overview/KPR drill-downs), Power Plan, MV Equipment and Layout.
+Layout cables also link to their own system element. Links open JC2's main
+`DeviceFullPage` entry in a new tab using the internal numeric ID. This entry
+shows the company login when needed, then hosts the device detail. The embedded
+`imms-js-webapp` detail URL alone can return Session 401 and a blank page when
+the browser is signed out. The saved automation session is separate from the
+user's browser login. Equipment names are matched exactly; missing or
+ambiguous identities show **Infralink link unavailable**.
+
+Refresh the device-ID snapshot after adding equipment or deploying to a new
+host, using the same saved JC2 session as the EPS Tracker:
+
+中文操作说明：[Infralink 设备链接刷新与登录帮助](docs/INFRALINK_LINKS_HELP.md)，
+包含新增设备、session 过期后重新登录，以及刷新链接的完整步骤。
+
+```powershell
+python scripts/etl/build_infralink_equipment_links.py --refresh --auth-state "$env:LOCALAPPDATA\iad6_eps_tracker\jc2_auth_state.json"
+```
+
+This reads the tracker view's project contract scope and queries device names
+and IDs only. It does not modify Infralink or save authentication data into the
+dashboard. The snapshot stays in gitignored `runtime/automation/`; the generated
+`frontend/public/data/infralink_equipment_links.json` contains only matched names
+and IDs plus mapping diagnostics. Normal ETL rebuilds links offline from that
+snapshot, or retains published identities if the local snapshot is absent.
+New unmatched equipment needs another snapshot refresh. Reload the browser after
+refreshing; static deployments must include the generated link dataset.
+
 CxAlloy uploads from Data Operations use the dashboard's guarded incremental
 entry point. It verifies successful upload hashes against current PDF contents,
 reuses historical filenames after local renaming, and sends only new attachments.

@@ -32,6 +32,7 @@ import { EnergisationMarker } from "../components/pdms/EnergisationMarker";
 import { ENERGISATION_COLORS, getEnergisationLabel, getEnergisationStage } from "../utils/energisation";
 import { StatusBadge } from "../components/common/StatusBadge";
 import { IssueDetailDrawer } from "../components/issues/IssueDetailDrawer";
+import { InfralinkEquipmentLink } from "../components/common/InfralinkEquipmentLink";
 import { Button } from "../components/ui/button";
 import type {
   CaseIssue,
@@ -821,6 +822,7 @@ function EquipmentDetail({
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <h2 className="break-words text-base font-semibold">{row.equipmentId}</h2>
+            <InfralinkEquipmentLink equipmentId={row.equipment?.equipment_id ?? row.equipmentId} />
             <p className="mt-1 text-xs text-muted-foreground">{row.pdmName ?? "No PDM association"}</p>
           </div>
           <div className="flex shrink-0 flex-col items-end gap-2">

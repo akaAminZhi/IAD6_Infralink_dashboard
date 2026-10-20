@@ -7,6 +7,7 @@ import { LoadingState } from "./components/common/LoadingState";
 import { AppLayout } from "./components/layout/AppLayout";
 import { IssueAttachmentManifestProvider } from "./contexts/IssueAttachmentManifestContext";
 import { NetaReportManifestProvider } from "./contexts/NetaReportManifestContext";
+import { InfralinkEquipmentLinksProvider } from "./contexts/InfralinkEquipmentLinksContext";
 import { useDashboardData } from "./hooks/useDashboardData";
 import { OperationsAuthGate } from "./components/dataOperations/OperationsAuth";
 
@@ -84,6 +85,7 @@ function App() {
   return (
     <IssueAttachmentManifestProvider manifest={dashboardData.issueAttachmentManifest}>
       <NetaReportManifestProvider manifest={dashboardData.netaReportManifest}>
+        <InfralinkEquipmentLinksProvider refreshKey={dashboardData.etlRunMetadata?.generated_at}>
         <AppLayout etlRunMetadata={dashboardData.etlRunMetadata}>
           {!isDataOperations &&
           (dashboardData.loading ||
@@ -147,6 +149,7 @@ function App() {
             </>
           )}
         </AppLayout>
+        </InfralinkEquipmentLinksProvider>
       </NetaReportManifestProvider>
     </IssueAttachmentManifestProvider>
   );

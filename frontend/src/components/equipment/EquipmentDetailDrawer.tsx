@@ -24,6 +24,7 @@ import {
 } from "../../utils/netaReports";
 import { getNetaReviewsForReport } from "../../utils/netaReportReviews";
 import { EpsTestItemsPanel } from "../common/EpsTestItemsPanel";
+import { InfralinkEquipmentLink } from "../common/InfralinkEquipmentLink";
 import { NetaReportChips } from "../common/NetaReportChips";
 import { Button } from "../ui/button";
 import { Card, CardContent } from "../ui/card";
@@ -286,6 +287,7 @@ export function EquipmentDetailDrawer({
               <h2 className="break-words text-xl font-semibold tracking-normal">
                 {equipment.display_equipment_id}
               </h2>
+              <InfralinkEquipmentLink equipmentId={equipment.equipment_id} />
               <p className="mt-1 text-sm text-muted-foreground">
                 {equipment.status ?? "Unknown status"} - {pdmNames.length > 1 ? "Multiple PDMs" : pdmNames[0] ?? "No PDM association"}
               </p>

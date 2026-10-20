@@ -1,5 +1,90 @@
 ﻿# Codex Handoff
 
+## Current update (2026-10-20): Infralink login and refresh help
+
+- Added Chinese operator guide `docs/INFRALINK_LINKS_HELP.md` and a README link.
+  Covers existing-session refresh, login/MFA and pressing Enter to save the
+  explicit auth-state file, new-device import/ETL order, Chrome versus automation
+  login, personal Data Operations state paths, and common troubleshooting.
+- Checked commands against the current refresh builder and sibling NETA login
+  script. Documentation-only follow-up; no login, refresh, ETL, build, tests or
+  service changes. The guide and Infralink implementation are committed together;
+  generated build-info remains uncommitted. Earlier test/build results below
+  apply to the implementation; documentation paths and diff checks passed.
+
+## Current update (2026-10-19): Fix Infralink links in signed-out browsers
+
+- User's screenshot showed Device 1297197950 blank with repeated Session 401.
+  Reproduced four Session 401 responses in a clean browser context. The first
+  implementation linked the embedded Angular details directly and its live test
+  reused saved authentication, so it missed the signed-out behavior.
+- Shared URL generation now uses JC2's native main-app route:
+  `https://jc2.mcdean.com/#:DeviceFullPage;viewModelId=<numeric-id>`.
+  This comes from JC2's own full-page action. The main application handles login
+  and hosts `/imms-js-webapp/#/details/Device/<id>?fullPage=true` after login.
+  Every existing Equipment/PDM/Power Plan/MV/Layout link receives this fix through
+  the shared index; cached IDs and equipment data do not need regeneration.
+- Real browser checks verified a signed-out click from dashboard port 5173
+  displays **Sign in to Job Connect** and the MCDEAN enterprise-account button,
+  rather than the embedded app's blank 401 screen. With the saved session,
+  screenshot target IAD06-PDU6-02A-2 opens its exact device details without Session
+  401. No interactive SSO/MFA login was performed; the signed-out login-page and
+  signed-in detail behaviors were tested separately. Automation storage state
+  is never copied into ordinary user-browser links.
+- Updated all six relevant frontend tests to require the main-app URL. All 60
+  tests passed and the preview production build passed with the existing size
+  warning. Updated README/architecture and ignored login/browser smoke scripts;
+  screenshot `runtime/automation/infralink-signed-out-login.png` reviewed.
+  No ETL, Python/data changes, vendor writes, auth-state edits, commit or service
+  restart. The original generated build-info bytes from before this fix were
+  restored. Refresh the dashboard to load the rebuilt links.
+
+## Current update (2026-10-19): Direct Infralink equipment links
+
+- Added a shared **Open in Infralink** link at the top of Equipment, nested PDM
+  equipment (also used by Overview/KPR), Power Plan, MV Equipment and Layout
+  equipment details. Layout cable details link to the cable's own Device record.
+  New tabs use `noopener noreferrer`; missing/ambiguous identities stay visibly
+  unavailable. Exact full equipment IDs are used, with no endpoint/suffix guesses.
+- Inspected the sibling EPS Tracker's NETA downloader and its JC2 view config.
+  A `DeviceList;dna=...` URL did not reliably apply the filter on first load, and
+  search also returned related cable/termination rows. Used the actual detail
+  iframe route `/imms-js-webapp/#/details/Device/<numeric-id>` instead. Verified
+  IAD06-PDU6-01E-2 opens Device 1301515161 with the matching device heading.
+- `scripts/etl/build_infralink_equipment_links.py` adds a local offline builder
+  and explicit `--refresh --auth-state` mode. Refresh reads the tracker view's
+  contract scope, captures the app's anti-CSRF header only in memory, and queries
+  the read-only Device/entities grid. Its HTTP POST is the provider's read query;
+  no vendor records, exports, reports or auth-state files are modified. Only
+  names and internal IDs enter the ignored cache. Auth errors, incomplete/repeated
+  pagination, changed totals and invalid IDs abort before cache replacement.
+- Normal ETL registers this offline output and preserves published IDs if the
+  host has no local cache. Missing/ambiguous IDs remain in manifest diagnostics.
+  Refresh the snapshot for newly added devices. README documents the command and
+  deployment requirement to include generated `infralink_equipment_links.json`.
+  `InfralinkEquipmentLinksProvider` loads this optional dataset independently and
+  reloads when ETL metadata changes; existing equipment/readiness schemas and
+  global dashboard loaders retain their behavior.
+- Real saved JC2 session read 40,069 project device identities. Generated links
+  for all 18,950 current normalized equipment records, zero missing/ambiguous.
+  Snapshot: ignored `runtime/automation/infralink_equipment_ids.json`; published
+  link dataset is also gitignored. No full ETL or unrelated dataset regeneration.
+- Validation: 14 Python tests (mapping, ambiguity, offline reuse, paginated read
+  scope, error handling, ETL registration and schemas); 70 frontend tests across
+  the common link/provider, nested PDM detail, Equipment, Power Plan, MV, Layout
+  and App. Final preview-mode production build passed; existing large-chunk
+  warning remains. `git diff --check` passed. No lint or full suites were run.
+- Compiled preview browser QA passed on temporary loopback port 5187, covering
+  all five detail entry points, Layout cable identity, desktop/mobile visibility,
+  actual new-tab navigation to the sample's live Infralink page and no page errors.
+  Screenshots visually reviewed: ignored `runtime/automation/infralink-equipment-
+  {desktop,mobile}.png`; repeatable checks in `infralink_links_smoke.py`.
+  Temporary preview/browser closed afterward; user services were not restarted.
+- Per the user's checkpoint request, the prior CxAlloy changes were committed
+  first as `6e872a5`. The Infralink feature and operator guide are committed
+  together in the following feature commit. The already
+  modified generated `frontend/tsconfig.tsbuildinfo` remains uncommitted.
+
 ## Current update (2026-10-19): Revoke invalid CxAlloy history
 
 - Fixed TX-HTP6-01E's false equipment Uploaded status. Its sole historical site

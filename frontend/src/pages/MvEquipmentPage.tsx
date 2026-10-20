@@ -21,6 +21,7 @@ import { wheelZoomFactor } from "../utils/wheelZoom";
 import { useFrameState } from "../hooks/useFrameState";
 import { EmptyState } from "../components/common/EmptyState";
 import { IssueDetailDrawer } from "../components/issues/IssueDetailDrawer";
+import { InfralinkEquipmentLink } from "../components/common/InfralinkEquipmentLink";
 import { IssueStatusBadge } from "../components/issues/IssueStatusBadge";
 import type {
   DashboardData,
@@ -1650,6 +1651,7 @@ export function MvEquipmentPage({ data }: MvEquipmentPageProps) {
                           )}
                           <h2 className="break-words text-base font-semibold">{selected.label}</h2>
                         </div>
+                        <InfralinkEquipmentLink equipmentId={selected.matched_equipment_id} matchStatus={selected.match_status} />
                         <p className="mt-1 text-xs text-muted-foreground">
                           {isConnection(selected)
                             ? "MV cable connection"
