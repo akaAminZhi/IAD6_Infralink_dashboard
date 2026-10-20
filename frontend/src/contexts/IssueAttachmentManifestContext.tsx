@@ -1,3 +1,4 @@
+import { useDashboardResources } from "./DashboardResourcesContext";
 import { createContext, useContext, type ReactNode } from "react";
 
 import type { IssueAttachmentManifest } from "../types/data";
@@ -20,6 +21,7 @@ export function IssueAttachmentManifestProvider({
   );
 }
 
-export function useIssueAttachmentManifest(): IssueAttachmentManifest | null {
+export function useIssueAttachmentManifest(enabled = true): IssueAttachmentManifest | null {
+  useDashboardResources(["issueAttachmentManifest"], enabled);
   return useContext(IssueAttachmentManifestContext);
 }

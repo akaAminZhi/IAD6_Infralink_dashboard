@@ -43,6 +43,16 @@ beforeEach(() => {
 });
 
 describe("2.5D Layout connections", () => {
+  it("reloads its independent manifest after dashboard ETL invalidation", async () => {
+    const { rerender } = render(<LayoutPlanPage refreshKey={0} />);
+    await screen.findByRole("button", { name: "EQ-1: Energized" });
+    const updated = dataset();
+    updated.floors[0].equipment[0].energized_completed_at = null;
+    fetchMock.mockResolvedValue(updated);
+    rerender(<LayoutPlanPage refreshKey={1} />);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    expect(await screen.findByRole("button", { name: "EQ-1: Not Energized" })).toBeInTheDocument();
+  });
   it("opens the selected equipment and cable's own Infralink record", async () => {
     isometricDataset();
     const user = userEvent.setup();

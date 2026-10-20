@@ -1,36 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
-import type {
-  CaseIssue,
-  CxalloyReportStatusManifest,
-  DashboardData,
-  DashboardSummary,
-  DataQualityReport,
-  Equipment,
-  EtlRunMetadata,
-  EpsModuleExecutionRecord,
-  EpsPdmExecutionRecord,
-  EpsTestItemRecord,
-  EpsTestSummary,
-  HistoryComparison,
-  IssueAttachmentManifest,
-  KprSummary,
-  ModuleEquipmentLink,
-  NetaReportManifest,
-  PdmRecord,
-  PowerPlanManifest,
-} from "../types/data";
-import { fetchJson, unwrapRecords } from "../utils/dataLoaders";
-
-interface DashboardDataState extends DashboardData {
-  detailDataError: string | null;
-  detailDataLoaded: boolean;
-  detailDataLoading: boolean;
-  loadDetailData: () => Promise<void>;
-  loading: boolean;
-  error: string | null;
-  reload: () => void;
-}
+import type { DashboardData } from "../types/data";
+import type { DashboardResource, DashboardResourceLoader } from "../types/dashboardResources";
+import { clearPendingJsonRequests, fetchJson, unwrapRecords } from "../utils/dataLoaders";
+import { dashboardResourceFiles, getRouteResources } from "../utils/dashboardResources";
 
 const emptyDashboardData: DashboardData = {
   pdms: [],
@@ -55,163 +28,92 @@ const emptyDashboardData: DashboardData = {
   kprSummary: null,
 };
 
-async function fetchOptionalJson<T>(path: string): Promise<T | null> {
-  try {
-    return await fetchJson<T>(path);
-  } catch (error) {
-    console.warn(`Optional dashboard data could not be loaded: ${path}`, error);
-    return null;
-  }
+const recordResources = new Set<DashboardResource>([
+  "pdms", "equipment", "cases", "moduleEquipmentLinks", "epsPdmExecution", "epsModuleExecution",
+  "epsTestItems", "epsFailedItems", "epsIncompleteItems", "epsNotFoundItems",
+]);
+const requiredResources = new Set<DashboardResource>([
+  "pdms", "equipment", "cases", "moduleEquipmentLinks", "summary", "etlRunMetadata", "dataQualityReport",
+]);
+
+function createCache() {
+  return {
+    data: emptyDashboardData,
+    status: {} as DashboardResourceLoader["resourceStatus"],
+    pending: new Map<DashboardResource, Promise<void>>(),
+  };
 }
 
-export function useDashboardData(): DashboardDataState {
-  const [data, setData] = useState<DashboardData>(emptyDashboardData);
-  const [loading, setLoading] = useState(true);
-  const [detailDataLoading, setDetailDataLoading] = useState(false);
-  const [detailDataLoaded, setDetailDataLoaded] = useState(false);
-  const [detailDataError, setDetailDataError] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [reloadToken, setReloadToken] = useState(0);
-
-  const reload = useCallback(() => {
-    setDetailDataLoaded(false);
-    setDetailDataError(null);
-    setReloadToken((token) => token + 1);
+export function useDashboardData(pathname = "/overview", search = "") {
+  const cacheRef = useRef(createCache());
+  const reloadVersion = useRef(0);
+  const mounted = useRef(true);
+  const [, setRevision] = useState(0);
+  const publish = useCallback(() => {
+    if (mounted.current) setRevision((revision) => revision + 1);
+  }, []);
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
   }, []);
 
-  const loadDetailData = useCallback(async () => {
-    if (detailDataLoaded || detailDataLoading) {
-      return;
-    }
+  const loadResources = useCallback(async (resources: readonly DashboardResource[], retry = false) => {
+    const cache = cacheRef.current;
+    let started = false;
+    const requests = resources.map((key) => {
+      const pending = cache.pending.get(key);
+      if (pending) return pending;
+      if (cache.status[key] === "loaded" || (cache.status[key] === "error" && !retry)) return;
+      cache.status = { ...cache.status, [key]: "loading" };
+      started = true;
+      const request = (async () => {
+        // Register the pending request before invoking even a synchronous loader.
+        await Promise.resolve();
+        try {
+          const payload = await fetchJson<unknown>(`/data/${dashboardResourceFiles[key]}`);
+          if (payload === null && requiredResources.has(key)) throw new Error(`Missing ${key}`);
+          cache.data = { ...cache.data, [key]: recordResources.has(key) ? unwrapRecords(payload) : payload };
+          cache.status = { ...cache.status, [key]: "loaded" };
+        } catch (error) {
+          console.warn(`Dashboard data could not be loaded: ${key}`, error);
+          // Optional exports retain their existing empty/unavailable behavior.
+          cache.status = { ...cache.status, [key]: requiredResources.has(key) ? "error" : "loaded" };
+        } finally {
+          cache.pending.delete(key);
+          if (cacheRef.current === cache) publish();
+        }
+      })();
+      cache.pending.set(key, request);
+      return request;
+    });
+    if (started) publish();
+    await Promise.all(requests);
+  }, [publish]);
 
-    setDetailDataLoading(true);
-    setDetailDataError(null);
+  const reload = useCallback(() => {
+    // Discard the entire previous generation, including late detail responses.
+    clearPendingJsonRequests();
+    cacheRef.current = createCache();
+    reloadVersion.current += 1;
+    publish();
+  }, [publish]);
 
-    try {
-      const [equipmentJson, casesJson, moduleLinksJson, dataQualityReport] = await Promise.all([
-        fetchJson<unknown>("/data/equipment.json"),
-        fetchJson<unknown>("/data/cases.json"),
-        fetchJson<unknown>("/data/module_equipment_links.json"),
-        fetchJson<DataQualityReport>("/data/data_quality_report.json"),
-      ]);
-
-      setData((currentData) => ({
-        ...currentData,
-        equipment: unwrapRecords<Equipment>(equipmentJson),
-        cases: unwrapRecords<CaseIssue>(casesJson),
-        moduleEquipmentLinks: unwrapRecords<ModuleEquipmentLink>(moduleLinksJson),
-        dataQualityReport,
-      }));
-      setDetailDataLoaded(true);
-    } catch (loadError) {
-      console.warn("Dashboard detail data loading failed", loadError);
-      setDetailDataError("Equipment and issue detail data could not be loaded.");
-    } finally {
-      setDetailDataLoading(false);
-    }
-  }, [detailDataLoaded, detailDataLoading]);
-
+  const cache = cacheRef.current;
+  const resources = getRouteResources(pathname, search);
+  const resourceKey = resources.join(",");
   useEffect(() => {
-    let active = true;
+    // Metadata never blocks a route. All required files start in the same batch.
+    void loadResources(["etlRunMetadata", ...resourceKey.split(",").filter(Boolean) as DashboardResource[]]);
+  }, [cache, loadResources, resourceKey]);
 
-    async function loadData() {
-      setLoading(true);
-      setError(null);
-
-      try {
-        const [
-          pdmsJson,
-          summary,
-          etlRunMetadata,
-          historyComparison,
-          epsTestSummary,
-          epsPdmExecutionJson,
-          epsModuleExecutionJson,
-          epsTestItemsJson,
-          epsFailedItemsJson,
-          epsIncompleteItemsJson,
-          epsNotFoundItemsJson,
-          issueAttachmentManifest,
-          netaReportManifest,
-          cxalloyReportStatus,
-          powerPlanManifest,
-          kprSummary,
-        ] = await Promise.all([
-          fetchJson<unknown>("/data/pdms.json"),
-          fetchJson<DashboardSummary>("/data/summary.json"),
-          fetchJson<EtlRunMetadata>("/data/etl_run_metadata.json"),
-          fetchOptionalJson<HistoryComparison>("/data/history_comparison.json"),
-          fetchOptionalJson<EpsTestSummary>("/data/eps_test_summary.json"),
-          fetchOptionalJson<unknown>("/data/eps_pdm_execution.json"),
-          fetchOptionalJson<unknown>("/data/eps_module_execution.json"),
-          fetchOptionalJson<unknown>("/data/eps_test_items.json"),
-          fetchOptionalJson<unknown>("/data/eps_failed_items.json"),
-          fetchOptionalJson<unknown>("/data/eps_incomplete_items.json"),
-          fetchOptionalJson<unknown>("/data/eps_not_found_items.json"),
-          fetchOptionalJson<IssueAttachmentManifest>("/data/issue_attachment_manifest.json"),
-          fetchOptionalJson<NetaReportManifest>("/data/neta_report_manifest.json"),
-          fetchOptionalJson<CxalloyReportStatusManifest>("/data/cxalloy_report_status.json"),
-          fetchOptionalJson<PowerPlanManifest>("/data/power_plan.json"),
-          fetchOptionalJson<KprSummary>("/data/kpr_summary.json"),
-        ]);
-
-        if (!active) {
-          return;
-        }
-
-        setData({
-          pdms: unwrapRecords<PdmRecord>(pdmsJson),
-          equipment: [],
-          cases: [],
-          moduleEquipmentLinks: [],
-          summary,
-          dataQualityReport: null,
-          etlRunMetadata,
-          historyComparison,
-          epsTestSummary,
-          epsPdmExecution: unwrapRecords<EpsPdmExecutionRecord>(epsPdmExecutionJson),
-          epsModuleExecution: unwrapRecords<EpsModuleExecutionRecord>(epsModuleExecutionJson),
-          epsTestItems: unwrapRecords<EpsTestItemRecord>(epsTestItemsJson),
-          epsFailedItems: unwrapRecords<EpsTestItemRecord>(epsFailedItemsJson),
-          epsIncompleteItems: unwrapRecords<EpsTestItemRecord>(epsIncompleteItemsJson),
-          epsNotFoundItems: unwrapRecords<EpsTestItemRecord>(epsNotFoundItemsJson),
-          issueAttachmentManifest,
-          netaReportManifest,
-          cxalloyReportStatus,
-          powerPlanManifest,
-          kprSummary,
-        });
-        setDetailDataLoaded(false);
-        setDetailDataError(null);
-      } catch (loadError) {
-        if (!active) {
-          return;
-        }
-        console.warn("Dashboard data loading failed", loadError);
-        setError("Dashboard data could not be loaded.");
-        setData(emptyDashboardData);
-      } finally {
-        if (active) {
-          setLoading(false);
-        }
-      }
-    }
-
-    void loadData();
-
-    return () => {
-      active = false;
-    };
-  }, [reloadToken]);
-
+  const failed = resources.some((key) => cache.status[key] === "error");
   return {
-    ...data,
-    detailDataError,
-    detailDataLoaded,
-    detailDataLoading,
-    loading,
-    error,
-    loadDetailData,
+    ...cache.data,
+    loading: !failed && resources.some((key) => cache.status[key] !== "loaded"),
+    error: failed ? "Dashboard data could not be loaded." : null,
+    resourceStatus: cache.status,
+    reloadVersion: reloadVersion.current,
+    loadResources,
     reload,
   };
 }

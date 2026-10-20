@@ -16,6 +16,10 @@ export function unwrapRecords<T>(json: unknown): T[] {
 
 const pendingRequests = new Map<string, Promise<unknown | null>>();
 
+export function clearPendingJsonRequests(): void {
+  pendingRequests.clear();
+}
+
 export function fetchJson<T>(url: string): Promise<T | null> {
   const existing = pendingRequests.get(url);
   if (existing) return existing as Promise<T | null>;

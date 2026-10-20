@@ -43,7 +43,7 @@ function Field({ label, value }: { label: string; value: string | number | boole
 }
 
 export function IssueDetailDrawer({ issue, onClose }: IssueDetailDrawerProps) {
-  const manifest = useNetaReportManifest();
+  const manifest = useNetaReportManifest(Boolean(issue));
   const [netaReportNameMode, setNetaReportNameMode] =
     useState<NetaReportNameMode>("original");
 

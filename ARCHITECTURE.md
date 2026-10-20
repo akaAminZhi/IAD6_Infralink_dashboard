@@ -53,7 +53,7 @@ flowchart LR
 ### Data loading
 
 `InfralinkEquipmentLinksProvider` loads the optional generated device-ID
-manifest independently, and reloads it when ETL metadata changes. The shared
+manifest when a detail link first mounts, and invalidates it on dashboard ETL reload. The shared
 detail-header link component builds JC2's main `DeviceFullPage;viewModelId=...`
 route from a validated numeric ID. The main application handles sign-in and
 hosts the embedded detail; linking directly to the embedded Angular application
@@ -62,17 +62,30 @@ state is never transferred to browser links. Exact equipment references resolve 
 ambiguous identities stay unavailable. This covers nested PDM details and
 Layout cable inspectors as well as the equipment/map routes.
 
-`frontend/src/hooks/useDashboardData.ts` loads data in two tiers:
+`frontend/src/hooks/useDashboardData.ts` loads datasets by route, using the
+explicit dependency map in `frontend/src/utils/dashboardResources.ts`:
 
-- Initial operational data: PDMs, summary/metadata, EPS datasets, manifests,
-  power-plan data, CxAlloy status, history, and KPR summary.
-- Deferred detail data: equipment, cases, module links, and data-quality report,
-  loaded only for routes that need them.
-- Concurrent requests for the same JSON URL share one pending request, avoiding
-  duplicate fetch/parse work under development StrictMode. Settled results are
-  not cached, preserving later reloads of updated files.
+- PDMs waits only for PDM records and EPS PDM execution; its equipment section
+  loads EPS module/test-item detail and report links when the drawer opens.
+- Equipment starts its equipment/PDM/case/test-item, CxAlloy, report-manifest and
+  history reads together. Power Plan starts only its PDM/equipment/case and EPS
+  module/test-item reads. Status/filter dependencies finish before either renders.
+- Layout reads its own manifest immediately, independently of dashboard data.
+  Its NETA manifest and device identities are deferred until selection.
+- Metadata loads without blocking pages. KPR drill-down query parameters request
+  KPR context; Data Quality data is requested only for that route.
+- `DashboardResourcesContext` lets detail/report/attachment consumers request
+  shared datasets and distinguish loading from missing evidence. Loaded datasets
+  are reused during navigation within one dashboard generation.
+- Dashboard reload clears loaded and pending-request caches; late responses from
+  the old generation cannot overwrite new data. Layout receives a reload version
+  so its independent manifest refreshes too. No persistent data cache is introduced.
+- Concurrent reads of one JSON URL share one pending fetch/parse; the low-level
+  loader does not retain completed results across reloads.
 - Dev and compiled preview intercept `/data/` JSON/CSV requests and stream live
-  files from `frontend/public/data/` with `no-store`. Preview retains built JS/CSS
+  files from `frontend/public/data/` with `no-store`. Responses of at least 1 KB
+  stream through gzip when accepted, with `Vary: Accept-Encoding` and identity/HEAD
+  support; no compressed-file cache can outlive ETL output replacement. Preview retains built JS/CSS
   but reflects successful ETL outputs without a frontend rebuild. Missing live
   files return 404; path containment, real paths and extensions restrict serving.
 - NETA PDF requests under `/neta-reports/` and `/neta-reports-gc/` also use live

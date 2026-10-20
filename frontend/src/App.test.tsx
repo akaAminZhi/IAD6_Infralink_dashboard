@@ -57,10 +57,9 @@ function dashboardState(
 ): ReturnType<typeof useDashboardData> {
   return {
     ...makeDashboardData(),
-    detailDataError: null,
-    detailDataLoaded: false,
-    detailDataLoading: false,
-    loadDetailData: vi.fn(async () => undefined),
+    resourceStatus: {},
+    reloadVersion: 0,
+    loadResources: vi.fn(async () => undefined),
     loading: false,
     error: null,
     reload: vi.fn(),
@@ -86,7 +85,7 @@ describe("App routing and loading behavior", () => {
     useDashboardDataMock.mockReturnValue(state);
     renderRoute("/layout");
     expect(await screen.findByText("Layout Route")).toBeInTheDocument();
-    expect(state.loadDetailData).not.toHaveBeenCalled();
+    expect(useDashboardDataMock).toHaveBeenCalledWith("/layout", "");
   });
   it("shows the loading state for dashboard routes", () => {
     useDashboardDataMock.mockReturnValue(dashboardState({ loading: true }));
@@ -102,34 +101,21 @@ describe("App routing and loading behavior", () => {
     expect(await screen.findByText("Data Operations Route")).toBeInTheDocument();
   });
 
-  it("loads detail data before rendering a detail route", async () => {
-    const loadDetailData = vi.fn(async () => undefined);
-    useDashboardDataMock.mockReturnValue(
-      dashboardState({ loadDetailData, detailDataLoaded: false }),
-    );
-    renderRoute("/equipment");
-
-    expect(screen.getByText("Loading dashboard data")).toBeInTheDocument();
-    await waitFor(() => expect(loadDetailData).toHaveBeenCalledTimes(1));
+  it.each([
+    ["/pdms", "PDM Route"], ["/equipment", "Equipment Route"],
+    ["/power-plan", "Power Plan Route"], ["/mv-equipment", "MV Equipment Route"],
+  ])("renders %s after its route-specific data is ready", async (path, label) => {
+    useDashboardDataMock.mockReturnValue(dashboardState());
+    renderRoute(path);
+    expect(await screen.findByText(label)).toBeInTheDocument();
+    expect(useDashboardDataMock).toHaveBeenCalledWith(path, "");
   });
 
-  it("loads cases before rendering the MV equipment route", async () => {
-    const loadDetailData = vi.fn(async () => undefined);
-    useDashboardDataMock.mockReturnValue(
-      dashboardState({ loadDetailData, detailDataLoaded: false }),
-    );
-    renderRoute("/mv-equipment");
-
-    expect(screen.getByText("Loading dashboard data")).toBeInTheDocument();
-    await waitFor(() => expect(loadDetailData).toHaveBeenCalledTimes(1));
-  });
-
-  it("renders a detail route after detail data is ready", async () => {
-    useDashboardDataMock.mockReturnValue(
-      dashboardState({ detailDataLoaded: true }),
-    );
-    renderRoute("/equipment");
+  it("passes KPR drill-down parameters to the route loader", async () => {
+    useDashboardDataMock.mockReturnValue(dashboardState());
+    renderRoute("/equipment?lifecycleStage=neta");
     expect(await screen.findByText("Equipment Route")).toBeInTheDocument();
+    expect(useDashboardDataMock).toHaveBeenCalledWith("/equipment", "?lifecycleStage=neta");
   });
 
   it("shows a retryable dashboard error", async () => {

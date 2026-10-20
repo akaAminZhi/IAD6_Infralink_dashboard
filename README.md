@@ -149,8 +149,14 @@ without restarting preview or rebuilding code. Missing live files return 404
 instead of falling back to stale copies in `dist/`. The normal command retains
 the Vite development server. Preview is a local trial mode, not a permanent
 production deployment setup. Application routes load their code on demand;
-concurrent reads of the same JSON share one request without caching completed
-results, so reloads can fetch updated data.
+PDMs, Equipment, Power Plan and Layout load their own required datasets rather
+than waiting for all dashboard files. PDM EPS details, report/attachment links,
+and Infralink identities load when needed. Equipment/Power Plan retain the data
+required for accurate status colors and filters. Loaded datasets are reused when
+switching pages and cleared by a successful ETL dashboard reload; Layout refreshes
+its independent manifest too. Live JSON/CSV responses use gzip when the browser
+accepts it, while retaining `no-store` so ETL updates remain visible. Re-run the
+preview launcher once after installing these changes to load the new middleware.
 
 NETA report PDFs also read live from `frontend/public/neta-reports/` and
 `frontend/public/neta-reports-gc/`, including their tracker junction targets.

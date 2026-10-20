@@ -1,5 +1,51 @@
 ﻿# Codex Handoff
 
+## Current update (2026-10-20): Load frequently used pages independently
+
+- Replaced the initial 16-file loading gate plus sequential global-detail batch
+  with explicit route dependencies in `frontend/src/utils/dashboardResources.ts`.
+  PDMs needs only PDM and EPS PDM records; Equipment and Power Plan start their
+  status/filter inputs in parallel. Data Quality is requested only on its route.
+  KPR drill-down query parameters retain their KPR context. Metadata is nonblocking.
+- PDM equipment details load EPS module/test-item records and NETA manifest when
+  the drawer opens, behind a section loading state. Report and attachment consumers
+  request shared manifests on demand; Infralink identities wait for a detail link.
+  Equipment retains EPS item counts, CxAlloy filters and NETA review-manifest data.
+  Power Plan retains all inputs used for readiness colors and issue/test counts.
+- Shared resources are reused while navigating. Successful-ETL dashboard reload
+  clears the complete generation and low-level pending-request map; late responses
+  cannot overwrite refreshed data. Layout is independent and receives a reload
+  version to refresh its own manifest. Required file failures offer retry instead
+  of silently rendering an empty list. Optional exports keep existing behavior.
+- Live JSON/CSV responses >=1 KB negotiate streaming gzip (level 1), including
+  Vary/HEAD/identity support and explicit gzip refusal. Cache-Control remains
+  no-store; compression always reads the current file, with no stale gzip cache.
+  Existing live report/attachment serving, security checks and proxies are retained.
+- Current cold-page JSON transfer measured in Chromium: PDMs 109,463 bytes (3
+  requests); Equipment 1,164,370 (8); Power Plan 940,100 (6); Layout 192,419 (2).
+  These include ETL metadata, exclude JS/CSS, and precede opening details.
+  Local ready timings were ~0.23-0.36s; simulated 10 Mbps/80ms latency timings were
+  PDMs 1.26s, Equipment 2.25s, Power Plan 2.23s, Layout 1.20s. No VM/ngrok speedup
+  or before/after timing claim is inferred from these local/simulated results.
+- Validation: 102 targeted frontend tests passed across loader, App, deferred
+  section/ETL refresh integration, four primary pages, links, Issues, MV, Overview,
+  and Data Operations. 17 Node HTTP tests passed for compression, ETL file
+  replacement, actual preview, reports, ranges, attachments and traversal checks.
+  An initial loader worker startup timeout passed on isolated retry. Final preview
+  build passed (existing large-chunk warning); diff check passed.
+- Real Chromium smoke on a temporary loopback preview checked cold-route request
+  sets, deferred PDM data, all four detail/link entry points, a local PDF preview
+  with 206/%PDF byte-range response, and no page errors. Screenshots visually
+  checked. Ignored artifacts: `runtime/automation/first_load_smoke.py`,
+  `first-load-smoke.json`, `first-load-throttled.json`, and first-load screenshots.
+  Temporary preview/browser processes were closed. No vendor navigation/writes,
+  ETL, raw-data changes, new dependencies, or user-service restart.
+  The user's original modified tsconfig.tsbuildinfo bytes were restored.
+- For the trial, stop/restart `python scripts/start_dashboard.py --preview` once
+  to load gzip middleware, then open /pdms, /equipment, /power-plan and /layout.
+  Future successful ETLs still refresh live data without rebuilding frontend code.
+
+
 ## Current update (2026-10-20): Infralink login and refresh help
 
 - Added Chinese operator guide `docs/INFRALINK_LINKS_HELP.md` and a README link.

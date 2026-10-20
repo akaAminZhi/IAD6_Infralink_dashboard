@@ -32,6 +32,17 @@ Most dashboard pages read static JSON directly from `frontend/public/data/`.
 Data Operations, MV comments and local NETA review editing use the automation
 API; no database is required.
 
+## Page loading
+
+`python scripts/start_dashboard.py --preview` builds compiled assets and serves
+live datasets with negotiated gzip compression. Restart this command after source
+updates. PDMs loads its list/readiness inputs first; EPS equipment details and
+report links load when opening details. Equipment and Power Plan start their
+required status/filter inputs in parallel, without EPS history or Data Quality
+files. Layout loads independently and fetches report/device links on selection.
+ETL dashboard reload invalidates shared resources and refreshes Layout; ordinary
+navigation reuses resources already loaded in the current dashboard session.
+
 ## Layout
 
 Layout opens in **2.5D** by default; **2D plan** restores the original rectangle

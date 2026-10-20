@@ -1,3 +1,4 @@
+import { useDashboardResources } from "../../contexts/DashboardResourcesContext";
 import { X } from "lucide-react";
 import { useState } from "react";
 
@@ -102,8 +103,11 @@ export function NetaReportChips({
   showLinkedFileNames = false,
   stackedCompact = false,
 }: NetaReportChipsProps) {
-  const manifest = useNetaReportManifest();
+  const manifest = useNetaReportManifest(reports.length > 0);
+  const { loading } = useDashboardResources(["netaReportManifest"], reports.length > 0);
   const [preview, setPreview] = useState<ReportPreview | null>(null);
+
+  if (loading) return <span className="text-sm text-muted-foreground">Loading report links?</span>;
 
   if (reports.length === 0) {
     return <span className="text-sm text-muted-foreground">--</span>;

@@ -1,3 +1,4 @@
+import { DashboardResourceBoundary } from "../../contexts/DashboardResourcesContext";
 import { Activity, ShieldCheck, X } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 
@@ -383,11 +384,13 @@ export function PdmDetailDrawer({
                     EPS execution shows field-test progress separately from Infralink NETA readiness.
                   </p>
                 </div>
+                <DashboardResourceBoundary resources={["epsModuleExecution", "epsTestItems", "netaReportManifest"]}>
                 <PdmEquipmentList
                   equipment={equipment}
                   epsModuleExecution={pdmEpsModuleExecution}
                   epsTestItems={epsTestItems}
                 />
+                </DashboardResourceBoundary>
               </CardContent>
             </Card>
 

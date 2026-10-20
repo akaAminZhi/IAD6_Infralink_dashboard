@@ -6,6 +6,7 @@ import { useDashboardData } from "./useDashboardData";
 
 vi.mock("../utils/dataLoaders", () => ({
   fetchJson: vi.fn(),
+  clearPendingJsonRequests: vi.fn(),
   unwrapRecords: <T,>(json: unknown): T[] => {
     if (Array.isArray(json)) return json as T[];
     if (
@@ -52,130 +53,127 @@ afterEach(() => {
   fetchJsonMock.mockReset();
 });
 
-describe("useDashboardData", () => {
-  it("preserves energisation flags from the PDM record envelope", async () => {
+describe("useDashboardData route loading", () => {
+  function setup() {
+    fetchJsonMock.mockImplementation(async (path) => defaultPayload(path));
+  }
+
+  it("loads only PDM list dependencies, preserving energisation and readiness inputs", async () => {
     fetchJsonMock.mockImplementation(async (path) => path === "/data/pdms.json"
       ? { records: [{ pdm_name: "PDM-A", energised_offsite: true, energised_onsite: null }] }
       : defaultPayload(path));
-    const { result } = renderHook(() => useDashboardData());
+    const { result } = renderHook(() => useDashboardData("/pdms"));
     await waitFor(() => expect(result.current.loading).toBe(false));
-    expect(result.current.pdms[0]).toMatchObject({
-      energised_offsite: true, energised_onsite: null,
-    });
+    expect(result.current.pdms[0]).toMatchObject({ energised_offsite: true, energised_onsite: null });
+    expect(result.current.epsPdmExecution).toHaveLength(1);
+    expect(fetchJsonMock.mock.calls.map(([path]) => path).sort()).toEqual([
+      "/data/etl_run_metadata.json", "/data/pdms.json", "/data/eps_pdm_execution.json",
+    ].sort());
   });
 
-  it("loads the core and optional overview datasets", async () => {
-    fetchJsonMock.mockImplementation(async (path) => defaultPayload(path));
-
-    const { result } = renderHook(() => useDashboardData());
-
+  it("starts Equipment data before a slow PDM request finishes", async () => {
+    let release!: (value: unknown) => void;
+    fetchJsonMock.mockImplementation((path) => path === "/data/pdms.json"
+      ? new Promise((resolve) => { release = resolve; }) : Promise.resolve(defaultPayload(path)));
+    const { result } = renderHook(() => useDashboardData("/equipment"));
+    await waitFor(() => expect(fetchJsonMock).toHaveBeenCalledWith("/data/equipment.json"));
+    expect(fetchJsonMock).toHaveBeenCalledWith("/data/eps_test_items.json");
+    expect(result.current.loading).toBe(true);
+    await act(async () => release(defaultPayload("/data/pdms.json")));
     await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.equipment).toHaveLength(1);
+    expect(result.current.epsTestItems).toHaveLength(1);
+    expect(fetchJsonMock).not.toHaveBeenCalledWith("/data/data_quality_report.json");
+    expect(fetchJsonMock).not.toHaveBeenCalledWith("/data/eps_test_summary.json");
+  });
+
+  it("keeps Layout independent even when metadata never completes", async () => {
+    fetchJsonMock.mockImplementation(() => new Promise(() => {}));
+    const { result } = renderHook(() => useDashboardData("/layout"));
+    expect(result.current.loading).toBe(false);
     expect(result.current.error).toBeNull();
-    expect(result.current.pdms).toEqual([{ pdm_name: "PDM-A", equipment: [] }]);
-    expect(result.current.summary?.total_pdms).toBe(1);
-    expect(result.current.epsTestItems).toEqual([{ equipment_name: "EQ-1" }]);
-    expect(result.current.detailDataLoaded).toBe(false);
+    await waitFor(() => expect(fetchJsonMock.mock.calls.map(([path]) => path)).toEqual(["/data/etl_run_metadata.json"]));
   });
 
-  it("keeps the dashboard available when an optional dataset fails", async () => {
+  it("waits for all Power Plan status inputs without fetching unrelated datasets", async () => {
+    setup();
+    const { result } = renderHook(() => useDashboardData("/power-plan"));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(fetchJsonMock.mock.calls.map(([path]) => path).sort()).toEqual([
+      "/data/etl_run_metadata.json", "/data/pdms.json", "/data/equipment.json", "/data/cases.json",
+      "/data/eps_module_execution.json", "/data/eps_test_items.json",
+    ].sort());
+  });
+
+  it("loads details once on demand and keeps the PDM list available", async () => {
+    setup();
+    const { result } = renderHook(() => useDashboardData("/pdms"));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    await act(async () => {
+      await Promise.all([
+        result.current.loadResources(["epsTestItems", "epsModuleExecution"]),
+        result.current.loadResources(["epsTestItems"]),
+      ]);
+    });
+    expect(result.current.epsTestItems).toHaveLength(1);
+    expect(fetchJsonMock.mock.calls.filter(([path]) => path === "/data/eps_test_items.json")).toHaveLength(1);
+    expect(result.current.loading).toBe(false);
+  });
+
+  it("reuses loaded data on route changes and loads KPR context only for a drill-down", async () => {
+    setup();
+    const { result, rerender } = renderHook(({ path, search }) => useDashboardData(path, search), {
+      initialProps: { path: "/pdms", search: "" },
+    });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    rerender({ path: "/equipment", search: "" });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(fetchJsonMock.mock.calls.filter(([path]) => path === "/data/pdms.json")).toHaveLength(1);
+    expect(fetchJsonMock).not.toHaveBeenCalledWith("/data/kpr_summary.json");
+    rerender({ path: "/equipment", search: "?lifecycleStage=neta" });
+    await waitFor(() => expect(fetchJsonMock).toHaveBeenCalledWith("/data/kpr_summary.json"));
+  });
+
+  it("handles optional missing exports and offers reload for missing required files", async () => {
     vi.spyOn(console, "warn").mockImplementation(() => undefined);
-    fetchJsonMock.mockImplementation(async (path) => {
-      if (path === "/data/power_plan.json") {
-        throw new Error("optional file missing");
-      }
-      return defaultPayload(path);
-    });
-
-    const { result } = renderHook(() => useDashboardData());
-
+    fetchJsonMock.mockImplementation(async (path) => path === "/data/eps_pdm_execution.json"
+      ? null : path === "/data/pdms.json" ? null : defaultPayload(path));
+    const { result } = renderHook(() => useDashboardData("/pdms"));
+    await waitFor(() => expect(result.current.error).toBe("Dashboard data could not be loaded."));
+    setup();
+    act(() => result.current.reload());
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(result.current.error).toBeNull();
-    expect(result.current.powerPlanManifest).toBeNull();
     expect(result.current.pdms).toHaveLength(1);
   });
 
-  it("reports a core dataset failure and resets data", async () => {
-    vi.spyOn(console, "warn").mockImplementation(() => undefined);
-    fetchJsonMock.mockImplementation(async (path) => {
-      if (path === "/data/pdms.json") {
-        throw new Error("pdms missing");
-      }
-      return defaultPayload(path);
-    });
-
-    const { result } = renderHook(() => useDashboardData());
-
+  it("ignores late responses from before ETL reload and refreshes deferred data too", async () => {
+    setup();
+    const { result } = renderHook(() => useDashboardData("/pdms"));
     await waitFor(() => expect(result.current.loading).toBe(false));
-    expect(result.current.error).toBe("Dashboard data could not be loaded.");
-    expect(result.current.pdms).toEqual([]);
-  });
-
-  it("loads detail data on demand and ignores duplicate requests", async () => {
-    let releaseEquipment: (() => void) | undefined;
-    const equipmentGate = new Promise<void>((resolve) => {
-      releaseEquipment = resolve;
-    });
-    fetchJsonMock.mockImplementation(async (path) => {
-      if (path === "/data/equipment.json") {
-        await equipmentGate;
-      }
-      return defaultPayload(path);
-    });
-
-    const { result } = renderHook(() => useDashboardData());
-    await waitFor(() => expect(result.current.loading).toBe(false));
-
-    let firstLoad: Promise<void>;
+    let release!: (value: unknown) => void;
+    fetchJsonMock.mockImplementation((path) => path === "/data/eps_test_items.json"
+      ? new Promise((resolve) => { release = resolve; }) : Promise.resolve(defaultPayload(path)));
+    let oldRequest!: Promise<void>;
     await act(async () => {
-      firstLoad = result.current.loadDetailData();
+      oldRequest = result.current.loadResources(["epsTestItems"]);
       await Promise.resolve();
     });
-    expect(result.current.detailDataLoading).toBe(true);
-
-    await act(async () => {
-      await result.current.loadDetailData();
-    });
-    expect(
-      fetchJsonMock.mock.calls.filter(([path]) => path === "/data/equipment.json"),
-    ).toHaveLength(1);
-
-    releaseEquipment?.();
-    await act(async () => {
-      await firstLoad!;
-    });
-    expect(result.current.detailDataLoaded).toBe(true);
-    expect(result.current.equipment).toEqual([{ equipment_id: "IAD06-EQ-1" }]);
-    expect(result.current.cases).toEqual([{ case_id: "CASE-1" }]);
+    setup();
+    act(() => result.current.reload());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    await act(async () => { await result.current.loadResources(["epsTestItems"]); });
+    await act(async () => { release({ records: [{ equipment_name: "STALE" }] }); await oldRequest; });
+    expect(result.current.epsTestItems).toEqual([{ equipment_name: "EQ-1" }]);
+    expect(fetchJsonMock.mock.calls.filter(([path]) => path === "/data/pdms.json")).toHaveLength(2);
+    expect(fetchJsonMock.mock.calls.filter(([path]) => path === "/data/eps_test_items.json")).toHaveLength(2);
   });
 
-  it("reports detail loading failures and reloads the overview", async () => {
-    vi.spyOn(console, "warn").mockImplementation(() => undefined);
-    fetchJsonMock.mockImplementation(async (path) => {
-      if (path === "/data/equipment.json") {
-        throw new Error("equipment unavailable");
-      }
-      return defaultPayload(path);
-    });
-
-    const { result } = renderHook(() => useDashboardData());
+  it("loads Data Quality only when visiting it", async () => {
+    setup();
+    const { result } = renderHook(() => useDashboardData("/data-quality"));
     await waitFor(() => expect(result.current.loading).toBe(false));
-    const initialPdmCalls = fetchJsonMock.mock.calls.filter(
-      ([path]) => path === "/data/pdms.json",
-    ).length;
-
-    await act(async () => {
-      await result.current.loadDetailData();
-    });
-    expect(result.current.detailDataError).toBe(
-      "Equipment and issue detail data could not be loaded.",
-    );
-
-    act(() => result.current.reload());
-    await waitFor(() => {
-      const pdmCalls = fetchJsonMock.mock.calls.filter(
-        ([path]) => path === "/data/pdms.json",
-      ).length;
-      expect(pdmCalls).toBe(initialPdmCalls + 1);
-    });
+    expect(result.current.dataQualityReport).toEqual({ unmatched_cases: [] });
+    expect(fetchJsonMock).not.toHaveBeenCalledWith("/data/equipment.json");
   });
 });

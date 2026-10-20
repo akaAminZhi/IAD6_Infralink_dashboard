@@ -107,8 +107,7 @@ function overlapsViewport(rect: PowerPlanRect, viewport: PowerPlanRect): boolean
     rect.y <= viewport.y + viewport.height && rect.y + rect.height >= viewport.y;
 }
 
-export function LayoutPlanPage() {
-  const netaReportManifest = useNetaReportManifest();
+export function LayoutPlanPage({ refreshKey = 0 }: { refreshKey?: number }) {
   const [isometric, setIsometric] = useState(() => {
     try { return localStorage.getItem(LAYOUT_VIEW_KEY) !== "plan"; } catch { return true; }
   });
@@ -122,6 +121,7 @@ export function LayoutPlanPage() {
   const [overrides, setOverrides] = useState(readLayoutOverrides);
   const [storageError, setStorageError] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const netaReportManifest = useNetaReportManifest(Boolean(selectedId || selectedCableId));
   const [search, setSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [activeSearchIndex, setActiveSearchIndex] = useState(0);
@@ -150,7 +150,7 @@ export function LayoutPlanPage() {
       setLoading(false);
     });
     return () => { active = false; };
-  }, [retry]);
+  }, [retry, refreshKey]);
 
   useEffect(() => {
     const element = mapRef.current;

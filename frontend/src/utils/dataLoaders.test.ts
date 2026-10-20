@@ -1,12 +1,25 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { fetchJson, unwrapRecords } from "./dataLoaders";
+import { clearPendingJsonRequests, fetchJson, unwrapRecords } from "./dataLoaders";
 
 afterEach(() => {
   vi.restoreAllMocks();
 });
 
 describe("dataLoaders", () => {
+  it("starts a fresh request after ETL invalidation without reusing an older pending response", async () => {
+    let release!: (response: Response) => void;
+    vi.stubGlobal("fetch", vi.fn()
+      .mockImplementationOnce(() => new Promise<Response>(resolve => { release = resolve; }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ version: 2 }))));
+    const old = fetchJson("/data/reloaded.json");
+    clearPendingJsonRequests();
+    const fresh = fetchJson("/data/reloaded.json");
+    expect(fresh).not.toBe(old);
+    expect(await fresh).toEqual({ version: 2 });
+    release(new Response(JSON.stringify({ version: 1 })));
+    expect(await old).toEqual({ version: 1 });
+  });
   it("shares concurrent requests but fetches again after completion", async () => {
     let release!: (response: Response) => void;
     const fetchMock = vi.fn().mockImplementationOnce(() => new Promise<Response>(resolve => {

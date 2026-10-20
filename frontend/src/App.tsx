@@ -1,5 +1,5 @@
 import { ArrowLeft } from "lucide-react";
-import { lazy, Suspense, useEffect } from "react";
+import { lazy, Suspense } from "react";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 
 import { ErrorState } from "./components/common/ErrorState";
@@ -8,6 +8,7 @@ import { AppLayout } from "./components/layout/AppLayout";
 import { IssueAttachmentManifestProvider } from "./contexts/IssueAttachmentManifestContext";
 import { NetaReportManifestProvider } from "./contexts/NetaReportManifestContext";
 import { InfralinkEquipmentLinksProvider } from "./contexts/InfralinkEquipmentLinksContext";
+import { DashboardResourcesProvider } from "./contexts/DashboardResourcesContext";
 import { useDashboardData } from "./hooks/useDashboardData";
 import { OperationsAuthGate } from "./components/dataOperations/OperationsAuth";
 
@@ -47,8 +48,8 @@ const KprPage = lazy(() =>
 );
 
 function App() {
-  const dashboardData = useDashboardData();
   const location = useLocation();
+  const dashboardData = useDashboardData(location.pathname, location.search);
   const navigate = useNavigate();
   const navigationState = location.state as
     | { fromKpr?: boolean; fromOverview?: boolean }
@@ -56,47 +57,16 @@ function App() {
   const cameFromOverview = Boolean(navigationState?.fromOverview);
   const cameFromKpr = Boolean(navigationState?.fromKpr);
   const isDataOperations = location.pathname === "/data-operations";
-  const needsDetailData =
-    location.pathname === "/equipment" ||
-    location.pathname === "/issues" ||
-    location.pathname === "/power-plan" ||
-    location.pathname === "/mv-equipment" ||
-    location.pathname === "/data-quality";
-  const {
-    detailDataLoaded,
-    detailDataLoading,
-    error,
-    loadDetailData,
-    loading,
-  } = dashboardData;
-
-  useEffect(() => {
-    if (
-      needsDetailData &&
-      !loading &&
-      !error &&
-      !detailDataLoaded &&
-      !detailDataLoading
-    ) {
-      void loadDetailData();
-    }
-  }, [detailDataLoaded, detailDataLoading, error, loadDetailData, loading, needsDetailData]);
-
   return (
+    <DashboardResourcesProvider value={dashboardData}>
     <IssueAttachmentManifestProvider manifest={dashboardData.issueAttachmentManifest}>
       <NetaReportManifestProvider manifest={dashboardData.netaReportManifest}>
-        <InfralinkEquipmentLinksProvider refreshKey={dashboardData.etlRunMetadata?.generated_at}>
+        <InfralinkEquipmentLinksProvider refreshKey={String(dashboardData.reloadVersion)}>
         <AppLayout etlRunMetadata={dashboardData.etlRunMetadata}>
-          {!isDataOperations &&
-          (dashboardData.loading ||
-            (needsDetailData &&
-              !dashboardData.detailDataLoaded &&
-              !dashboardData.detailDataError)) ? (
+          {!isDataOperations && dashboardData.loading ? (
             <LoadingState />
           ) : !isDataOperations && dashboardData.error ? (
             <ErrorState message={dashboardData.error} onRetry={dashboardData.reload} />
-          ) : !isDataOperations && needsDetailData && dashboardData.detailDataError ? (
-            <ErrorState message={dashboardData.detailDataError} onRetry={dashboardData.loadDetailData} />
           ) : (
             <>
               {cameFromOverview && location.pathname !== "/overview" ? (
@@ -136,7 +106,7 @@ function App() {
                   <Route element={<IssuesPage data={dashboardData} />} path="/issues" />
                   <Route element={<EpsTestExecutionPage data={dashboardData} />} path="/eps-test-execution" />
                   <Route element={<PowerPlanPage data={dashboardData} />} path="/power-plan" />
-                  <Route element={<LayoutPlanPage />} path="/layout" />
+                  <Route element={<LayoutPlanPage refreshKey={dashboardData.reloadVersion} />} path="/layout" />
                   <Route element={<MvEquipmentPage data={dashboardData} />} path="/mv-equipment" />
                   <Route element={<DataQualityPage data={dashboardData} />} path="/data-quality" />
                   <Route
@@ -152,6 +122,7 @@ function App() {
         </InfralinkEquipmentLinksProvider>
       </NetaReportManifestProvider>
     </IssueAttachmentManifestProvider>
+    </DashboardResourcesProvider>
   );
 }
 

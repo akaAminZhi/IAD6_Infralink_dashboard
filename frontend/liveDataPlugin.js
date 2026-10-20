@@ -1,6 +1,17 @@
 import { createReadStream } from "node:fs";
 import { realpath, stat } from "node:fs/promises";
 import path from "node:path";
+import { pipeline } from "node:stream/promises";
+import { createGzip } from "node:zlib";
+
+function acceptsGzip(header = "") {
+  const encodings = new Map(header.split(",").map((entry) => {
+    const [name, ...parameters] = entry.trim().toLowerCase().split(";");
+    const quality = parameters.find((parameter) => parameter.trim().startsWith("q="));
+    return [name, quality ? Number(quality.trim().slice(2)) : 1];
+  }));
+  return (encodings.get("gzip") ?? encodings.get("*") ?? 0) > 0;
+}
 
 // Keep compiled application assets, but serve ETL outputs from their live source.
 export function liveDataPlugin() {
@@ -41,10 +52,16 @@ export function liveDataPlugin() {
         if (!info.isFile()) throw new Error("Dataset not found");
         response.setHeader("Content-Type", path.extname(target).toLowerCase() === ".json"
           ? "application/json; charset=utf-8" : "text/csv; charset=utf-8");
-        response.setHeader("Content-Length", info.size);
+        response.setHeader("Vary", "Accept-Encoding");
+        const gzip = info.size >= 1024 && acceptsGzip(request.headers["accept-encoding"]);
+        if (gzip) response.setHeader("Content-Encoding", "gzip");
+        else response.setHeader("Content-Length", info.size);
         response.setHeader("X-Content-Type-Options", "nosniff");
         if (request.method === "HEAD") return response.end();
-        createReadStream(canonicalFile).on("error", () => response.destroy()).pipe(response);
+        const source = createReadStream(canonicalFile);
+        // Stream the current file; do not retain stale compressed ETL outputs.
+        const streams = gzip ? [source, createGzip({ level: 1 }), response] : [source, response];
+        void pipeline(streams).catch(() => response.destroy());
       } catch {
         response.statusCode = 404;
         response.end("Dataset not found.");

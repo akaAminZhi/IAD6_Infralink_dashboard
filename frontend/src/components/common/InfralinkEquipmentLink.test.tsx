@@ -7,6 +7,12 @@ import { InfralinkEquipmentLink } from "./InfralinkEquipmentLink";
 afterEach(() => vi.restoreAllMocks());
 
 describe("Infralink equipment links", () => {
+  it("does not download device identities until a detail link is mounted", async () => {
+    const fetch = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify([])));
+    render(<InfralinkEquipmentLinksProvider><span>PDM list</span></InfralinkEquipmentLinksProvider>);
+    await Promise.resolve();
+    expect(fetch).not.toHaveBeenCalled();
+  });
   it("opens the exact device through JC2's sign-in-capable full-page entry", async () => {
     const fetch = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ records: [
       { equipment_id: "IAD06-PDU6-01E-2", infralink_id: "1301515161" },

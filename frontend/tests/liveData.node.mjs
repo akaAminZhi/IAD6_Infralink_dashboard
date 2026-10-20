@@ -4,6 +4,7 @@ import { mkdtemp, mkdir, writeFile, rename, rm, symlink } from "node:fs/promises
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, before, test } from "node:test";
+import { gunzipSync } from "node:zlib";
 import { liveDataPlugin } from "../liveDataPlugin.js";
 
 let root, server, origin;
@@ -60,6 +61,42 @@ test("serves CSV and supports HEAD without a response body", async () => {
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type"), /text\/csv/);
   assert.equal(await response.text(), "");
+});
+
+function rawRead(suffix, headers = {}, method = "GET") {
+  return new Promise((resolve, reject) => {
+    const req = request(`${origin}/data/${suffix}`, { headers, method }, res => {
+      const chunks = [];
+      res.on("data", chunk => chunks.push(chunk));
+      res.on("end", () => resolve({ headers: res.headers, body: Buffer.concat(chunks) }));
+    });
+    req.on("error", reject);
+    req.end();
+  });
+}
+
+test("negotiates gzip, identity, explicit refusal, and HEAD correctly", async () => {
+  const original = JSON.stringify({ records: Array.from({ length: 300 }, (_, i) => ({ id: i, value: "equipment" })) });
+  await writeFile(path.join(root, "public", "data", "large.json"), original);
+  const compressed = await rawRead("large.json", { "Accept-Encoding": "br, gzip" });
+  assert.equal(compressed.headers["content-encoding"], "gzip");
+  assert.equal(compressed.headers.vary, "Accept-Encoding");
+  assert.equal(compressed.headers["cache-control"], "no-store");
+  assert.equal(compressed.headers["content-length"], undefined);
+  assert.equal(gunzipSync(compressed.body).toString(), original);
+  assert.ok(compressed.body.length < Buffer.byteLength(original) / 2);
+  for (const encoding of ["identity", "gzip;q=0, *;q=1", "br"]) {
+    const plain = await rawRead("large.json", { "Accept-Encoding": encoding });
+    assert.equal(plain.headers["content-encoding"], undefined);
+    assert.equal(plain.body.toString(), original);
+    assert.equal(Number(plain.headers["content-length"]), Buffer.byteLength(original));
+  }
+  const head = await rawRead("large.json", { "Accept-Encoding": "gzip" }, "HEAD");
+  assert.equal(head.headers["content-encoding"], "gzip");
+  assert.equal(head.body.length, 0);
+  await writeFile(path.join(root, "public", "data", "large.json"), original.replaceAll("equipment", "updated"));
+  const updated = await rawRead("large.json", { "Accept-Encoding": "gzip" });
+  assert.match(gunzipSync(updated.body).toString(), /updated/);
 });
 
 test("rejects writes and unapproved extensions", async () => {

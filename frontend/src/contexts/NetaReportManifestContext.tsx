@@ -1,3 +1,4 @@
+import { useDashboardResources } from "./DashboardResourcesContext";
 import { createContext, useContext, type ReactNode } from "react";
 
 import type { NetaReportManifest } from "../types/data";
@@ -20,6 +21,7 @@ export function NetaReportManifestProvider({
   );
 }
 
-export function useNetaReportManifest(): NetaReportManifest | null {
+export function useNetaReportManifest(enabled = true): NetaReportManifest | null {
+  useDashboardResources(["netaReportManifest"], enabled);
   return useContext(NetaReportManifestContext);
 }

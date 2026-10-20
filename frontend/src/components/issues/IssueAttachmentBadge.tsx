@@ -1,3 +1,4 @@
+import { useDashboardResources } from "../../contexts/DashboardResourcesContext";
 import { X } from "lucide-react";
 import { useState } from "react";
 
@@ -111,9 +112,12 @@ export function IssueAttachmentBadge({
   showImageThumbnails = false,
   tone = "blue",
 }: IssueAttachmentBadgeProps) {
-  const manifest = useIssueAttachmentManifest();
+  const manifest = useIssueAttachmentManifest(references.length > 0);
+  const { loading } = useDashboardResources(["issueAttachmentManifest"], references.length > 0);
   const [preview, setPreview] = useState<AttachmentPreview | null>(null);
   const classes = toneClasses[tone];
+
+  if (loading) return <span className="text-sm text-muted-foreground">Loading attachments?</span>;
 
   if (references.length === 0) {
     return <span className="text-sm text-muted-foreground">{emptyLabel}</span>;
