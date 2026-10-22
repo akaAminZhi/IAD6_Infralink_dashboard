@@ -129,6 +129,35 @@ describe("MvEquipmentPage", () => {
     expect(screen.getByLabelText("TX6-02A: 2 open issues")).toHaveTextContent("2");
   });
 
+  it("keeps a failed cable count on its route instead of an unrelated termination", async () => {
+    const user = userEvent.setup();
+    const cable = "FD04-IAD06-UTILITY6-03";
+    const termination = "FD03-IAD06-UTILITY6-03-A";
+    render(<MvEquipmentPage data={makeDashboardData({
+      cases: [],
+      powerPlanManifest: { pages: [{
+        page_id: "mv", page_label: "MV", document_name: "Electrical-IAD6-MV.pdf", page_number: 1,
+        width: 1000, height: 700,
+        annotations: [
+          { annotation_id: "cable", kind: "connection", annotation_type: "PolyLine", label: cable,
+            mv_daily_test_status: "failed", mv_daily_test_date: "2026-10-21",
+            rect: { x: 100, y: 100, width: 80, height: 140 }, center: { x: 140, y: 170 },
+            vertices: [{ x: 180, y: 240 }, { x: 180, y: 230 }, { x: 100, y: 230 }, { x: 100, y: 100 }] },
+          { annotation_id: "termination", kind: "termination", label: termination,
+            rect: { x: 170, y: 90, width: 20, height: 20 }, center: { x: 180, y: 100 } },
+        ],
+      }] },
+    })} />);
+
+    // Combined-page coordinates translate the cable's longest segment midpoint to (70, 145).
+    const badge = screen.getByLabelText(`${cable}: 1 failed test items`);
+    expect(badge).toHaveAttribute("transform", "translate(70 145)");
+    expect(screen.queryByLabelText(`${termination}: 1 open issues`)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(`${termination}: 1 failed test items`)).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: `${termination}, termination` }));
+    expect(screen.getByText("No linked Infralink issues.")).toBeInTheDocument();
+  });
+
   it("combines PDF pages and draws all MV annotations on one canvas", async () => {
     const user = userEvent.setup();
     const data = makeDashboardData({

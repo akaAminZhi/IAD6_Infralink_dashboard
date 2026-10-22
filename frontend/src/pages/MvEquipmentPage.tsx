@@ -460,6 +460,27 @@ interface CommentIndicatorPosition {
   y: number;
 }
 
+function countIndicatorTransform(annotation: PowerPlanAnnotation, offsetX = 0): string {
+  if (isConnection(annotation)) {
+    // A cable's bounding-box corner can sit on an unrelated termination.
+    // Anchor counts to the middle of its longest actual route segment instead.
+    const points = annotation.vertices ?? [];
+    let anchor = annotation.center;
+    let longest = 0;
+    for (let index = 1; index < points.length; index += 1) {
+      const start = points[index - 1];
+      const end = points[index];
+      const length = Math.hypot(end.x - start.x, end.y - start.y);
+      if (length > longest) {
+        longest = length;
+        anchor = { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 };
+      }
+    }
+    return `translate(${anchor.x - offsetX} ${anchor.y})`;
+  }
+  return `translate(${annotation.rect.x + annotation.rect.width - offsetX} ${annotation.rect.y})`;
+}
+
 function commentIndicatorPosition(annotation: PowerPlanAnnotation): CommentIndicatorPosition {
   if (isConnection(annotation)) {
     return {
@@ -1588,7 +1609,7 @@ export function MvEquipmentPage({ data }: MvEquipmentPageProps) {
                     aria-label={`${annotation.label}: ${annotation.openIssueCount} open issues`}
                     key={`${annotation.annotation_id}-open-issues`}
                     pointerEvents="none"
-                    transform={`translate(${annotation.rect.x + annotation.rect.width} ${annotation.rect.y})`}
+                    transform={countIndicatorTransform(annotation)}
                   >
                     <g className="animate-equipment-failed">
                       <circle fill="#b91c1c" r="12" stroke="white" strokeWidth="2" />
@@ -1603,7 +1624,7 @@ export function MvEquipmentPage({ data }: MvEquipmentPageProps) {
                     aria-label={`${annotation.label}: ${annotation.failedCount} failed test items`}
                     key={`${annotation.annotation_id}-failed`}
                     pointerEvents="none"
-                    transform={`translate(${annotation.rect.x + annotation.rect.width - ((annotation.openIssueCount ?? 0) > 0 ? 28 : 0)} ${annotation.rect.y})`}
+                    transform={countIndicatorTransform(annotation, (annotation.openIssueCount ?? 0) > 0 ? 28 : 0)}
                   >
                     <g className="animate-equipment-failed">
                       <circle fill="#b91c1c" r="12" stroke="white" strokeWidth="2" />
