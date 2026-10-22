@@ -1,5 +1,26 @@
 ﻿# Codex Handoff
 
+## Current update (2026-10-22): Accurate Equipment CxAlloy file counts
+
+- `CxalloyUploadBadge` now counts each PDF's status from `cxalloy_reports`,
+  matching the detail drawer. Mixed packages show separate Uploaded and Pending
+  counts, plus Review required and Missing local PDF counts when present.
+  Hover text gives the equipment/cable breakdown. Legacy records without file
+  evidence retain status only; empty file lists do not imply completion.
+- Added badge regression cases and Equipment page assertions for partial cable
+  uploads. All 17 targeted tests passed using forks/one worker. The first threads
+  run passed 13 tests but timed out starting the remaining worker; fork retry
+  passed all three files. Preview-mode production build and diff check passed;
+  existing chunk-size/plugin-timing warnings remain.
+- Real browser check against the existing local preview verified ATS6-01D-2
+  shows 3 uploaded files and 1 pending file. Details confirmed one equipment
+  report and two cable reports uploaded, with one cable pending; no page errors.
+  Screenshot visually checked at ignored
+  `runtime/automation/cxalloy-table-counts.png`; repeatable smoke script alongside.
+- No data contract or ETL changes, vendor uploads, commits or service restarts.
+  Existing user-modified tsconfig.tsbuildinfo bytes were preserved through build.
+  Refresh Equipment to load the rebuilt frontend.
+
 ## Current update (2026-10-20): Load frequently used pages independently
 
 - Replaced the initial 16-file loading gate plus sequential global-detail batch

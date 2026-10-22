@@ -56,6 +56,7 @@ describe("EquipmentPage", () => {
         records: [{
           equipment_id: "IAD06-PDU6-01D-4",
           upload_status: "pending",
+          expected_report_count: 2,
           reports: [
             { report_name: "Report-01.pdf", report_kind: "equipment", upload_status: "uploaded" },
             { report_name: "FDR-new.pdf", report_kind: "cable", upload_status: "pending" },
@@ -81,6 +82,9 @@ describe("EquipmentPage", () => {
     const row = equipmentCell.closest("tr");
     expect(row).not.toBeNull();
     expect(row?.textContent).toContain("0");
+    expect(within(row!).getByText("Uploaded · 1 file")).toBeInTheDocument();
+    expect(within(row!).getByText("Pending · 1 file")).toBeInTheDocument();
+    expect(within(row!).queryByText("Pending · 2 files")).not.toBeInTheDocument();
 
     await user.click(equipmentCell);
     expect(screen.getByText("Asset Information")).toBeInTheDocument();

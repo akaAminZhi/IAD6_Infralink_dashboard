@@ -71,6 +71,10 @@ metadata, including shared PDFs and filenames without a cable prefix. Missing
 local PDFs and unverifiable upload history remain visible. Refresh this view with
 `python scripts/etl/build_cxalloy_report_status.py` or the normal ETL; this reads
 local upload evidence and does not contact CxAlloy.
+The Equipment table counts uploaded, pending, review-required, and missing-local
+PDFs separately using the same per-file evidence as the details. Hover over a
+count for its equipment/cable breakdown. Legacy status data without file-level
+evidence shows a status without a file count.
 Historical site checks naming another PDF are ignored. A later
 `equipment_not_found` revokes older success until a subsequent successful upload
 or site check verifies it again; cached dashboard hashes and manifest skips do
