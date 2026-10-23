@@ -1,5 +1,85 @@
 ﻿# Codex Handoff
 
+## Current update (2026-10-23): Equipment cable completion from attached reports
+
+- Equipment now carries the existing normalized `feeder_cable_atp` into its
+  flattened view rows, including PDM enrichment. Cable NETA display completion
+  accepts the cable's own Feeder Cable ATP or NETA Test Report attachment even
+  when the raw completion flag is false/unknown. It reuses Layout's shared
+  `hasInfralinkCableTestReport`; placeholder filtering/whitespace/deduplication
+  match the Python Layout builder's `split_attachment_names`.
+- Table badges, filters, summary and attention share this report-based rule.
+  Report counts include ATP attachments (same filename counted once across
+  fields), with an ATP evidence panel in expanded rows and equipment details.
+  This panel confirms the attachment in Infralink and lists its source names;
+  it does not invent a local PDF link or borrow another asset's report.
+- Ordinary equipment, terminations and tracking exclusions keep their previous
+  completion rules. L3/daily-test status alone is insufficient for Equipment's
+  report-based completion. A true completion flag without any report remains a
+  missing-report problem. Raw Excel flags/dates, ETL and KPR are unchanged.
+- Current local inputs contain 358 tracked cables with ATP evidence and blank
+  raw NETA completion. Example: `FDR-IAD06-MDS6-01B-IAD06-CH607-01B`.
+  Existing normalized JSON already includes the needed field; no ETL or data
+  contract regeneration is required. No raw files or vendor records changed.
+- Verification: 38 targeted tests passed across cable readiness (21), equipment
+  utilities (9) and Equipment page (8). Initial worker-start timeouts required
+  isolated retries. Preview production build passed with existing size/timing
+  warnings; original build-info bytes restored. Diff check passed.
+- Real Chromium smoke verified the example's completion badge, 1-report count,
+  ATP evidence in table/details, inclusion in the completion filter, and Layout's
+  Tested + Infralink Updated state. No page errors; detail screenshot visually
+  reviewed. Ignored script: `runtime/automation/cable_completion_smoke.py`;
+  screenshots `cable-completion-table.png` and `cable-completion-detail.png`.
+  The browser was closed. No user-service restart, vendor writes or commit.
+
+## Current update (2026-10-23): Search all Equipment IDs, including cables
+
+- Search-order follow-up: Equipment and Layout prioritize ordinary equipment
+  ahead of cables/terminations using case-insensitive Excel equipment_type.
+  Layout groups before exact/prefix ranking and the 12-result limit; Equipment
+  groups after column sorting and before pagination, only while ID search is
+  active. Column ordering remains effective within each group. All IDs remain
+  searchable. Shared classification lives in searchUtils.ts.
+  Follow-up validation: Layout search (3) and Equipment page (7) tests passed;
+  the Equipment worker required an isolated threads retry after startup timeout.
+  Preview production build and diff check passed. Real Chromium query MDS6-01B
+  put the MDS first in both pages, ahead of its cables/terminations, with no page
+  errors. Ignored `runtime/automation/search_priority_smoke.py` and screenshots
+  record the check. Build-info restored; no data changes or service restarts.
+- Equipment now retains every nonblank normalized SystemElements Equipment ID
+  in its lookup inventory, including standalone cables, terminations and assets
+  without NETA evidence. Existing PDM associations and case/evidence enrichment
+  remain; represented PDM assets are not appended again. Equipment summary
+  counts reflect the full inventory; ETL/KPR/lifecycle logic is unchanged.
+- Layout combines drawing placements, all manifest cables (including unresolved
+  routes), and all remaining Excel Equipment IDs. Exact matches rank first within each type group;
+  existing partial search and keyboard selection work across floors. Cable
+  selection opens its own test/report details in 2D and 2.5D and chooses an
+  available floor using the existing unique-endpoint placement helper. Camera
+  changes remain on explicit Zoom actions for cables.
+- IDs without geometry open Excel details marked Not placed on layout. No
+  coordinates or energisation planning controls are invented. Missing NETA
+  reports remain visible. Full equipment data loads through the shared dashboard
+  resource cache on the first search, with loading/retry feedback, and is
+  invalidated by dashboard ETL reload. Initial Layout requests remain independent.
+- Read-only comparison against `SystemElements_10-23-2026_06-21-AM.xlsx` found
+  18,950 unique IDs, all present in equipment.json, including 5,480 cable rows.
+  No ETL or data contract changes were needed. Frontend README documents behavior.
+- Preview-mode production build passed, retaining existing chunk-size and plugin
+  timing warnings. Original generated tsconfig.tsbuildinfo bytes were restored.
+  The user's existing prompt.md edit was preserved. No commit or service restart.
+- Verification: 79 targeted tests passed across Equipment utilities/page, Layout
+  search/page, App and the dashboard loader across separate runs. Combined runs
+  hit existing worker-start timeouts; isolated Equipment (6) and Layout (43)
+  retries passed. Two older Layout selectors were narrowed to the device result
+  now that related cables also appear. Final diff check passed.
+- Real Chromium smoke against the existing local preview passed with current
+  data: full inventory deferred until search, cable and termination lookup in
+  Equipment, cable details in both Layout views, unplaced Excel details, and no
+  page errors. Screenshots visually reviewed. Ignored repeatable script/results:
+  `runtime/automation/equipment_search_smoke.py`, `equipment-search-smoke.json`,
+  and `*-search.png`. Browser was closed; no vendor navigation or writes.
+
 ## Current update (2026-10-22): Accurate Equipment CxAlloy file counts
 
 - `CxalloyUploadBadge` now counts each PDF's status from `cxalloy_reports`,

@@ -17,6 +17,93 @@ describe("EquipmentPage", () => {
     clearPublishedNetaReviewCache();
   });
   afterEach(() => vi.restoreAllMocks());
+  it("shows cable ATP completion consistently in table, summary, filters and details", async () => {
+    const user = userEvent.setup();
+    const cableId = "FDR-IAD06-MDS6-01B-IAD06-CH607-01B";
+    const data = makeDashboardData({ pdms: [], equipment: [
+      { equipment_id: cableId, equipment_type: "Feeder Cable - LV", neta_complete: false, feeder_cable_atp: "Cable ATP.pdf" },
+      { equipment_id: "FDR-MISSING", equipment_type: "Feeder Cable - MV", neta_complete: true },
+      { equipment_id: "FDR-UNTESTED", equipment_type: "Feeder Cable - LV", neta_complete: false, status: "L3: Pre Func Testing & Startup" },
+    ] });
+    render(<MemoryRouter><NetaReportManifestProvider manifest={null}><EquipmentPage data={data} /></NetaReportManifestProvider></MemoryRouter>);
+    const row = screen.getByRole("cell", { name: cableId }).closest("tr")!;
+    expect(within(row).getByText("Complete + Report Available")).toBeInTheDocument();
+    expect(within(row).queryByText("NETA incomplete")).not.toBeInTheDocument();
+    await user.click(within(row).getByRole("button", { name: "1 reports" }));
+    expect(within(row).getByRole("region", { name: "Cable completion evidence" })).toHaveTextContent("Cable ATP.pdf");
+    await user.click(within(row).getByRole("button", { name: "1 reports" }));
+    const complete = screen.getByText("NETA Complete With Report").closest("button")!;
+    expect(complete).toHaveTextContent("1");
+    await user.click(complete);
+    expect(screen.getByRole("cell", { name: cableId })).toBeInTheDocument();
+    expect(screen.queryByRole("cell", { name: "FDR-UNTESTED" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("cell", { name: "FDR-MISSING" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("cell", { name: cableId }));
+    expect(screen.getByRole("region", { name: "Cable completion evidence" })).toHaveTextContent("Attached in Infralink");
+    expect(screen.getAllByText("Complete + Report Available")).toHaveLength(2);
+    await user.click(screen.getByRole("button", { name: "Close equipment detail" }));
+    await user.click(screen.getByText("Missing NETA Report").closest("button")!);
+    expect(screen.getByRole("cell", { name: "FDR-MISSING" })).toBeInTheDocument();
+    expect(screen.queryByRole("cell", { name: cableId })).not.toBeInTheDocument();
+  });
+
+  it("places ordinary equipment first during search while retaining column sort order within each group", async () => {
+    const user = userEvent.setup();
+    const cableId = "FDR-IAD06-EQ-1-IAD06-EQ-2";
+    const regularIds = ["IAD06-EQ-1", "IAD06-EQ-CABLE-PANEL"];
+    const data = makeDashboardData({
+      pdms: [],
+      equipment: [
+        { equipment_id: cableId, equipment_type: "Feeder Cable - LV", open_issues_count_from_system_elements: 9 },
+        { equipment_id: cableId + "-A", equipment_type: "tErMiNaTiOn", open_issues_count_from_system_elements: 8 },
+        ...regularIds.map((equipment_id) => ({ equipment_id, equipment_type: "Switchgear" })),
+      ],
+    });
+    render(<MemoryRouter><NetaReportManifestProvider manifest={null}><EquipmentPage data={data} /></NetaReportManifestProvider></MemoryRouter>);
+    const ids = () => screen.getAllByRole("row").slice(1).map((row) => within(row).getAllByRole("cell")[0].textContent);
+    expect(ids()[0]).toBe(cableId);
+    await user.click(screen.getByRole("button", { name: "Search & Filters" }));
+    const search = screen.getByPlaceholderText("Search equipment ID or source label");
+    await user.type(search, "eq");
+    await waitFor(() => expect(ids().slice(0, 2)).toEqual(regularIds));
+    expect(ids().slice(2)).toEqual([cableId, cableId + "-A"]);
+    await user.click(screen.getByRole("button", { name: "Equipment ID" }));
+    await user.click(screen.getByRole("button", { name: "Equipment ID" }));
+    expect(ids().slice(0, 2)).toEqual([...regularIds].reverse());
+    expect(ids().slice(2)).toEqual([cableId + "-A", cableId]);
+    await user.clear(search);
+    await user.type(search, cableId + "-A");
+    await waitFor(() => expect(ids()).toEqual([cableId + "-A"]));
+  });
+
+  it("searches cables, terminations and other Excel IDs outside PDMs without NETA evidence", async () => {
+    const user = userEvent.setup();
+    const cableId = "FDR-IAD06-EQ-1-IAD06-EQ-2";
+    const data = makeDashboardData({
+      pdms: [{ pdm_name: "PDM-A", equipment: [{ equipment_id: "IAD06-EQ-1" }] }],
+      equipment: [
+        { equipment_id: "IAD06-EQ-1" },
+        { equipment_id: cableId, equipment_type: "Feeder Cable - LV", neta_complete: false },
+        { equipment_id: "IAD06-TERM-1", equipment_type: "Termination" },
+        { equipment_id: "IAD06-INV6-01", test_tracking_required: false },
+      ],
+      cases: [{ case_id: "CABLE-ISSUE", equipment_id: cableId, status: "Open", issue_image: "evidence.jpg", corrective_images: "repair.jpg" }],
+    });
+    render(<MemoryRouter><NetaReportManifestProvider manifest={null}><EquipmentPage data={data} /></NetaReportManifestProvider></MemoryRouter>);
+    await user.click(screen.getByRole("button", { name: "Search & Filters" }));
+    const search = screen.getByPlaceholderText("Search equipment ID or source label");
+    for (const id of [cableId, "IAD06-TERM-1", "IAD06-INV6-01"]) {
+      await user.clear(search);
+      await user.type(search, id.toLowerCase());
+      expect(await screen.findByRole("cell", { name: id })).toBeInTheDocument();
+      expect(screen.queryByRole("cell", { name: "IAD06-EQ-1" })).not.toBeInTheDocument();
+    }
+    await user.clear(search);
+    await user.type(search, cableId);
+    await user.click(await screen.findByRole("cell", { name: cableId }));
+    expect(screen.getByText("Asset Information")).toBeInTheDocument();
+    expect(screen.getByText("CABLE-ISSUE")).toBeInTheDocument();
+  });
   it("shows current columns, excludes resolved cases from open count, and opens asset details", async () => {
     const user = userEvent.setup();
     const data = makeDashboardData({

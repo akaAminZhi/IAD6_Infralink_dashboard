@@ -1,4 +1,4 @@
-/** The cable readiness rules used by MV Equipment and Layout. */
+/** The cable readiness rules used by Equipment, MV Equipment and Layout. */
 interface CableTestEvidence {
   system_element_status?: string | null;
   feeder_cable_atp_names?: string[] | null;
@@ -48,8 +48,19 @@ export function isCableInfralinkUpdated(evidence: CableTestEvidence): boolean {
 }
 
 export function hasInfralinkCableTestReport(evidence: CableTestEvidence): boolean {
-  return !!evidence.feeder_cable_atp_names?.some((name) => name.trim()) ||
+  return !!evidence.feeder_cable_atp_names?.some((name) => parseCableAttachmentNames(name).length) ||
     !!evidence.feeder_cable_atp_files?.length;
+}
+
+/** Match the Layout builder's split_attachment_names normalization. */
+export function parseCableAttachmentNames(value: string | null | undefined): string[] {
+  const names = new Map<string, string>();
+  for (const part of (value ?? "").split(/[;\r\n]+/)) {
+    const name = part.trim().replace(/\s+/g, " ");
+    const key = name.toLowerCase();
+    if (key && !["n/a", "na", "none", "null"].includes(key) && !names.has(key)) names.set(key, name);
+  }
+  return [...names.values()];
 }
 
 function latestDailyOutcome(evidence: CableTestEvidence): "failed" | "partial" | "passed" | null {

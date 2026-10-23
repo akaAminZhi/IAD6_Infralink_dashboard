@@ -13,6 +13,7 @@ import {
   getIndexedEpsTestItems,
 } from "./epsTestItemUtils";
 import { requiresEquipmentTestTracking } from "./equipmentTrackingUtils";
+import { hasInfralinkCableTestReport, parseCableAttachmentNames } from "./cableTestUtils";
 import { getNetaReportNames } from "./netaReports";
 
 export { getNetaReportNames };
@@ -44,6 +45,7 @@ export interface FlattenedEquipmentRow {
   neta_complete: boolean | string | null;
   neta_completed_at: string | null;
   neta_test_report: string | null;
+  feeder_cable_atp?: string | null;
   neta_report_status: string | null;
   cxalloy_upload_status: "uploaded" | "pending" | "missing_pdf" | null;
   cxalloy_expected_report_count: number;
@@ -139,13 +141,6 @@ function equipmentLookupKeys(value: unknown): string[] {
   return normalized.startsWith("IAD06-")
     ? [normalized, normalized.slice(6)]
     : [normalized, `IAD06-${normalized}`];
-}
-
-function hasNetaEvidence(equipment: Equipment): boolean {
-  return (
-    requiresEquipmentTestTracking(equipment) &&
-    (equipment.neta_complete === true || !isBlank(equipment.neta_test_report))
-  );
 }
 
 function buildCxalloyStatusIndex(
@@ -269,6 +264,7 @@ export function flattenEquipmentFromPdms(
         neta_complete: equipment.neta_complete ?? enrichment?.neta_complete ?? null,
         neta_completed_at: firstText(equipment.neta_completed_at, enrichment?.neta_completed_at),
         neta_test_report: firstText(equipment.neta_test_report, enrichment?.neta_test_report),
+        feeder_cable_atp: firstText(enrichment?.feeder_cable_atp, equipment.feeder_cable_atp),
         neta_report_status: firstText(equipment.neta_report_status),
         ...cxalloyFields(cxalloyStatus),
         cases,
@@ -282,7 +278,6 @@ export function flattenEquipmentFromPdms(
     });
   });
 
-  const includeAllStandaloneEquipment = rows.length === 0;
   const representedEquipmentKeys = new Set(
     rows.flatMap((row) =>
       [row.equipment_id, row.source_equipment_label, row.display_equipment_id].flatMap(
@@ -292,13 +287,6 @@ export function flattenEquipmentFromPdms(
   );
   const standaloneRows = equipmentRecords
     .filter((equipment) => {
-      if (includeAllStandaloneEquipment) {
-        return true;
-      }
-      if (!hasNetaEvidence(equipment)) {
-        return false;
-      }
-
       const lookupKeys = equipmentLookupKeys(equipment.equipment_id);
       return lookupKeys.length > 0 && lookupKeys.every((key) => !representedEquipmentKeys.has(key));
     })
@@ -330,6 +318,7 @@ export function flattenEquipmentFromPdms(
         neta_complete: equipment.neta_complete ?? null,
         neta_completed_at: firstText(equipment.neta_completed_at),
         neta_test_report: firstText(equipment.neta_test_report),
+        feeder_cable_atp: firstText(equipment.feeder_cable_atp),
         neta_report_status: null,
         ...cxalloyFields(cxalloyStatus),
         cases,
@@ -370,9 +359,32 @@ export function getCasesMissingIssueImageCount(equipment: FlattenedEquipmentRow)
   return equipment.cases.filter(hasMissingIssueImage).length;
 }
 
+export function getEquipmentCableAtpNames(equipment: FlattenedEquipmentRow): string[] {
+  const type = equipment.equipment_type ?? "";
+  return /\bcable\b/i.test(type) && !/termination/i.test(type)
+    ? parseCableAttachmentNames(equipment.feeder_cable_atp) : [];
+}
+
+export function hasEquipmentCableTestReport(equipment: FlattenedEquipmentRow): boolean {
+  const type = equipment.equipment_type ?? "";
+  return /\bcable\b/i.test(type) && !/termination/i.test(type) &&
+    hasInfralinkCableTestReport({ feeder_cable_atp_names: [
+      ...getEquipmentCableAtpNames(equipment), ...getNetaReportNames(equipment.neta_test_report),
+    ] });
+}
+
+export function getEquipmentTestReportCount(equipment: FlattenedEquipmentRow): number {
+  const netaReports = getNetaReportNames(equipment.neta_test_report);
+  const atpReports = getEquipmentCableAtpNames(equipment);
+  if (!atpReports.length) return netaReports.length;
+  return new Set([...netaReports, ...atpReports]
+    .map((name) => name.toLowerCase())).size;
+}
+
 export function hasMissingNetaReport(equipment: FlattenedEquipmentRow): boolean {
   return (
     requiresEquipmentTestTracking(equipment) &&
+    !hasEquipmentCableTestReport(equipment) &&
     equipment.neta_complete === true &&
     (isBlank(equipment.neta_test_report) || equipment.neta_report_status === "missing_report")
   );
@@ -388,6 +400,10 @@ export function hasPendingCxalloyReport(equipment: FlattenedEquipmentRow): boole
 export function getNetaDisplayStatus(equipment: FlattenedEquipmentRow): EquipmentNetaDisplayStatus {
   if (!requiresEquipmentTestTracking(equipment)) {
     return "Not Tracked";
+  }
+
+  if (hasEquipmentCableTestReport(equipment)) {
+    return "Complete + Report Available";
   }
 
   if (equipment.neta_complete === true && !hasMissingNetaReport(equipment)) {

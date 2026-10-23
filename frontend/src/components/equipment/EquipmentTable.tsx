@@ -15,11 +15,13 @@ import { formatNumber } from "../../utils/formatters";
 import {
   getCasesMissingIssueImageCount,
   getNetaReportNames,
+  getEquipmentTestReportCount,
   getOpenCaseCount,
   hasMissingNetaReport,
   type FlattenedEquipmentRow,
 } from "../../utils/equipmentUtils";
 import { getNetaReportLinks } from "../../utils/netaReports";
+import { equipmentSearchPriority } from "../../utils/searchUtils";
 import { EmptyState } from "../common/EmptyState";
 import { NetaReportChips } from "../common/NetaReportChips";
 import { StatusBadge } from "../common/StatusBadge";
@@ -28,11 +30,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui
 import { EquipmentAttentionBadges } from "./EquipmentAttentionBadges";
 import { CxalloyUploadBadge } from "./CxalloyUploadBadge";
 import { EquipmentNetaBadge } from "./EquipmentNetaBadge";
+import { EquipmentCableAtpEvidence } from "./EquipmentCableAtpEvidence";
 
 interface EquipmentTableProps {
   rows: FlattenedEquipmentRow[];
   selectedRowId: string | null;
   onSelectEquipment: (row: FlattenedEquipmentRow) => void;
+  prioritizeEquipment?: boolean;
 }
 
 const PAGE_SIZE = 100;
@@ -68,7 +72,7 @@ function SortableHeader({
   );
 }
 
-export function EquipmentTable({ rows, selectedRowId, onSelectEquipment }: EquipmentTableProps) {
+export function EquipmentTable({ rows, selectedRowId, onSelectEquipment, prioritizeEquipment = false }: EquipmentTableProps) {
   const [sorting, setSorting] = useState<SortingState>([
     { id: "openCases", desc: true },
   ]);
@@ -114,12 +118,13 @@ export function EquipmentTable({ rows, selectedRowId, onSelectEquipment }: Equip
       {
         id: "netaReportCount",
         header: "NETA Test Reports",
-        accessorFn: (row) => getNetaReportNames(row.neta_test_report).length,
+        accessorFn: getEquipmentTestReportCount,
         cell: ({ row }) => {
           const reportNames = getNetaReportNames(row.original.neta_test_report);
+          const reportCount = getEquipmentTestReportCount(row.original);
           const expandedMode = expandedReportModes.get(row.original.row_id);
 
-          if (reportNames.length === 0) {
+          if (reportCount === 0) {
             return <span>0 reports</span>;
           }
 
@@ -140,10 +145,13 @@ export function EquipmentTable({ rows, selectedRowId, onSelectEquipment }: Equip
                 type="button"
                 variant="outline"
               >
-                {formatNumber(reportNames.length)} reports
+                {formatNumber(reportCount)} reports
               </Button>
               {expandedMode ? (
-                <NetaReportChips compactNameMode={expandedMode} reports={reportNames} />
+                <>
+                  {reportNames.length ? <NetaReportChips compactNameMode={expandedMode} reports={reportNames} /> : null}
+                  <EquipmentCableAtpEvidence equipment={row.original} />
+                </>
               ) : null}
             </div>
           );
@@ -205,7 +213,11 @@ export function EquipmentTable({ rows, selectedRowId, onSelectEquipment }: Equip
     onSortingChange: setSorting,
     state: { sorting },
   });
-  const sortedRows = table.getRowModel().rows;
+  const tableRows = table.getRowModel().rows;
+  const sortedRows = useMemo(() => prioritizeEquipment ? [
+    ...tableRows.filter((row) => equipmentSearchPriority(row.original.equipment_type) === 0),
+    ...tableRows.filter((row) => equipmentSearchPriority(row.original.equipment_type) === 1),
+  ] : tableRows, [tableRows, prioritizeEquipment]);
   const pageCount = Math.max(1, Math.ceil(sortedRows.length / PAGE_SIZE));
   const pageStart = pageIndex * PAGE_SIZE;
   const pageEnd = Math.min(pageStart + PAGE_SIZE, sortedRows.length);

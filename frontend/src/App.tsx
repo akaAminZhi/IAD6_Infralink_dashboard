@@ -106,7 +106,7 @@ function App() {
                   <Route element={<IssuesPage data={dashboardData} />} path="/issues" />
                   <Route element={<EpsTestExecutionPage data={dashboardData} />} path="/eps-test-execution" />
                   <Route element={<PowerPlanPage data={dashboardData} />} path="/power-plan" />
-                  <Route element={<LayoutPlanPage refreshKey={dashboardData.reloadVersion} />} path="/layout" />
+                  <Route element={<LayoutPlanPage refreshKey={dashboardData.reloadVersion} equipment={dashboardData.equipment} />} path="/layout" />
                   <Route element={<MvEquipmentPage data={dashboardData} />} path="/mv-equipment" />
                   <Route element={<DataQualityPage data={dashboardData} />} path="/data-quality" />
                   <Route

@@ -1,3 +1,7 @@
+export function equipmentSearchPriority(equipmentType: string | null | undefined): number {
+  return /cable|termination/i.test(equipmentType ?? "") ? 1 : 0;
+}
+
 function normalizeSearchText(value: unknown): string {
   return String(value ?? "").trim().toLowerCase();
 }

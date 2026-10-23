@@ -31,6 +31,7 @@ import { Card, CardContent } from "../ui/card";
 import { EquipmentCaseList } from "./EquipmentCaseList";
 import { CxalloyReportUploadPanel } from "./CxalloyReportUploadPanel";
 import { EquipmentNetaBadge } from "./EquipmentNetaBadge";
+import { EquipmentCableAtpEvidence } from "./EquipmentCableAtpEvidence";
 import { EquipmentPdmAssociations } from "./EquipmentPdmAssociations";
 
 interface EquipmentDetailDrawerProps {
@@ -333,6 +334,7 @@ export function EquipmentDetailDrawer({
                     reviews={netaReportReviews}
                     value={equipment.neta_test_report}
                   />
+                  <EquipmentCableAtpEvidence equipment={equipment} />
                 </div> : null}
                 {trackingRequired && equipment.cxalloy_upload_status ? (
                   <CxalloyReportUploadPanel equipment={equipment} />

@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { cableTestState, layoutCableTestState } from "./cableTestUtils";
+import { cableTestState, layoutCableTestState, parseCableAttachmentNames } from "./cableTestUtils";
 
 describe("shared cable readiness", () => {
+  it("normalizes cable attachments like the Layout builder and rejects placeholder-only evidence", () => {
+    expect(parseCableAttachmentNames(" N/A; ATP  report.pdf; atp report.PDF\nnone; NA; null ")).toEqual(["ATP report.pdf"]);
+    expect(layoutCableTestState({ feeder_cable_atp_names: ["N/A", "none", " "] })).toBe("unconfirmed");
+  });
   it.each([
     [{ system_element_status: " L3: pre func testing & startup " }, "updated"],
     [{ system_element_status: "L3" }, "unconfirmed"],

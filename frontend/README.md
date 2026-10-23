@@ -39,11 +39,38 @@ live datasets with negotiated gzip compression. Restart this command after sourc
 updates. PDMs loads its list/readiness inputs first; EPS equipment details and
 report links load when opening details. Equipment and Power Plan start their
 required status/filter inputs in parallel, without EPS history or Data Quality
-files. Layout loads independently and fetches report/device links on selection.
+files. Layout loads independently, fetches the full Equipment ID inventory on
+the first search, and fetches report/device links on selection.
 ETL dashboard reload invalidates shared resources and refreshes Layout; ordinary
 navigation reuses resources already loaded in the current dashboard session.
 
 ## Layout
+
+Equipment lookup includes every nonblank Equipment ID in SystemElements Excel,
+including cables, terminations and assets without PDM links or NETA evidence.
+Existing PDM associations remain on their equipment rows; other IDs appear as
+standalone records. Equipment summary counts now cover this full inventory.
+
+In Equipment, a cable's own **Feeder Cable ATP** or **NETA Test Report** attachment
+confirms NETA completion even if Excel's NETA completion field is blank or false.
+The ATP rule uses the same attachment evidence as Layout. Blank and placeholder
+values (N/A, NA, none, null) do not count; status/L3 or daily tests alone do not
+replace report evidence. The table, completion filters and summary share this
+rule, and ATP references appear in the report count and details. The attachment
+confirms availability in Infralink; it does not claim a local PDF was downloaded.
+Raw Excel completion dates and flags are preserved. Other equipment, terminations,
+tracking exclusions and ETL/KPR metrics keep their existing rules.
+
+Layout search covers the same Excel IDs plus drawing placements and cable
+connections. Full or partial IDs are case-insensitive. Ordinary equipment ranks
+before cables and terminations; exact IDs rank first within each group. Equipment
+search results use the same grouping, keeping the selected column order within
+each group. Cable-only and termination-only searches still show their matches.
+Selecting a cable opens its test/report details in either view and switches to a
+floor with a drawable connection when available. The Zoom to connection button
+controls the camera. IDs without drawing positions remain searchable and open
+Excel details marked **Not placed on layout**, without adding a map position.
+The first search loads the shared equipment dataset; loading failures offer retry.
 
 Layout opens in **2.5D** by default; **2D plan** restores the original rectangle
 view. The last view choice is saved in this browser. TX6, Utility, GEN6, and TX

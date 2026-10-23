@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { NetaReportManifestProvider } from "../contexts/NetaReportManifestContext";
 import { InfralinkEquipmentLinksProvider } from "../contexts/InfralinkEquipmentLinksContext";
+import { DashboardResourcesProvider } from "../contexts/DashboardResourcesContext";
 import type { LayoutCableRecord, LayoutEquipmentRecord, LayoutPlanManifest } from "../types/data";
 import { LAYOUT_VIEW_KEY } from "../utils/layoutIsometricUtils";
 import * as isometricUtils from "../utils/layoutIsometricUtils";
@@ -43,6 +44,58 @@ beforeEach(() => {
 });
 
 describe("2.5D Layout connections", () => {
+  it.each(["plan", "isometric"])("finds cables across floors and unresolved cables in %s view", async (view) => {
+    const manifest = isometricDataset();
+    localStorage.setItem(LAYOUT_VIEW_KEY, view);
+    manifest.cables!.push(cable({ cable_id: "FD-UNRESOLVED", target_equipment_key: null, connection_status: "unresolved" }));
+    const cableId = "FDR-IAD06-EQ-FIX-IAD06-EQ-2";
+    manifest.cables![1] = cable({ cable_id: cableId, source_equipment_key: "EQ-FIX", target_equipment_key: "EQ-2" });
+    const user = userEvent.setup();
+    render(<LayoutPlanPage />);
+    const search = await screen.findByLabelText("Find equipment");
+    await user.type(search, cableId.toLowerCase());
+    await user.keyboard("{Enter}");
+    expect(screen.getByLabelText("Cable details")).toHaveTextContent(cableId);
+    expect(screen.getByLabelText("Floor")).toHaveValue("second");
+    expect(screen.getByRole("button", { name: "Zoom to connection" })).toBeEnabled();
+    await user.clear(search);
+    await user.type(search, "fd-unresolved");
+    await user.click(screen.getByRole("option", { name: /FD-UNRESOLVED/ }));
+    expect(screen.getByLabelText("Cable details")).toHaveTextContent("Connection is not drawn");
+    expect(screen.getByRole("button", { name: "Zoom to connection" })).toBeDisabled();
+  });
+
+  it("loads all Excel IDs only on search, shows unplaced details and clears them with Global view", async () => {
+    localStorage.removeItem(LAYOUT_VIEW_KEY);
+    const user = userEvent.setup();
+    const loadResources = vi.fn().mockResolvedValue(undefined);
+    render(<DashboardResourcesProvider value={{ loadResources, resourceStatus: { equipment: "loaded" } }}>
+      <LayoutPlanPage equipment={[
+        { equipment_id: "IAD06-TERM-1", equipment_type: "Termination", neta_complete: true },
+        { equipment_id: "IAD06-INV6-01", test_tracking_required: false },
+      ]} />
+    </DashboardResourcesProvider>);
+    const search = await screen.findByLabelText("Find equipment");
+    expect(loadResources).not.toHaveBeenCalled();
+    const map = screen.getByRole("img", { name: "First Floor equipment layout" });
+    const before = map.getAttribute("viewBox");
+    await user.type(search, "term-1");
+    expect(loadResources).toHaveBeenCalledWith(["equipment"]);
+    await user.keyboard("{Enter}");
+    expect(screen.getByRole("region", { name: "Excel equipment details" })).toHaveTextContent("IAD06-TERM-1");
+    expect(screen.getByRole("region", { name: "Excel equipment details" })).toHaveTextContent("Not placed on layout");
+    expect(screen.getByText("Data quality: NETA complete but report is missing.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Energize today" })).not.toBeInTheDocument();
+    expect(map).toHaveAttribute("viewBox", before);
+    await user.click(screen.getByRole("button", { name: "Global view" }));
+    expect(screen.queryByRole("region", { name: "Excel equipment details" })).not.toBeInTheDocument();
+    await user.type(search, "inv6-01");
+    await user.keyboard("{Enter}");
+    expect(screen.getByRole("region", { name: "Excel equipment details" })).toHaveTextContent("IAD06-INV6-01");
+    await user.click(screen.getByRole("button", { name: "EQ-1: Energized" }));
+    expect(screen.queryByRole("region", { name: "Excel equipment details" })).not.toBeInTheDocument();
+  });
+
   it("reloads its independent manifest after dashboard ETL invalidation", async () => {
     const { rerender } = render(<LayoutPlanPage refreshKey={0} />);
     await screen.findByRole("button", { name: "EQ-1: Energized" });
@@ -394,7 +447,7 @@ describe("2.5D Layout connections", () => {
     const map = await screen.findByRole("img", { name: "First Floor equipment layout" });
     const original = map.getAttribute("viewBox");
     await user.type(screen.getByLabelText("Find equipment"), "EQ-1");
-    await user.click(screen.getByRole("option", { name: /EQ-1/ }));
+    await user.click(screen.getByRole("option", { name: /^EQ-1/ }));
     expect(map).toHaveAttribute("viewBox", original);
     await user.click(screen.getByRole("button", { name: "Zoom to device" }));
     expect(map.getAttribute("viewBox")).not.toBe(original);
@@ -430,7 +483,7 @@ describe("2.5D Layout connections", () => {
     await user.click(map);
     expect(screen.queryByLabelText("Connected cables")).not.toBeInTheDocument();
     await user.type(screen.getByLabelText("Find equipment"), "EQ-1");
-    await user.click(screen.getByRole("option", { name: /EQ-1/ }));
+    await user.click(screen.getByRole("option", { name: /^EQ-1/ }));
     fireEvent.keyDown(map, { key: "Escape" });
     expect(map).toHaveAttribute("viewBox", original);
     expect(screen.getByLabelText("Find equipment")).toHaveValue("");

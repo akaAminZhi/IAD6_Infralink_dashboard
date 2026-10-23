@@ -5,10 +5,13 @@ import {
   flattenEquipmentFromPdms,
   getEquipmentAttentionReasons,
   getEquipmentSummaryMetrics,
+  getEquipmentCableAtpNames,
+  getEquipmentTestReportCount,
   getNetaDisplayStatus,
   getOpenCaseCount,
   groupEquipmentById,
   hasPendingCxalloyReport,
+  hasMissingNetaReport,
   type FlattenedEquipmentRow,
 } from "./equipmentUtils";
 
@@ -50,6 +53,37 @@ function row(overrides: Partial<FlattenedEquipmentRow> = {}): FlattenedEquipment
 }
 
 describe("equipmentUtils", () => {
+  it("uses a cable's own attached report as completion evidence without changing raw completion or dates", () => {
+    const cable = flattenEquipmentFromPdms(
+      [{ pdm_name: "PDM-A", equipment: [{ equipment_id: "FDR-A-B" }] }],
+      [{ equipment_id: "FDR-A-B", equipment_type: "Feeder Cable - LV", neta_complete: false, feeder_cable_atp: "ATP.pdf; atp.PDF; N/A" }],
+    )[0];
+    expect(getNetaDisplayStatus(cable)).toBe("Complete + Report Available");
+    expect(cable.neta_complete).toBe(false);
+    expect(cable.neta_completed_at).toBeNull();
+    expect(getEquipmentCableAtpNames(cable)).toEqual(["ATP.pdf"]);
+    expect(getEquipmentTestReportCount(cable)).toBe(1);
+    expect(hasMissingNetaReport(cable)).toBe(false);
+    expect(getEquipmentAttentionReasons(cable)).not.toContain("NETA incomplete");
+    expect(getEquipmentSummaryMetrics([cable])).toMatchObject({ netaComplete: 1, netaIncomplete: 0, missingNetaReports: 0 });
+    expect(getEquipmentTestReportCount({ ...cable, neta_test_report: "atp.PDF" })).toBe(1);
+    expect(getNetaDisplayStatus({ ...cable, feeder_cable_atp: null, neta_test_report: "NETA.pdf" })).toBe("Complete + Report Available");
+    expect(getNetaDisplayStatus({ ...cable, feeder_cable_atp: " N/A; none; null; NA; \n " })).toBe("Incomplete");
+    expect(hasMissingNetaReport({ ...cable, neta_complete: true, feeder_cable_atp: null })).toBe(true);
+    expect(getNetaDisplayStatus({ ...cable, test_tracking_required: false })).toBe("Not Tracked");
+  });
+
+  it("does not use another asset's ATP, termination attachments or equipment reports to complete a cable", () => {
+    const records = flattenEquipmentFromPdms([], [
+      { equipment_id: "EQ-A", equipment_type: "Switchgear", neta_complete: false, feeder_cable_atp: "ATP.pdf", neta_test_report: "EQ-A.pdf" },
+      { equipment_id: "FDR-A-B", equipment_type: "Feeder Cable - MV", neta_complete: false },
+      { equipment_id: "FDR-A-B-Z", equipment_type: "Cable Termination", neta_complete: false, feeder_cable_atp: "ATP.pdf" },
+    ]);
+    expect(records.map(getNetaDisplayStatus)).toEqual(["Incomplete", "Incomplete", "Incomplete"]);
+    expect(getEquipmentCableAtpNames(records[0])).toEqual([]);
+    expect(getEquipmentCableAtpNames(records[2])).toEqual([]);
+  });
+
   it("flattens PDM equipment and enriches asset, case, EPS, and CxAlloy data", () => {
     const pdms: PdmRecord[] = [
       {
@@ -125,7 +159,7 @@ describe("equipmentUtils", () => {
     expect(getOpenCaseCount(result[0])).toBe(0);
   });
 
-  it("includes NETA equipment that is not present in module equipment links", () => {
+  it("includes every identified standalone record without requiring NETA evidence", () => {
     const result = flattenEquipmentFromPdms(
       [
         {
@@ -156,16 +190,22 @@ describe("equipmentUtils", () => {
           neta_complete: false,
           neta_test_report: null,
         },
+        { equipment_id: "FDR-IAD06-EQ-1-IAD06-EQ-2", equipment_type: "Feeder Cable - LV" },
+        { equipment_id: "IAD06-INV6-01", test_tracking_required: false },
+        { equipment_id: "   " },
+        { equipment_id: null },
       ],
     );
 
-    expect(result).toHaveLength(2);
+    expect(result).toHaveLength(5);
     expect(result[1]).toMatchObject({
       display_equipment_id: "IAD06-CUPP6-02F-2",
       pdm_name: null,
       source: "equipment",
     });
     expect(getEquipmentSummaryMetrics(result).netaComplete).toBe(2);
+    expect(result.map((record) => record.display_equipment_id)).toContain("FDR-IAD06-EQ-1-IAD06-EQ-2");
+    expect(result[4].test_tracking_required).toBe(false);
   });
 
   it("derives NETA status and attention reasons", () => {

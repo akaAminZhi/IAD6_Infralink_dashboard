@@ -476,6 +476,7 @@ export function EquipmentPage({ data }: EquipmentPageProps) {
 
       <EquipmentTable
         onSelectEquipment={setSelectedEquipment}
+        prioritizeEquipment={Boolean(deferredFilters.equipmentSearch.trim())}
         rows={filteredRows}
         selectedRowId={selectedEquipment?.row_id ?? null}
       />

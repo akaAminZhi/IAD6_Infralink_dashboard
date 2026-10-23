@@ -14,7 +14,9 @@ import { LayoutCable } from "../components/layout/LayoutCable";
 import { LayoutBackground } from "../components/layout/LayoutBackground";
 import { useFrameState } from "../hooks/useFrameState";
 import { useNetaReportManifest } from "../contexts/NetaReportManifestContext";
-import type { LayoutCableRecord, LayoutEquipmentRecord, LayoutPlanManifest, PowerPlanRect } from "../types/data";
+import { useDashboardResources } from "../contexts/DashboardResourcesContext";
+import type { Equipment, LayoutCableRecord, LayoutEquipmentRecord, LayoutPlanManifest, PowerPlanRect } from "../types/data";
+import { buildLayoutSearchEntries, searchLayoutEntries, type LayoutSearchEntry } from "../utils/layoutSearchUtils";
 import { fetchJson } from "../utils/dataLoaders";
 import { LAYOUT_CABLE_TEST_STATES, layoutCableTestState } from "../utils/cableTestUtils";
 import { getLayoutCableReportNames } from "../utils/layoutReportUtils";
@@ -85,11 +87,6 @@ const EquipmentLightning = memo(function EquipmentLightning({ record, status, di
   </g>;
 });
 
-interface SearchSuggestion {
-  record: LayoutEquipmentRecord;
-  floorId: string;
-  floorLabel: string;
-}
 interface PanState {
   pointerId: number;
   x: number;
@@ -107,7 +104,7 @@ function overlapsViewport(rect: PowerPlanRect, viewport: PowerPlanRect): boolean
     rect.y <= viewport.y + viewport.height && rect.y + rect.height >= viewport.y;
 }
 
-export function LayoutPlanPage({ refreshKey = 0 }: { refreshKey?: number }) {
+export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?: number; equipment?: Equipment[] }) {
   const [isometric, setIsometric] = useState(() => {
     try { return localStorage.getItem(LAYOUT_VIEW_KEY) !== "plan"; } catch { return true; }
   });
@@ -121,8 +118,10 @@ export function LayoutPlanPage({ refreshKey = 0 }: { refreshKey?: number }) {
   const [overrides, setOverrides] = useState(readLayoutOverrides);
   const [storageError, setStorageError] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const netaReportManifest = useNetaReportManifest(Boolean(selectedId || selectedCableId));
+  const [unplacedEquipment, setUnplacedEquipment] = useState<Equipment | null>(null);
+  const netaReportManifest = useNetaReportManifest(Boolean(selectedId || selectedCableId || unplacedEquipment));
   const [search, setSearch] = useState("");
+  const searchResource = useDashboardResources(["equipment"], Boolean(search.trim()));
   const [searchOpen, setSearchOpen] = useState(false);
   const [activeSearchIndex, setActiveSearchIndex] = useState(0);
   const [viewport, setViewport, queueViewport, flushViewport] = useFrameState<PowerPlanRect | null>(null);
@@ -146,6 +145,7 @@ export function LayoutPlanPage({ refreshKey = 0 }: { refreshKey?: number }) {
       if (!active) return;
       setManifest(result);
       setFloorId(result?.floors[0]?.floor_id ?? "");
+      setSelectedId(null); setSelectedCableId(null); setUnplacedEquipment(null);
       setViewport(null);
       setLoading(false);
     });
@@ -262,22 +262,8 @@ export function LayoutPlanPage({ refreshKey = 0 }: { refreshKey?: number }) {
     counts[item.reason] = (counts[item.reason] ?? 0) + 1; return counts;
   }, {}), [manifest]);
 
-  const suggestions = useMemo(() => {
-    if (!manifest || !query) return [];
-    const candidates: SearchSuggestion[] = [];
-    const seen = new Set<string>();
-    for (const floor of manifest.floors) {
-      for (const record of visibleLayoutEquipment(manifest, floor.floor_id)) {
-        const key = `${record.fixed ? "fixed" : floor.floor_id}:${record.equipment_key}`;
-        if (seen.has(key) || !record.equipment_key.includes(query)) continue;
-        seen.add(key);
-        candidates.push({ record, floorId: record.fixed ? floorId : floor.floor_id, floorLabel: record.fixed ? "Fixed across floors" : floor.label });
-      }
-    }
-    return candidates.sort((a, b) => Number(b.record.equipment_key === query) - Number(a.record.equipment_key === query) ||
-      Number(b.record.equipment_key.startsWith(query)) - Number(a.record.equipment_key.startsWith(query)) ||
-      a.record.label.localeCompare(b.record.label, undefined, { numeric: true })).slice(0, 12);
-  }, [manifest, query, floorId]);
+  const searchEntries = useMemo(() => manifest ? buildLayoutSearchEntries(manifest, equipment, floorId) : [], [manifest, equipment, floorId]);
+  const suggestions = useMemo(() => searchLayoutEntries(searchEntries, search), [searchEntries, search]);
 
   function canvasRect(): DOMRect | undefined {
     const map = mapRef.current?.getBoundingClientRect();
@@ -313,6 +299,7 @@ export function LayoutPlanPage({ refreshKey = 0 }: { refreshKey?: number }) {
   }
 
   function focusDevice(record: LayoutEquipmentRecord) {
+    setUnplacedEquipment(null);
     setInspection(null);
     setSelectedId(record.annotation_id);
     setSelectedCableId(null);
@@ -321,16 +308,23 @@ export function LayoutPlanPage({ refreshKey = 0 }: { refreshKey?: number }) {
     setSelectionMode(false);
   }
 
-  function confirmSuggestion(suggestion: SearchSuggestion) {
-    setFloorId(suggestion.floorId);
-    setSearch(suggestion.record.label);
+  function confirmSuggestion(suggestion: LayoutSearchEntry) {
+    if (suggestion.floorId) setFloorId(suggestion.floorId);
+    setSearch(suggestion.label);
     setSearchOpen(false);
-    if (!isometric) { focusDevice(suggestion.record); return; }
     setInspection(null);
-    setSelectedId(suggestion.record.annotation_id);
+    setUnplacedEquipment(null);
+    setSelectedId(null);
     setSelectedCableId(null);
     setSelectionKeys(new Set());
     setSelectionMode(false);
+    if (suggestion.kind === "equipment") { setUnplacedEquipment(suggestion.record); return; }
+    if (suggestion.kind === "cable") {
+      setSelectedCableId(suggestion.record.cable_id);
+      return;
+    }
+    if (!isometric) { focusDevice(suggestion.record); return; }
+    setSelectedId(suggestion.record.annotation_id);
   }
 
   function handlePointerDown(event: ReactPointerEvent<SVGSVGElement>) {
@@ -424,9 +418,9 @@ export function LayoutPlanPage({ refreshKey = 0 }: { refreshKey?: number }) {
 
   const selectDevice = useCallback((record: LayoutEquipmentRecord) => {
     if (selectionMode) toggleEquipmentSelection(record.equipment_key);
-    else { setSelectedId(record.annotation_id); setSelectedCableId(null); }
+    else { setSelectedId(record.annotation_id); setSelectedCableId(null); setUnplacedEquipment(null); }
   }, [selectionMode, toggleEquipmentSelection]);
-  const selectCable = useCallback((cableId: string) => { setSelectedCableId(cableId); setSelectedId(null); }, []);
+  const selectCable = useCallback((cableId: string) => { setSelectedCableId(cableId); setSelectedId(null); setUnplacedEquipment(null); }, []);
   const leaveDevice = useCallback((annotationId: string) => {
     setInspection((current) => current?.annotationId === annotationId ? null : current);
   }, []);
@@ -461,7 +455,7 @@ export function LayoutPlanPage({ refreshKey = 0 }: { refreshKey?: number }) {
   }
 
   function clearFocus() {
-    setSelectedId(null); setSelectedCableId(null); setInspection(null); setSearch(""); setSearchOpen(false);
+    setSelectedId(null); setSelectedCableId(null); setUnplacedEquipment(null); setInspection(null); setSearch(""); setSearchOpen(false);
     setSelectionKeys(new Set());
   }
 
@@ -493,7 +487,7 @@ export function LayoutPlanPage({ refreshKey = 0 }: { refreshKey?: number }) {
       active={active} dimmed={dimmed} selectionMode={selectionMode} onSelect={selectCable} />;
   };
 
-  const cableDetails = isometric && selectedCable ? <div key={selectedCable.cable_id} className="space-y-3" aria-label="Cable details">
+  const cableDetails = selectedCable ? <div key={selectedCable.cable_id} className="space-y-3" aria-label="Cable details">
     <div className="flex items-start justify-between gap-2"><h3 className="text-sm font-semibold">Cable connection</h3>
       <Button variant="ghost" aria-label="Close cable details" onClick={() => setSelectedCableId(null)}><X className="h-4 w-4" /></Button></div>
     <p className="break-all text-sm font-medium">{selectedCable.cable_id}</p>
@@ -536,7 +530,7 @@ export function LayoutPlanPage({ refreshKey = 0 }: { refreshKey?: number }) {
       </div>
       <label className="space-y-1 text-sm font-medium">Floor
         <select aria-label="Floor" value={floorId} onChange={(event) => {
-          setFloorId(event.target.value); setSelectedId(null); setSelectedCableId(null); setSearchOpen(false); setInspection(null); setSelectionKeys(new Set());
+          setFloorId(event.target.value); setSelectedId(null); setSelectedCableId(null); setUnplacedEquipment(null); setSearchOpen(false); setInspection(null); setSelectionKeys(new Set());
         }} className="block h-9 rounded-md border bg-background px-3">
           {manifest.floors.map((floor) => <option key={floor.floor_id} value={floor.floor_id}>{floor.label}</option>)}
         </select>
@@ -558,18 +552,20 @@ export function LayoutPlanPage({ refreshKey = 0 }: { refreshKey?: number }) {
               if (event.key === "Enter" && suggestions.length) {
                 event.preventDefault(); confirmSuggestion(suggestions[Math.min(activeSearchIndex, suggestions.length - 1)]);
               }
-            }} placeholder={isometric ? "Equipment ID · Enter to select" : "Equipment ID · Enter to zoom"}
+            }} placeholder="Equipment / cable ID · Enter to select"
             className="h-9 w-full rounded-md border bg-background pl-9 pr-3" />
         </div>
         {searchOpen && query ? <div id="layout-equipment-suggestions" role="listbox" aria-label="Equipment suggestions"
           className="absolute left-0 right-0 top-full z-30 mt-1 max-h-72 overflow-auto rounded-md border bg-card p-1 shadow-lg">
           {suggestions.length ? suggestions.map((suggestion, index) => <button type="button" role="option"
             id={`layout-equipment-option-${index}`} aria-selected={index === activeSearchIndex}
-            key={`${suggestion.floorId}:${suggestion.record.annotation_id}`}
+            key={suggestion.id}
             className={`flex w-full items-center justify-between gap-3 rounded px-3 py-2 text-left text-sm ${index === activeSearchIndex ? "bg-accent" : "hover:bg-accent"}`}
             onPointerDown={(event) => event.preventDefault()} onClick={() => confirmSuggestion(suggestion)}>
-            <span>{suggestion.record.label}</span><span className="text-xs font-normal text-muted-foreground">{suggestion.floorLabel}</span>
-          </button>) : <div className="px-3 py-2 text-sm text-muted-foreground">No matching equipment</div>}
+            <span className="min-w-0 break-all">{suggestion.label}</span><span className="shrink-0 text-xs font-normal text-muted-foreground">{suggestion.floorLabel}</span>
+          </button>) : !searchResource.loading && !searchResource.error ? <div className="px-3 py-2 text-sm text-muted-foreground">No matching equipment</div> : null}
+          {searchResource.loading ? <p role="status" className="px-3 py-2 text-sm text-muted-foreground">Loading Excel equipment IDs…</p> : null}
+          {searchResource.error ? <div className="px-3 py-2 text-sm">Excel equipment IDs could not be loaded. <Button variant="ghost" onClick={searchResource.retry}>Retry search data</Button></div> : null}
         </div> : null}
       </div>
       <Button variant="outline" aria-label="Zoom out" onClick={() => { setInspection(null); setViewport(zoomLayoutViewport(bounds, fullBounds, 1.2)); }}><ZoomOut className="h-4 w-4" /></Button>
@@ -588,8 +584,8 @@ export function LayoutPlanPage({ refreshKey = 0 }: { refreshKey?: number }) {
       {Object.entries(LAYOUT_CABLE_TEST_STATES).map(([key, state]) => <span key={key} className="inline-flex items-center gap-2">
         <svg width="22" height="8" aria-hidden="true"><line x1="0" x2="22" y1="4" y2="4" stroke={state.color} strokeWidth="2.5" strokeDasharray={state.dash} /></svg>{state.label}
       </span>)}
-      <Button variant="ghost" className={selected || selectedCable ? undefined : "invisible"}
-        disabled={!selected && !selectedCable} onClick={clearFocus}><X className="mr-2 h-4 w-4" />Clear focus</Button>
+      <Button variant="ghost" className={selected || selectedCable || unplacedEquipment ? undefined : "invisible"}
+        disabled={!selected && !selectedCable && !unplacedEquipment} onClick={clearFocus}><X className="mr-2 h-4 w-4" />Clear focus</Button>
       <span className="w-full text-muted-foreground">Illustrative equipment heights and overhead routes. Select a device or cable to trace its connections. Terminations are hidden.</span>
       {!manifest.cables ? <span className="text-amber-700">Cable data is unavailable. Rebuild Layout data to load connections.</span> : null}
     </div> : null}
@@ -676,6 +672,18 @@ export function LayoutPlanPage({ refreshKey = 0 }: { refreshKey?: number }) {
       <div className="relative h-[68vh] min-h-[400px]">
       <aside className="h-full space-y-4 overflow-y-auto overscroll-contain rounded-lg border bg-card p-4 [scrollbar-gutter:stable]">
         {!selected && cableDetails ? <div className="border-b pb-4">{cableDetails}</div> : null}
+        {unplacedEquipment ? <section aria-label="Excel equipment details" className="space-y-3">
+          <h3 className="break-all font-semibold">{unplacedEquipment.equipment_id}</h3>
+          <InfralinkEquipmentLink equipmentId={unplacedEquipment.equipment_id} />
+          <p className="text-sm text-amber-700">Not placed on layout. This Equipment ID exists in SystemElements Excel.</p>
+          <p className="text-sm">Type: {unplacedEquipment.equipment_type ?? "Unknown"}</p>
+          <p className="text-sm">System status: {unplacedEquipment.status ?? "Unknown"}</p>
+          <p className="break-all text-sm">Parent: {unplacedEquipment.parent ?? "Unknown"}</p>
+          <p className="text-sm">Excel energized date: {unplacedEquipment.energized_completed_at ?? "No completed date"}</p>
+          <p className="text-sm">NETA: {unplacedEquipment.neta_complete === true ? "Complete" : "Not confirmed"}</p>
+          {getNetaReportNames(unplacedEquipment.neta_test_report).length ? <NetaReportChips reports={getNetaReportNames(unplacedEquipment.neta_test_report)} showLinkedFileNames stackedCompact /> : null}
+          {unplacedEquipment.neta_complete === true && !unplacedEquipment.neta_test_report ? <p className="text-xs text-red-700">Data quality: NETA complete but report is missing.</p> : null}
+        </section> : null}
         {selected ? <div className="space-y-3">
           <h3 className="break-all font-semibold">{selected.matched_equipment_id ?? selected.label}</h3>
           <InfralinkEquipmentLink equipmentId={selected.matched_equipment_id} matchStatus={selected.match_status} />
@@ -710,7 +718,7 @@ export function LayoutPlanPage({ refreshKey = 0 }: { refreshKey?: number }) {
             <Button variant="ghost" disabled={!overrides[selected.equipment_key]} onClick={() => {
               const next = { ...overrides }; delete next[selected.equipment_key]; saveOverrides(next);
             }}>Reset device</Button></div>
-        </div> : <p className="text-sm text-muted-foreground">Select equipment or confirm a search suggestion to view its details.</p>}
+        </div> : !selectedCable && !unplacedEquipment ? <p className="text-sm text-muted-foreground">Select equipment or confirm a search suggestion to view its details.</p> : null}
         {isometric && selected ? <section className="space-y-2 border-t pt-3" aria-label="Connected cables">
           <h3 className="text-sm font-semibold">Connected cables ({selectedConnections.length})</h3>
           <div className="grid grid-cols-3 gap-2 text-center" aria-label="Connected cable test counts">
