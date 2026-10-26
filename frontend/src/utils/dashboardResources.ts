@@ -10,6 +10,7 @@ export const dashboardResourceFiles: Record<DashboardResource, string> = {
   etlRunMetadata: "etl_run_metadata.json",
   historyComparison: "history_comparison.json",
   epsTestSummary: "eps_test_summary.json",
+  epsDailyReportAudit: "eps_daily_report_audit.json",
   epsPdmExecution: "eps_pdm_execution.json",
   epsModuleExecution: "eps_module_execution.json",
   epsTestItems: "eps_test_items.json",
@@ -45,7 +46,7 @@ export function getRouteResources(pathname: string, search = ""): DashboardResou
     case "/data-quality": resources = ["cases", "epsTestItems", "dataQualityReport"]; break;
     case "/kpr": resources = ["kprSummary"]; break;
     case "/eps-test-execution": resources = [
-      "epsTestSummary", "epsPdmExecution", "epsModuleExecution", "epsTestItems",
+      "epsTestSummary", "epsDailyReportAudit", "epsPdmExecution", "epsModuleExecution", "epsTestItems",
       "epsFailedItems", "epsIncompleteItems", "epsNotFoundItems",
     ]; break;
     default: resources = overview;

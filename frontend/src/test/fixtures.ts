@@ -13,6 +13,7 @@ export function makeDashboardData(
     etlRunMetadata: null,
     historyComparison: null,
     epsTestSummary: null,
+    epsDailyReportAudit: null,
     epsPdmExecution: [],
     epsModuleExecution: [],
     epsTestItems: [],

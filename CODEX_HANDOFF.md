@@ -36,6 +36,79 @@
   upload or service restart. Cache is populated; the next Data Operations ETL
   process loads the new Python code automatically.
 
+## Current update (2026-10-26): Combined EPS/MV daily reports and repeat review
+
+- EPS Test Execution previously used washed EPS daily history without a complete
+  raw MV/daily report audit. Added combined raw report review above explicitly
+  labeled EPS Tracker Execution metrics. Per the user, Partially Tested is ignored.
+- `scripts/etl/eps_daily_report_audit.py` reads both `Daily_test_report/` and
+  `MV_Daily_test_report/`, retaining Tested/Passed, Failed and Retested And Passed
+  source lines. Complete normalized item IDs identify repeat candidates;
+  equipment children and feeder-breaker aliases are not merged for detection.
+  Dates, source filenames, line numbers, same-day/conflicting entries and
+  unmatched/tracking-excluded IDs remain available. An explicit retest alone
+  does not imply a detected repeat without another recorded date. Same-day
+  duplication is separate from cross-date repeats. These are review candidates,
+  including planned retests, because reports do not identify test procedures.
+- Python dataclass and TypeScript contracts added. The existing EPS builder
+  enriches PDM/module matches using shared helpers and publishes the new
+  `eps_daily_report_audit.json`; ETL output metadata registers it. This dataset
+  loads only on EPS Test Execution. Existing tracker completion, readiness and
+  KPR calculations retain their previous scope. Builder source paths now
+  consistently honor `IAD6_EPS_TRACKER_ROOT`.
+- UI filters: search item/PDM/report, source, date range, different-date repeats,
+  same-day repeats and both-source overlap. First recorded date and every later
+  date are visible; expand Report history for results/provenance. Source/date
+  filters retain complete item history. Missing directories and undated files
+  are explicit. M-D filenames reuse the MV modification-year rule, marking
+  inferred dates `*` in history. Review works without module execution rows.
+- Follow-up optimization: removed All daily items. Default is cross-date repeats
+  in the last seven Eastern calendar days including today, sorted by the latest
+  matching repeat date. Date/source filters match repeat entries rather than a
+  first occurrence; earlier full history stays visible. Reset restores the
+  recent view; All repeat history clears the date bounds. Cards distinguish
+  recent and all-time repeat counts. Each page shows 10 records with pagination;
+  filters return to page one. Removed the PDM / Equipment association column.
+- Pagination layout follow-up: buttons now read Previous and Next. Records use
+  a fixed 800px scrollable region (including empty results), with a sticky table
+  header and the pager outside. Expanded histories scroll internally; page or
+  filter changes reset only the region's scroll position. The card no longer
+  shrinks on the last page. Six audit-panel tests and preview build passed.
+  Real Chromium with an intercepted 11-item fixture verified 10-to-1 paging:
+  card height stayed 1328px, window scrollY stayed 894, and button y stayed 482.
+  Expanded-history and empty-result heights also stayed fixed; no page errors.
+  Script/image: `runtime/automation/eps-repeat-review/fixed_height_smoke.py`
+  and `fixed-height-one-record.png` (visually reviewed). Source data untouched;
+  original user build-info restored. Refresh the browser to load the build.
+- Follow-up verification: six audit-panel tests and three EPS page tests passed
+  across runs (a combined worker-start timeout passed in the isolated run).
+  Tests cover the seven-day boundary, excluding future/first-only events,
+  Eastern dates, full older history, repeat-source filtering, newest-first
+  ordering, reset and ten-row pagination. Preview build passed. Real Chromium
+  verified the 2026-10-20 through 2026-10-26 default: 15 matching items, 10 on
+  page one and 5 on page two, removed column/All daily items option, history,
+  all-time view and reset; no page errors. Screenshot visually reviewed.
+  Script/screenshots: `runtime/automation/eps-repeat-review/recent_smoke.py`
+  and `recent-*.png`. No ETL/data regeneration needed for this frontend change;
+  original user build-info bytes restored again. Refresh the browser.
+- Real local builder completed: 93 EPS reports / 2,395 entries; 27 MV reports /
+  90 entries; 2,382 unique item IDs; 100 different-date repeat candidates; zero
+  same-day repeats; no partial entries. 83 unique items have MV evidence.
+  Example ATS6-02C-2: 2026-09-17 and 2026-09-21.
+- Verification: 30 targeted Python tests passed (audit, builder integration,
+  existing EPS behavior, schemas and ETL). 16 frontend tests passed across
+  audit panel, EPS page and resource loader; an initial worker-start timeout
+  passed on isolated retry. Preview production build passed with the existing
+  large-chunk warning. Real Chromium smoke against localhost compiled preview
+  verified combined/repeated counts, repeat filtering, complete expanded history
+  and MV-only filtering; no page errors. Desktop/mobile screenshots visually
+  reviewed. Ignored smoke script/images: `runtime/automation/eps-repeat-review/`.
+- Local EPS datasets/snapshots and compiled frontend regenerated; no full ETL,
+  service restart, vendor write or commit. Original user-modified build-info
+  bytes backed up and restored. Refresh EPS Test Execution to load the new
+  build/data. Later report edits need the EPS builder or normal ETL followed
+  by dashboard refresh.
+
 ## Current update (2026-10-23): Equipment cable completion from attached reports
 
 - Equipment now carries the existing normalized `feeder_cable_atp` into its

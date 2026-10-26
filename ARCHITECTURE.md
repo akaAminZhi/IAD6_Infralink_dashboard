@@ -224,6 +224,11 @@ when a deployment does not have the local cache.
 2. Equipment matching for module links and cases.
 3. PDM dataset, summary, and data-quality report construction.
 4. Seven-day/history, EPS execution, and monthly KPR datasets.
+   EPS execution additionally publishes `eps_daily_report_audit.json`, combining
+   raw EPS/MV Tested/Passed, Failed and Retested And Passed evidence (ignoring
+   Partially Tested). Complete normalized IDs identify repeat candidates; source
+   lines and conflicting/same-day records remain intact. This route-specific
+   evidence does not change tracker completion or KPR totals.
 5. NETA, CxAlloy, issue-attachment, and power-plan/MV manifests.
 6. ETL metadata and record-count reporting.
 

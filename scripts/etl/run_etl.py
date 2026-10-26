@@ -89,6 +89,7 @@ OUTPUT_FILES = {
     "data_quality_report": DATA_DIR / "data_quality_report.json",
     "history_comparison": DATA_DIR / "history_comparison.json",
     "eps_test_summary": DATA_DIR / "eps_test_summary.json",
+    "eps_daily_report_audit": DATA_DIR / "eps_daily_report_audit.json",
     "eps_pdm_execution": DATA_DIR / "eps_pdm_execution.json",
     "eps_module_execution": DATA_DIR / "eps_module_execution.json",
     "eps_test_items": DATA_DIR / "eps_test_items.json",

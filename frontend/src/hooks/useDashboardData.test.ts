@@ -54,6 +54,19 @@ afterEach(() => {
 });
 
 describe("useDashboardData route loading", () => {
+  it("loads combined daily-report evidence for EPS execution and preserves both source histories", async () => {
+    const audit = { item_count: 1, items: [{ equipment_key: "TX6-01", events: [
+      { source: "Daily_test_report", date: "2026-10-01" },
+      { source: "MV_Daily_test_report", date: "2026-10-03" },
+    ] }] };
+    fetchJsonMock.mockImplementation(async (path) => path === "/data/eps_daily_report_audit.json"
+      ? audit : defaultPayload(path));
+    const { result } = renderHook(() => useDashboardData("/eps-test-execution"));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.epsDailyReportAudit).toEqual(audit);
+    expect(fetchJsonMock).toHaveBeenCalledWith("/data/eps_daily_report_audit.json");
+  });
+
   function setup() {
     fetchJsonMock.mockImplementation(async (path) => defaultPayload(path));
   }

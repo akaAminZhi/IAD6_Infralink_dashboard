@@ -19,6 +19,7 @@ import {
 import { CollapsibleFilterCard } from "../components/common/CollapsibleFilterCard";
 import { EmptyState } from "../components/common/EmptyState";
 import { StatusBadge } from "../components/common/StatusBadge";
+import { DailyReportAuditPanel } from "../components/eps/DailyReportAuditPanel";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
 import type {
   DashboardData,
@@ -2344,17 +2345,22 @@ export function EpsTestExecutionPage({ data }: EpsTestExecutionPageProps) {
     setCustomActivityEquipmentValues(nextFilter.startsWith("advanced") ? equipmentValues : []);
   };
 
-  if (!summary || data.epsModuleExecution.length === 0) {
+  if (!summary) {
     return (
-      <EmptyState
-        title="No EPS test execution data found."
-        description="Run python scripts/etl/run_etl.py first, then refresh this page."
-      />
+      <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
+        <DailyReportAuditPanel audit={data.epsDailyReportAudit} />
+        <EmptyState
+          title="No EPS tracker execution data found."
+          description="Run python scripts/etl/run_etl.py first, then refresh this page."
+        />
+      </div>
     );
   }
 
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
+      <DailyReportAuditPanel audit={data.epsDailyReportAudit} />
+      <h2 className="text-xl font-semibold">EPS Tracker Execution</h2>
       <EpsActivityCards
         activeFilter={activityFilter}
         onSelectFilter={selectActivityFilter}

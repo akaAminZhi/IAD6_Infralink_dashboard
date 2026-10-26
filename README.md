@@ -128,6 +128,31 @@ EPS reports are stored in the tracker `Daily_test_report/` directory and saving
 one rebuilds `daily_tested_equipment.md`. MV reports are stored separately in
 `MV_Daily_test_report/`; saving an MV report does not run the EPS wash script.
 
+EPS Test Execution also includes an **EPS + MV Daily Reports / Repeat Test
+Review** panel. It reads both raw report directories and combines Tested/Passed,
+Failed, and Retested And Passed entries; Partially Tested is ignored. The review
+only lists repeated items, defaulting to repeat dates in the last seven calendar
+days including today (America/New_York), newest first, with 10 records per page.
+Previous/Next controls stay below a fixed-height, internally scrollable records
+area, keeping the module height stable on short pages and expanded histories.
+Use All repeat history to review older repeats; Reset returns to the recent
+seven-day view. Filter by item/PDM/report, repeat source/date range, repeated
+dates, same-day entries, or items in both sources. Each item shows its first
+recorded date and every later date; the PDM/equipment association column is omitted.
+Expand Report history for outcomes, source filenames and line numbers. Filters
+retain the item's full history. A repeated complete item ID is a review
+candidate, including planned retests, rather than proof of a repeated procedure.
+Same-day entries are separate from cross-date repeats. M-D filenames infer the
+year from file modification time, matching the existing MV date rule; the UI
+marks these dates with `*`. Missing directories and undated files are visible.
+
+The combined evidence is published as `eps_daily_report_audit.json` by
+`python scripts/etl/build_eps_test_execution.py` and the full ETL, honoring
+`IAD6_EPS_TRACKER_ROOT`. Refresh the page after rebuilding. It loads only on EPS
+Test Execution. Existing tracker completion, PDM readiness and KPR calculations
+retain their EPS tracker scope. Unmatched IDs remain available for review;
+tracking-excluded IDs are labeled in the table.
+
 The automation API listens only on `127.0.0.1:8765`. It uses the sibling
 `IAD6_EPS_Testing_Tracker` directory by default. Set `IAD6_EPS_TRACKER_ROOT`
 when the tracker repository is stored elsewhere:

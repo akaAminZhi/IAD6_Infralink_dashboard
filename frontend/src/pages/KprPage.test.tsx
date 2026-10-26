@@ -168,6 +168,7 @@ function dashboardData(summary: KprSummary): DashboardData {
     etlRunMetadata: null,
     historyComparison: null,
     epsTestSummary: null,
+    epsDailyReportAudit: null,
     epsPdmExecution: [],
     epsModuleExecution: [],
     epsTestItems: [],

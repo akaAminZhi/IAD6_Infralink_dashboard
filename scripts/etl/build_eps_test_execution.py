@@ -7,6 +7,7 @@ the source of truth for final closeout.
 
 from __future__ import annotations
 
+import os
 import re
 from collections import Counter, defaultdict
 from dataclasses import dataclass
@@ -21,15 +22,19 @@ try:
     from .json_utils import file_metadata, load_records_json, write_json
     from .pdm_assignment import choose_effective_pdm_name, is_pdm_name
     from .tracking_rules import requires_equipment_test_tracking
+    from .eps_daily_report_audit import build_daily_report_audit
 except ImportError:
     from json_utils import file_metadata, load_records_json, write_json
     from pdm_assignment import choose_effective_pdm_name, is_pdm_name
     from tracking_rules import requires_equipment_test_tracking
+    from eps_daily_report_audit import build_daily_report_audit
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = PROJECT_ROOT / "frontend" / "public" / "data"
-EPS_ROOT = PROJECT_ROOT.parent / "IAD6_EPS_Testing_Tracker"
+EPS_ROOT = Path(os.environ.get(
+    "IAD6_EPS_TRACKER_ROOT", str(PROJECT_ROOT.parent / "IAD6_EPS_Testing_Tracker")
+))
 EPS_EXCEL_DIR = EPS_ROOT / "Excel"
 EPS_TRACKER_PATH = EPS_EXCEL_DIR / "IAD06 TRACKER.xlsx"
 EPS_TRACKER_SOURCE_DIR = EPS_EXCEL_DIR / "EPS_Trackers"
@@ -39,6 +44,7 @@ MODULE_LINKS_PATH = DATA_DIR / "module_equipment_links.json"
 EQUIPMENT_PATH = DATA_DIR / "equipment.json"
 
 SUMMARY_OUTPUT_PATH = DATA_DIR / "eps_test_summary.json"
+DAILY_REPORT_AUDIT_OUTPUT_PATH = DATA_DIR / "eps_daily_report_audit.json"
 PDM_OUTPUT_PATH = DATA_DIR / "eps_pdm_execution.json"
 MODULE_OUTPUT_PATH = DATA_DIR / "eps_module_execution.json"
 TEST_ITEMS_OUTPUT_PATH = DATA_DIR / "eps_test_items.json"
@@ -2379,7 +2385,24 @@ def build_eps_test_execution(
         alias_matches=equipment_sets.alias_matches,
     )
 
+    # Keep raw evidence independent of washed EPS tracker totals. This includes
+    # MV results and unmatched IDs without inventing tracker completion.
+    audit = build_daily_report_audit(EPS_ROOT)
+    module_link_index = build_module_link_index(module_links)
+    for item in audit["items"]:
+        link, match_status = find_module_link_for_equipment_key(
+            item["equipment_key"], module_link_index, module_keys, info_by_key
+        )
+        item["module_match_status"] = match_status
+        if link:
+            info = lookup_equipment_info(link, info_by_key) or {}
+            link = link_with_effective_pdm(link, info)
+            item["pdm_name"] = link.get("pdm_name")
+            item["module_equipment"] = link.get("source_equipment_label")
+    audit["generated_at"] = datetime.now().astimezone().isoformat()
+
     write_json(SUMMARY_OUTPUT_PATH, summary)
+    write_json(DAILY_REPORT_AUDIT_OUTPUT_PATH, audit)
     write_json(PDM_OUTPUT_PATH, records_envelope(pdm_records))
     write_json(MODULE_OUTPUT_PATH, records_envelope(module_records))
     write_json(TEST_ITEMS_OUTPUT_PATH, records_envelope(test_items))

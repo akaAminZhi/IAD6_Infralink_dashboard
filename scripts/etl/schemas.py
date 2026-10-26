@@ -33,6 +33,30 @@ class SchemaRecord:
 
 
 @dataclass(slots=True)
+class EpsDailyReportEvent(SchemaRecord):
+    date: str
+    source: Literal["Daily_test_report", "MV_Daily_test_report"]
+    report_name: str
+    line_number: int
+    status: Literal["tested", "tested_and_passed", "failed", "retested_and_passed"]
+    date_basis: Literal["filename", "filename_month_day_file_year"]
+
+
+@dataclass(slots=True)
+class EpsDailyReportItem(SchemaRecord):
+    equipment_key: str
+    events: list[EpsDailyReportEvent]
+    test_dates: list[str]
+    repeated_on_different_dates: bool
+    repeated_on_same_day: bool
+    cross_source: bool
+    test_tracking_required: bool
+    pdm_name: str | None = None
+    module_equipment: str | None = None
+    module_match_status: str = "unmatched"
+
+
+@dataclass(slots=True)
 class InfralinkEquipmentLink(SchemaRecord):
     equipment_id: str
     infralink_id: str

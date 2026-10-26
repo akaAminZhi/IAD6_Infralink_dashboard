@@ -518,6 +518,43 @@ export interface EpsDailyHistorySummary {
   [key: string]: unknown;
 }
 
+export interface EpsDailyReportEvent {
+  date: string;
+  source: "Daily_test_report" | "MV_Daily_test_report";
+  report_name: string;
+  line_number: number;
+  status: "tested" | "tested_and_passed" | "failed" | "retested_and_passed";
+  date_basis: "filename" | "filename_month_day_file_year";
+}
+
+export interface EpsDailyReportItem {
+  equipment_key: string;
+  events: EpsDailyReportEvent[];
+  test_dates: string[];
+  repeated_on_different_dates: boolean;
+  repeated_on_same_day: boolean;
+  cross_source: boolean;
+  test_tracking_required: boolean;
+  pdm_name: string | null;
+  module_equipment: string | null;
+  module_match_status: string;
+}
+
+export interface EpsDailyReportAudit {
+  sources: Record<EpsDailyReportEvent["source"], {
+    available: boolean;
+    report_count: number;
+    event_count: number;
+    files: SourceFileMetadata[];
+    skipped_files: string[];
+  }>;
+  item_count: number;
+  event_count: number;
+  repeated_item_count: number;
+  same_day_item_count: number;
+  items: EpsDailyReportItem[];
+}
+
 export interface EpsTestSummary {
   generated_at?: string;
   selected_input_files?: SourceFileMap;
@@ -802,6 +839,7 @@ export interface DashboardData {
   etlRunMetadata: EtlRunMetadata | null;
   historyComparison: HistoryComparison | null;
   epsTestSummary: EpsTestSummary | null;
+  epsDailyReportAudit: EpsDailyReportAudit | null;
   epsPdmExecution: EpsPdmExecutionRecord[];
   epsModuleExecution: EpsModuleExecutionRecord[];
   epsTestItems: EpsTestItemRecord[];
