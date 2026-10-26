@@ -158,6 +158,35 @@ describe("MvEquipmentPage", () => {
     expect(screen.getByText("No linked Infralink issues.")).toBeInTheDocument();
   });
 
+  it("anchors a missing ATP warning to its cable route and opens that cable's details", async () => {
+    const user = userEvent.setup();
+    const cable = "FD06-IAD06-UTILITY6-04";
+    render(<MvEquipmentPage data={makeDashboardData({
+      powerPlanManifest: { pages: [{
+        page_id: "mv", page_label: "MV", document_name: "Electrical-IAD6-MV.pdf", page_number: 1,
+        width: 1000, height: 1000,
+        annotations: [{
+          annotation_id: "missing-atp", kind: "connection", annotation_type: "PolyLine", label: cable,
+          matched_equipment_id: cable, system_element_status: "L3: Pre Func Testing & Startup",
+          feeder_cable_atp_required: true, feeder_cable_atp_status: "missing_required",
+          feeder_cable_atp_names: [], feeder_cable_atp_files: [],
+          rect: { x: 100, y: 100, width: 200, height: 780 }, center: { x: 200, y: 490 },
+          vertices: [{ x: 300, y: 100 }, { x: 300, y: 860 }, { x: 100, y: 860 }, { x: 100, y: 880 }],
+        }],
+      }] },
+    })} />);
+
+    // The longest segment is at x=300; the bounding-box center is off the route at x=200.
+    // Combining pages translates the route by (-30, -30).
+    const warning = screen.getByLabelText(`${cable}: required Feeder Cable ATP PDF missing`);
+    expect(warning).toHaveAttribute("transform", "translate(270 450)");
+    expect(warning.querySelector("title")).toHaveTextContent(cable);
+    expect(screen.getByText("L3 Missing ATP 1")).toBeInTheDocument();
+    await user.click(warning);
+    expect(screen.getByRole("heading", { name: cable })).toBeInTheDocument();
+    expect(screen.getByText("Required file missing")).toBeInTheDocument();
+  });
+
   it("combines PDF pages and draws all MV annotations on one canvas", async () => {
     const user = userEvent.setup();
     const data = makeDashboardData({

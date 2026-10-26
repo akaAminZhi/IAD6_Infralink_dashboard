@@ -1560,9 +1560,10 @@ export function MvEquipmentPage({ data }: MvEquipmentPageProps) {
                       />
                       {isRequiredAtpMissing(annotation) ? (
                         <g
-                          pointerEvents="none"
-                          transform={`translate(${annotation.center.x} ${annotation.center.y})`}
+                          aria-label={`${annotation.label}: required Feeder Cable ATP PDF missing`}
+                          transform={countIndicatorTransform(annotation, ((annotation.openIssueCount ?? 0) > 0 ? 28 : 0) + ((annotation.failedCount ?? 0) > 0 ? 28 : 0))}
                         >
+                          <title>{`${annotation.label}: L3 status requires a downloaded Feeder Cable ATP PDF.`}</title>
                           <circle fill="#dc2626" r="15" stroke="#ffffff" strokeWidth="3" />
                           <text
                             dominantBaseline="central"
