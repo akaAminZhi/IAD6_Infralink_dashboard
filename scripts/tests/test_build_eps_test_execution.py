@@ -7,6 +7,7 @@ import pytest
 from openpyxl import Workbook
 
 from scripts.etl.build_eps_test_execution import (
+    EquipmentInfoIndex,
     TrackerRecord,
     build_module_link_index,
     build_module_execution_records,
@@ -30,7 +31,37 @@ from scripts.etl.build_eps_test_execution import (
     tracker_module_key_for_record,
     tracker_match_keys,
     unmatched_input_equipment_keys,
+    lookup_equipment_info,
+    prefix_module_key,
+    suffix_module_key,
 )
+
+
+@pytest.mark.parametrize("label, matched", [
+    ("PDU6-01A-1", None), ("PDU6-01A-1", "EXACT"),
+    ("IAD06-PDU6-01A-1", None), ("UNKNOWN", None),
+])
+def test_equipment_suffix_index_preserves_lookup_precedence(label, matched) -> None:
+    records = {
+        "LONG-PREFIX-PDU6-01A-1": {"equipment_id": "long"},
+        "AA-PDU6-01A-1": {"equipment_id": "short-first"},
+        "BB-PDU6-01A-1": {"equipment_id": "short-second"},
+        "EXACT": {"equipment_id": "exact"},
+    }
+    link = {"source_equipment_label": label, "matched_equipment_id": matched}
+    indexed = EquipmentInfoIndex(records)
+    assert lookup_equipment_info(link, indexed) == lookup_equipment_info(link, records)
+    if label.endswith("PDU6-01A-1") and matched is None:
+        assert lookup_equipment_info(link, indexed)["equipment_id"] == "short-first"
+
+
+@pytest.mark.parametrize("record", ["A-B-C-D", "A-B-C", "UNKNOWN", "A-B-C-D-A-B"])
+def test_module_boundary_lookup_matches_longest_inventory_match(record: str) -> None:
+    modules = {"A-B", "A-B-C", "C-D", "B-C-D", record}
+    prefixes = [item for item in modules if record != item and record.startswith(f"{item}-")]
+    suffixes = [item for item in modules if record != item and record.endswith(f"-{item}")]
+    assert prefix_module_key(record, modules) == max(prefixes, key=len, default="")
+    assert suffix_module_key(record, modules) == max(suffixes, key=len, default="")
 
 
 def test_missing_tracker_dates_use_daily_status_events(tmp_path: Path) -> None:

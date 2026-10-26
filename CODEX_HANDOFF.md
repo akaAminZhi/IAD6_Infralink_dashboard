@@ -1,5 +1,41 @@
 ﻿# Codex Handoff
 
+## Current update (2026-10-26): ETL performance
+
+- Real 18-step baseline: 248.70s. Main costs: KPR 136.35s, EPS 64.83s,
+  history comparison 21.16s. CxAlloy was 10.85s, not the main bottleneck.
+- Added `workbook_cache.py`, scoped to full ETL only. Equipment/case normalized
+  records persist in gitignored `runtime/etl-cache/workbooks/`, keyed by source
+  path/content SHA256, all ETL Python sources, and Python/openpyxl versions.
+  Record checksums detect damage; corrupt/unwritable cache falls back to parsing.
+  Reuse returns isolated records; source changes during parsing are not cached.
+  Standalone normalizers/builders remain uncached. Removing the cache rebuilds it.
+- EPS pre-indexes equipment suffix lookups, preserving exact/normalized priority,
+  shortest fallback and tie order. Module prefix/suffix matching walks ID
+  boundaries instead of inventory. All historical snapshots still regenerate.
+  CxAlloy PDF hashing/upload safeguards and pipeline step order are unchanged.
+- Logs now show per-step elapsed time, cache hits/misses and total step time.
+- Real warm-cache validation via the normal CLI: 45.50s (81.7% less than
+  baseline), with 48 cache hits and zero parses. KPR 11.60s, EPS 9.94s,
+  history 1.04s, CxAlloy 10.48s. First cache-building run took 292.94s,
+  affected by a 148.70s CxAlloy I/O outlier while frontend build also ran;
+  this is not evidence of a cold-run speedup. Its KPR/EPS/history steps were
+  95.79/11.00/13.63s. New workbooks or ETL code/dependency changes parse again.
+  Disk/OneDrive activity affects timing.
+- Compared 145 generated JSON/CSV files, including EPS history snapshots,
+  against baseline: all data equivalent after excluding generated/modified/
+  published timestamps and canonicalizing the existing unordered KPR transitions
+  list. CSVs were byte-identical. Local probes/logs/timings are under
+  `runtime/automation/etl-performance/`. Initial cold comparison flagged only
+  timestamp/order noise; warm comparison handles it and reports zero differences.
+- Verification: 68 targeted Python tests passed (cache, ETL, EPS, equipment/case,
+  history, KPR, daily-report audit). Preview-mode frontend build passed with
+  existing size/plugin warnings; user-modified TS build-info bytes preserved.
+  Diff whitespace check passed. No full suites or lint ran.
+- Preserved pre-existing uncommitted EPS/MV review changes. No commit, live
+  upload or service restart. Cache is populated; the next Data Operations ETL
+  process loads the new Python code automatically.
+
 ## Current update (2026-10-23): Equipment cable completion from attached reports
 
 - Equipment now carries the existing normalized `feeder_cable_atp` into its

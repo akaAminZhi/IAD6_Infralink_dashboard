@@ -760,6 +760,22 @@ def load_tracker_records(path: Path) -> tuple[dict[str, list[TrackerRecord]], se
     return dict(by_substation), equipment_keys
 
 
+class EquipmentInfoIndex(dict[str, dict[str, Any]]):
+    """Build the shortest suffix match once for the immutable input inventory."""
+
+    def __init__(self, records: dict[str, dict[str, Any]]) -> None:
+        super().__init__(records)
+        self.by_suffix: dict[str, tuple[str, dict[str, Any]]] = {}
+        for candidate_key, info in records.items():
+            for position, character in enumerate(candidate_key):
+                if character != "-":
+                    continue
+                suffix = candidate_key[position + 1:]
+                previous = self.by_suffix.get(suffix)
+                if previous is None or len(candidate_key) < len(previous[0]):
+                    self.by_suffix[suffix] = (candidate_key, info)
+
+
 def load_equipment_info() -> dict[str, dict[str, Any]]:
     records = load_records_json(EQUIPMENT_PATH)
     info_by_key: dict[str, dict[str, Any]] = {}
@@ -770,7 +786,7 @@ def load_equipment_info() -> dict[str, dict[str, Any]]:
             if lookup_key:
                 info_by_key[lookup_key] = record
 
-    return info_by_key
+    return EquipmentInfoIndex(info_by_key)
 
 
 def lookup_equipment_info(
@@ -789,6 +805,9 @@ def lookup_equipment_info(
 
     source_key = compact_equipment_key(module_link.get("source_equipment_label"))
     if source_key:
+        if isinstance(info_by_key, EquipmentInfoIndex):
+            match = info_by_key.by_suffix.get(source_key)
+            return match[1] if match else {}
         suffix_matches = [
             (candidate_key, info)
             for candidate_key, info in info_by_key.items()
@@ -898,25 +917,18 @@ def find_module_link_for_equipment_key(
 
 
 def prefix_module_key(record_key: str, module_keys: set[str]) -> str:
-    matches = [
-        module_key
-        for module_key in module_keys
-        if record_key != module_key and record_key.startswith(f"{module_key}-")
-    ]
-    if not matches:
-        return ""
-    return max(matches, key=len)
+    # Longest prefix first; work scales with ID length, not module inventory.
+    for position in range(len(record_key) - 1, -1, -1):
+        if record_key[position] == "-" and record_key[:position] in module_keys:
+            return record_key[:position]
+    return ""
 
 
 def suffix_module_key(record_key: str, module_keys: set[str]) -> str:
-    matches = [
-        module_key
-        for module_key in module_keys
-        if record_key != module_key and record_key.endswith(f"-{module_key}")
-    ]
-    if not matches:
-        return ""
-    return max(matches, key=len)
+    for position, character in enumerate(record_key):
+        if character == "-" and record_key[position + 1:] in module_keys:
+            return record_key[position + 1:]
+    return ""
 
 
 def tracker_records_by_module(

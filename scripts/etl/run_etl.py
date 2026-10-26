@@ -5,10 +5,12 @@ from __future__ import annotations
 import json
 from datetime import datetime
 from pathlib import Path
+from time import perf_counter
 from typing import Callable
 
 try:
     from .file_discovery import get_input_files
+    from .workbook_cache import workbook_cache
     from .json_utils import (
         file_metadata,
         load_records_json,
@@ -35,6 +37,7 @@ try:
     from . import normalize_modules
 except ImportError:
     from file_discovery import get_input_files
+    from workbook_cache import workbook_cache
     from json_utils import (
         file_metadata,
         load_records_json,
@@ -149,20 +152,30 @@ def build_pipeline_steps(input_files: dict[str, str]) -> list[tuple[str, Callabl
 
 
 def run_steps(input_files: dict[str, str]) -> bool:
+    started = perf_counter()
+    with workbook_cache() as cache:
+        succeeded = _run_steps(input_files)
+    print(f"Workbook cache: {cache.hits} reused, {cache.misses} parsed")
+    print(f"ETL steps elapsed: {perf_counter() - started:.2f}s")
+    return succeeded
+
+
+def _run_steps(input_files: dict[str, str]) -> bool:
     pipeline_steps = build_pipeline_steps(input_files)
     total_steps = len(pipeline_steps)
 
     for index, (name, step) in enumerate(pipeline_steps, start=1):
         print("")
         print(f"[{index}/{total_steps}] Running {name}...")
+        started = perf_counter()
         try:
             step()
         except Exception as exc:
             print("")
-            print(f"ERROR: ETL step failed: {name}")
+            print(f"ERROR: ETL step failed: {name} (after {perf_counter() - started:.2f}s)")
             print(f"{type(exc).__name__}: {exc}")
             return False
-        print(f"[{index}/{total_steps}] Finished {name}")
+        print(f"[{index}/{total_steps}] Finished {name} ({perf_counter() - started:.2f}s)")
 
     return True
 

@@ -232,6 +232,16 @@ gitignored. JSON outputs commonly include selected-input metadata and a
 `records` array. The ETL stops on the first failed step; quality findings are
 reported as data and do not stop the pipeline.
 
+Full runs scope a content-addressed normalization cache to the pipeline.
+`workbook_cache.py` verifies source workbook bytes and versions all ETL Python
+sources plus Python/openpyxl before reusing equipment/case records. Persistent
+entries live only in gitignored `runtime/etl-cache/workbooks/`; missing, corrupt
+or unwritable cache files do not change parsing/error behavior. In-memory reuse
+returns isolated records. Standalone normalizers remain uncached. EPS equipment
+lookups pre-index suffix matches, preserving exact-match priority and the shortest
+fallback, while all historical snapshots continue to rebuild on each run.
+Each step reports elapsed seconds in existing ETL logs.
+
 ### Matching and assignment
 
 - Equipment matching proceeds through exact, project-prefixed/normalized,

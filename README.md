@@ -360,6 +360,17 @@ all read the same setting. `JC2_SYSTEM_ELEMENTS_URL` can override it temporarily
 
 7. Start the frontend after the ETL succeeds.
 
+Full ETL logs include elapsed seconds for every step and workbook-cache reuse
+counts. Equipment and case normalization uses a local, gitignored cache under
+`runtime/etl-cache/workbooks/`. Workbook content, ETL Python source, Python and
+openpyxl versions determine reuse; changed files/rules are parsed again. Corrupt
+or unavailable cache files fall back to parsing. The first run builds the cache,
+so later refreshes are faster. Removing this cache only makes the next run rebuild
+it. Independent normalizer/builder commands retain their uncached behavior.
+EPS matching uses an inventory suffix index; daily history snapshots are still
+fully regenerated so corrections to older reports remain visible. CxAlloy PDF
+content verification is unchanged.
+
 ## ETL Outputs
 
 Key generated outputs:

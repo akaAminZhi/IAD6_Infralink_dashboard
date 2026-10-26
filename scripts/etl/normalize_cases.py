@@ -19,9 +19,11 @@ from openpyxl.utils.datetime import from_excel
 try:
     from .file_discovery import get_input_files
     from .json_utils import file_metadata, write_json as write_json_payload
+    from .workbook_cache import cached_normalizer
 except ImportError:
     from file_discovery import get_input_files
     from json_utils import file_metadata, write_json as write_json_payload
+    from workbook_cache import cached_normalizer
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -275,6 +277,7 @@ def make_case_record(
     }
 
 
+@cached_normalizer
 def normalize_cases(cases_path: str) -> list[dict]:
     workbook = load_workbook(cases_path, read_only=True, data_only=True)
     try:

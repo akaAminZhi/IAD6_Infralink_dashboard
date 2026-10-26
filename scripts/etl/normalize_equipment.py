@@ -19,10 +19,12 @@ try:
     from .file_discovery import get_input_files
     from .json_utils import file_metadata, write_json as write_json_payload
     from .tracking_rules import requires_equipment_test_tracking
+    from .workbook_cache import cached_normalizer
 except ImportError:
     from file_discovery import get_input_files
     from json_utils import file_metadata, write_json as write_json_payload
     from tracking_rules import requires_equipment_test_tracking
+    from workbook_cache import cached_normalizer
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -342,6 +344,7 @@ def validate_source_columns(header_map: dict[str, int]) -> None:
         raise ValueError(f"Missing expected SystemElements columns: {missing_display}")
 
 
+@cached_normalizer
 def normalize_equipment(system_elements_path: str) -> list[dict]:
     workbook = load_workbook(system_elements_path, read_only=True, data_only=True)
     try:
