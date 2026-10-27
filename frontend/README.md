@@ -158,8 +158,21 @@ unconfirmed line style until a completed test result is available.
 Installation Complete alone does not confirm testing. Green/blue solid and
 red/gray dashed lines distinguish these states, with text labels in the
 legend and details. NETA completion and missing report evidence are shown
-separately. The Layout builder reads raw EPS reports and the same MV daily report
-index as Power Plan/MV. Rebuild with `python scripts/etl/build_layout_plan.py`
+separately. Green cables whose Infralink status is updated without a listed
+Feeder Cable ATP or NETA report show an amber exclamation marker on the route,
+with the same warning in connected cable rows and cable details. The marker
+stays readable when zooming. Listed report names count as attachment evidence
+even if the local PDF has not been downloaded; existing missing-file messages
+still identify those downloads separately. **Highlight missing reports (count)**
+highlights all drawable updated cables missing reports on the current floor and
+keeps their endpoint equipment clear while fading other routes and equipment.
+It shows hidden cables, clears individual focus and leaves the camera unchanged.
+Click again, Clear focus, Global view or Escape to restore the normal display.
+Hiding cables, changing floors, switching views or entering box selection also
+exits highlighting. The count includes drawable connections across the floor,
+including off-camera routes; unresolved placements are not counted.
+The Layout builder reads raw EPS reports and the same MV daily report index as
+Power Plan/MV. Rebuild with `python scripts/etl/build_layout_plan.py`
 after EPS/MV daily reports or normalized equipment change; normal ETL also
 performs this step. Layout loads the updated generated data on the next page load.
 

@@ -1,7 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { cableTestState, layoutCableTestState, parseCableAttachmentNames } from "./cableTestUtils";
+import { cableTestState, layoutCableMissingReport, layoutCableTestState, parseCableAttachmentNames } from "./cableTestUtils";
 
 describe("shared cable readiness", () => {
+  it("flags updated cables without report evidence while distinguishing missing local downloads", () => {
+    const updated = { system_element_status: " L3: pre func testing & startup " };
+    expect(layoutCableMissingReport(updated)).toBe(true);
+    expect(layoutCableMissingReport({ ...updated, feeder_cable_atp_names: ["N/A", "null", " "], neta_test_report: "none; NA" })).toBe(true);
+    expect(layoutCableMissingReport({ ...updated, feeder_cable_atp_names: ["ATP.pdf"] })).toBe(false);
+    expect(layoutCableMissingReport({ ...updated, feeder_cable_atp_files: [{}] })).toBe(false);
+    expect(layoutCableMissingReport({ ...updated, neta_test_report: "NETA.pdf" })).toBe(false);
+    expect(layoutCableMissingReport({ eps_daily_test_status: "tested" })).toBe(false);
+    expect(layoutCableMissingReport({ ...updated, eps_daily_test_status: "failed" })).toBe(false);
+    expect(layoutCableMissingReport({})).toBe(false);
+  });
   it("normalizes cable attachments like the Layout builder and rejects placeholder-only evidence", () => {
     expect(parseCableAttachmentNames(" N/A; ATP  report.pdf; atp report.PDF\nnone; NA; null ")).toEqual(["ATP report.pdf"]);
     expect(layoutCableTestState({ feeder_cable_atp_names: ["N/A", "none", " "] })).toBe("unconfirmed");

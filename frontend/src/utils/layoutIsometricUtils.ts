@@ -201,3 +201,12 @@ export function layoutCablePath(connection: PlacedLayoutCable, lane = 0): string
   }
   return `M ${a.x} ${a.y} C ${b.x} ${b.y}, ${c.x} ${c.y}, ${d.x} ${d.y}`;
 }
+
+/** Anchor report warnings on the actual cable route, including its bundle lane. */
+export function layoutCableMarkerPoint(connection: PlacedLayoutCable, lane = 0): PowerPlanPoint {
+  const [a, b, c, d] = overheadCablePoints(connection, lane);
+  if (!connection.source.fixed && !connection.target.fixed && !isNearbyCable(connection)) {
+    return { x: (b.x + c.x) / 2, y: (b.y + c.y) / 2 };
+  }
+  return { x: (a.x + 3 * b.x + 3 * c.x + d.x) / 8, y: (a.y + 3 * b.y + 3 * c.y + d.y) / 8 };
+}

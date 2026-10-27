@@ -201,11 +201,17 @@ describe("2.5D Layout connections", () => {
     expect(screen.queryByRole("button", { name: /FD-TERM-A|FD-CABLE/ })).not.toBeInTheDocument();
     expect(container.querySelectorAll("[data-cable-id]")).toHaveLength(1);
     expect(container.querySelector('[data-cable-state="updated"]')).toBeInTheDocument();
+    expect(container.querySelector('[data-cable-state="updated"]')).toHaveAttribute("stroke", "#16a34a");
+    expect(container.querySelector("[data-cable-missing-report]")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /FDR-IAD06-EQ-1-IAD06-EQ-FIX:/ })).toHaveAccessibleName(/no Feeder Cable ATP or NETA report is listed/);
     await user.click(screen.getByRole("button", { name: /FDR-IAD06-EQ-1-IAD06-EQ-FIX:/ }));
     expect(screen.getByLabelText("Cable details")).toHaveTextContent("From: EQ-1");
     expect(screen.getByLabelText("Cable details")).toHaveTextContent("To: EQ-FIX");
     expect(screen.getByLabelText("Cable details")).toHaveTextContent("Tested + Infralink Updated");
+    expect(screen.getByLabelText("Cable details")).toHaveTextContent("Infralink updated, but no Feeder Cable ATP or NETA report is listed.");
     expect(screen.getByRole("button", { name: "EQ-FIX: Not Energized" })).toHaveAttribute("aria-pressed", "true");
+    await user.click(screen.getByRole("button", { name: "EQ-1: Energized" }));
+    expect(screen.getByLabelText("Connected cable list")).toHaveTextContent("Report missing");
     expect(container.querySelector("[data-mv-termination]")).not.toBeInTheDocument();
   });
 
@@ -218,6 +224,7 @@ describe("2.5D Layout connections", () => {
     const { container } = render(<LayoutPlanPage />);
     await screen.findByRole("button", { name: "2.5D" });
     expect(container.querySelector('[data-cable-state="pending"]')).toBeInTheDocument();
+    expect(container.querySelector("[data-cable-missing-report]")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /FDR-IAD06-EQ-1-IAD06-EQ-FIX:/ }));
     expect(screen.getByLabelText("Cable details")).toHaveTextContent("Tested - Infralink Update Pending");
     expect(screen.getByLabelText("Cable details")).toHaveTextContent("EPS daily: tested · 2026-10-14 · 10-14.md");
@@ -235,6 +242,7 @@ describe("2.5D Layout connections", () => {
     const { container } = render(<LayoutPlanPage />);
     await screen.findByRole("button", { name: "2.5D" });
     expect(container.querySelector('[data-cable-state="updated"]')).toBeInTheDocument();
+    expect(container.querySelector("[data-cable-missing-report]")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /FDR-IAD06-MDB6-01A-IAD06-ATS-TX-HTP6-01A:/ }));
     expect(screen.getByLabelText("Cable details")).toHaveTextContent("Tested + Infralink Updated");
   });
@@ -374,6 +382,70 @@ describe("2.5D Layout connections", () => {
     expect(container.querySelector("[data-device-kind]")).not.toBeVisible();
     expect(localStorage.getItem(LAYOUT_VIEW_KEY)).toBe("plan");
     expect(screen.getByRole("button", { name: "EQ-2: Not Energized" })).toBeInTheDocument();
+  });
+
+  it("highlights all updated cables missing reports together and dims other routes and equipment", async () => {
+    const manifest = isometricDataset();
+    const updated = { system_element_status: "L3: Pre Func Testing & Startup" };
+    manifest.cables = [
+      cable({ ...updated, cable_id: "FDR-MISSING-1" }),
+      cable({ ...updated, cable_id: "FDR-MISSING-2" }),
+      cable({ ...updated, cable_id: "FDR-WITH-REPORT", neta_test_report: "NETA.pdf" }),
+      cable({ cable_id: "FDR-PENDING", eps_daily_test_status: "tested" }),
+    ];
+    const user = userEvent.setup();
+    const { container } = render(<LayoutPlanPage />);
+    const toggle = await screen.findByRole("button", { name: "Highlight missing reports (2)" });
+    const route = (id: string) => container.querySelector(`[data-cable-id="${id}"]`)!;
+    const unrelated = screen.getByRole("button", { name: "EQ-UNKNOWN: Unknown" });
+    const map = screen.getByRole("img", { name: "First Floor equipment layout" });
+    const camera = map.getAttribute("viewBox");
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute("aria-pressed", "true");
+    for (const id of ["FDR-MISSING-1", "FDR-MISSING-2"]) {
+      expect(route(id)).toHaveAttribute("opacity", "1");
+      expect(route(id).querySelector("[data-cable-state]")).toHaveAttribute("stroke-width", "5.3");
+    }
+    expect(route("FDR-WITH-REPORT")).toHaveAttribute("opacity", "0.1");
+    expect(route("FDR-PENDING")).toHaveAttribute("opacity", "0.1");
+    expect(unrelated).toHaveAttribute("opacity", "0.2");
+    expect(screen.getByRole("button", { name: "EQ-1: Energized" })).toHaveAttribute("opacity", "1");
+    expect(map).toHaveAttribute("viewBox", camera);
+    await user.click(route("FDR-MISSING-1"));
+    expect(screen.getByLabelText("Cable details")).toHaveTextContent("FDR-MISSING-1");
+    expect(route("FDR-MISSING-2")).toHaveAttribute("opacity", "1");
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute("aria-pressed", "false");
+    expect(route("FDR-PENDING")).toHaveAttribute("opacity", "0.85");
+    expect(unrelated).toHaveAttribute("opacity", "1");
+  });
+
+  it("shows hidden cables for report highlighting and exits the mode through existing view controls", async () => {
+    const manifest = isometricDataset();
+    manifest.cables![0].system_element_status = "L3: Pre Func Testing & Startup";
+    const user = userEvent.setup();
+    const { container } = render(<LayoutPlanPage />);
+    const toggle = await screen.findByRole("button", { name: "Highlight missing reports (1)" });
+    await user.click(screen.getByRole("button", { name: "Hide all cables" }));
+    await user.click(toggle);
+    expect(container.querySelector("[data-cable-missing-report]")).toBeInTheDocument();
+    expect(toggle).toHaveAttribute("aria-pressed", "true");
+    await user.click(screen.getByRole("button", { name: "Clear focus" }));
+    expect(toggle).toHaveAttribute("aria-pressed", "false");
+    await user.click(toggle);
+    await user.click(screen.getByRole("button", { name: "Global view" }));
+    expect(toggle).toHaveAttribute("aria-pressed", "false");
+    await user.click(toggle);
+    await user.click(screen.getByRole("button", { name: "Hide all cables" }));
+    expect(toggle).toHaveAttribute("aria-pressed", "false");
+    expect(container.querySelector("[data-cable-id]")).not.toBeInTheDocument();
+    await user.click(toggle);
+    await user.click(screen.getByRole("button", { name: "2D plan" }));
+    await user.click(screen.getByRole("button", { name: "2.5D" }));
+    expect(screen.getByRole("button", { name: "Highlight missing reports (1)" })).toHaveAttribute("aria-pressed", "false");
+    await user.click(screen.getByRole("button", { name: "Highlight missing reports (1)" }));
+    await user.selectOptions(screen.getByLabelText("Floor"), "second");
+    expect(screen.getByRole("button", { name: "Highlight missing reports (0)" })).toBeDisabled();
   });
 
   it("keeps cable visibility off across global reset, floor/view changes and connection inspection", async () => {

@@ -1,6 +1,7 @@
 /** The cable readiness rules used by Equipment, MV Equipment and Layout. */
 interface CableTestEvidence {
   system_element_status?: string | null;
+  neta_test_report?: string | null;
   feeder_cable_atp_names?: string[] | null;
   feeder_cable_atp_files?: unknown[] | null;
   mv_daily_test_status?: string | null;
@@ -32,6 +33,14 @@ export const LAYOUT_CABLE_TEST_STATES: Record<LayoutCableTestState, { label: str
 export function layoutCableTestState(evidence: CableTestEvidence): LayoutCableTestState {
   const state = cableTestState(evidence);
   return state === "partial" ? "unconfirmed" : state;
+}
+
+export const LAYOUT_CABLE_MISSING_REPORT_MESSAGE = "Infralink updated, but no Feeder Cable ATP or NETA report is listed.";
+
+/** Report references confirm attachment evidence even when the local PDF is unavailable. */
+export function layoutCableMissingReport(evidence: CableTestEvidence): boolean {
+  return layoutCableTestState(evidence) === "updated" && !hasInfralinkCableTestReport(evidence) &&
+    !parseCableAttachmentNames(evidence.neta_test_report).length;
 }
 
 export function isMvDailyTestPassed(evidence: CableTestEvidence): boolean {

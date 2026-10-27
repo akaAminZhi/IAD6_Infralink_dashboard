@@ -1,5 +1,45 @@
 ﻿# Codex Handoff
 
+## Current update (2026-10-27): Layout cable missing-report warning
+
+- Green updated cables without a listed Feeder Cable ATP or NETA report now
+  carry an amber exclamation marker on their route. The cable title/accessibility
+  label, legend, connected cable list and inspector explain the missing report.
+- Existing test states, colors, counts and NETA quality warnings are preserved.
+  Report names count as attachment evidence even without a downloaded PDF;
+  blank/placeholder references do not. Failed/pending/unconfirmed routes retain
+  their existing display. No ETL, data contract or regenerated dataset changes.
+- Marker anchors follow the actual cubic arc or long room tray and bundle lane.
+  Screen size stays stable through zoom. Native Lucide icons are used.
+- Preview frontend build passed with existing chunk-size/plugin timing warnings;
+  original user-modified build-info bytes restored. Real Chromium verified a
+  local updated cable missing reports, green stroke, warning/inspector, keyboard
+  selection, stable ~14px marker through zoom and cable visibility toggling,
+  with no page errors. Screenshot visually reviewed. Ignored smoke script and
+  image: `runtime/automation/layout_missing_report_smoke.py` and
+  `layout-missing-report-detail.png`. All 79 targeted Vitest tests passed across
+  cable readiness, layout geometry and Layout page. Initial fork workers stalled;
+  the targeted run passed with the threads pool. Diff whitespace check passed.
+- Refresh Layout to load the compiled change. No vendor writes or service restart.
+- Follow-up: added **Highlight missing reports (count)** beside cable visibility.
+  It reuses the warning rule and counts drawable connections on the current
+  floor, including off-camera routes. Enabling shows hidden cables, clears
+  individual focus/box selection, and keeps the camera. Matching cables are
+  widened and drawn last; their endpoint equipment stays clear while other
+  routes/equipment fade. Inspecting one cable keeps all matches highlighted.
+  Toggle again, Clear focus, Global view/Escape, hide cables, change floor/view,
+  enter box selection or reload data to exit. Existing readiness counts stay
+  unchanged. No matching connections disables the button.
+- Follow-up verification: all 45 Layout page tests passed after a worker startup
+  timeout retry and correction of an SVG attribute name in the new test.
+  Preview build passed with existing size/timing warnings, preserving original
+  build-info bytes. Real Chromium confirmed 38 highlighted routes and 238 faded
+  routes on the local first floor, equipment fading, unchanged camera, hidden
+  cable recovery, inspecting without losing other highlights, toggle/global
+  reset and no page errors. Screenshot visually reviewed; ignored artifacts:
+  `runtime/automation/layout_highlight_missing_reports_smoke.py` and
+  `layout-highlight-missing-reports.png`. Diff whitespace check passed.
+
 ## Current update (2026-10-26): ETL performance
 
 - Real 18-step baseline: 248.70s. Main costs: KPR 136.35s, EPS 64.83s,
