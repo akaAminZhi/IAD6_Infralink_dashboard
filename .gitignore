@@ -18,6 +18,7 @@ frontend/coverage/
 frontend/public/issue-case-images/
 frontend/public/neta-reports/
 frontend/public/neta-reports-gc/
+frontend/tsconfig.tsbuildinfo
 
 # Generated dashboard data
 frontend/public/data/*
