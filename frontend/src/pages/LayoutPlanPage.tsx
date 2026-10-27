@@ -1,3 +1,4 @@
+import { DailyTestHistory } from "../components/common/DailyTestHistory";
 import { Box, Cable, CircleAlert, Eye, EyeOff, Maximize, MousePointer2, RotateCcw, Search, X, Zap, ZoomIn, ZoomOut } from "lucide-react";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 
@@ -514,6 +515,7 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
     <p className="text-xs">Infralink: {selectedCable.system_element_status ?? "Unknown"}</p>
     <p className="text-xs">EPS daily: {selectedCable.eps_daily_test_status?.replace(/_/g, " ") ?? "No test evidence"}{selectedCable.eps_daily_test_date ? ` · ${selectedCable.eps_daily_test_date}` : ""}{selectedCable.eps_daily_report_name ? ` · ${selectedCable.eps_daily_report_name}` : ""}</p>
     <p className="text-xs">MV daily: {selectedCable.mv_daily_test_status?.replace(/_/g, " ") ?? "No test evidence"}{selectedCable.mv_daily_test_date ? ` · ${selectedCable.mv_daily_test_date}` : ""}</p>
+    <DailyTestHistory events={selectedCable.daily_report_history} conflict={selectedCable.daily_report_conflict} />
     <p className="text-xs">NETA: {selectedCable.neta_complete ? "Complete" : "Not confirmed"}</p>
     <FeederCableAtpReports key={selectedCable.cable_id} files={selectedCable.feeder_cable_atp_files ?? []}
       names={selectedCable.feeder_cable_atp_names ?? []} required={selectedCable.feeder_cable_atp_required ?? false} />
@@ -745,6 +747,7 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
               <NetaReportChips reports={selectedEquipmentReports} compactNameMode="gc" showLinkedFileNames stackedCompact />
             </div>
           </section> : null}
+          <DailyTestHistory events={selected.daily_report_history} />
           <p className="text-xs text-muted-foreground">{overrides[selected.equipment_key] && !selected.energized_completed_at ? "Manual override · saved in this browser" : "From SystemElements Excel"}</p>
           <div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => focusDevice(selected)}>Zoom to device</Button>
             <Button variant="ghost" disabled={!overrides[selected.equipment_key]} onClick={() => {

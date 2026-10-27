@@ -37,7 +37,7 @@ describe("dashboard page empty states", () => {
     [
       "EPS execution",
       <EpsTestExecutionPage data={makeDashboardData()} />,
-      "No EPS test execution data found.",
+      "No EPS tracker execution data found.",
     ],
     ["Power plan", <PowerPlanPage data={makeDashboardData()} />, "No PDM equipment data found."],
     ["MV equipment", <MvEquipmentPage data={makeDashboardData()} />, "No MV equipment plan found."],

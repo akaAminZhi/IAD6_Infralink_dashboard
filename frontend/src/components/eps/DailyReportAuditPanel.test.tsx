@@ -39,9 +39,11 @@ describe("DailyReportAuditPanel", () => {
     const user = userEvent.setup();
     render(<DailyReportAuditPanel audit={audit} />);
     expect(screen.queryByRole("option", { name: "All daily items" })).not.toBeInTheDocument();
-    expect(screen.getByLabelText("Repeat review")).toHaveValue("dates");
+    expect(screen.getByLabelText("Repeat review")).toHaveValue("all");
     expect(screen.queryByRole("columnheader", { name: "PDM / Equipment" })).not.toBeInTheDocument();
     expect(screen.queryByText("TX6-SINGLE")).not.toBeInTheDocument();
+    expect(screen.getByText("TX6-SAME")).toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText("Repeat review"), "dates");
     expect(screen.queryByText("TX6-SAME")).not.toBeInTheDocument();
     const row = screen.getByText("TX6-REPEAT").closest("tr")!;
     expect(within(row).getByText("2026-10-01")).toBeInTheDocument();
@@ -49,7 +51,7 @@ describe("DailyReportAuditPanel", () => {
     await user.click(within(row).getByText("Report history (2 entries)"));
     expect(within(row).getByText("2026-10-01 · Failed")).toBeVisible();
     expect(within(row).getByText("2026-10-03 · Retested and Passed")).toBeVisible();
-    expect(within(row).getByText("Daily Test Report / 2026-10-01.md · line 2")).toBeVisible();
+    expect(within(row).getByText("legacy · Legacy EPS Daily Report / 2026-10-01.md · line 2")).toBeVisible();
   });
 
   it("separates same-day entries and retains complete history under source and date filters", async () => {
@@ -71,7 +73,7 @@ describe("DailyReportAuditPanel", () => {
     expect(screen.getByText("TX6-SAME")).toBeInTheDocument();
   });
 
-  it("defaults to repeat dates in the last seven calendar days, newest first, retaining earlier history", async () => {
+  it("defaults to seven days, excludes first-only and future repeats, and resets to the recent window", async () => {
     vi.setSystemTime(new Date("2026-10-26T16:00:00Z"));
     const user = userEvent.setup();
     const records = [
@@ -105,9 +107,11 @@ describe("DailyReportAuditPanel", () => {
     expect(screen.queryByText("TX6-OLD")).not.toBeInTheDocument();
   });
 
-  it("uses the project Eastern calendar date rather than the UTC date", () => {
+  it("uses the project Eastern calendar date for its recent shortcut", async () => {
+    const user = userEvent.setup();
     vi.setSystemTime(new Date("2026-10-26T02:00:00Z"));
     render(<DailyReportAuditPanel audit={audit} />);
+    await user.click(screen.getByRole("button", { name: /Repeated in last 7 days/ }));
     expect(screen.getByLabelText("Repeat date from")).toHaveValue("2026-10-19");
     expect(screen.getByLabelText("Repeat date through")).toHaveValue("2026-10-25");
     expect(screen.getByText("No repeated test items match these filters.")).toBeInTheDocument();
@@ -132,6 +136,30 @@ describe("DailyReportAuditPanel", () => {
     await user.type(screen.getByLabelText("Search repeated items"), "TX6-PAGE-01");
     expect(screen.getByText("TX6-PAGE-01")).toBeInTheDocument();
     expect(screen.getByText("Page 1 / 1 · 10 per page")).toBeInTheDocument();
+  });
+
+  it("filters cross-site repeats and site while retaining failures, same-day duplicates and full older history", async () => {
+    const user = userEvent.setup();
+    const records = [
+      item("TX6-CROSS", [event("2025-01-01", "Offsite_Test_Report", "tested_and_passed"), event("2026-10-03", "Onsite_Test_Report", "failed"), event("2026-10-04", "Onsite_Test_Report", "retested_and_passed")]),
+      item("TX6-LINES", [event("2026-10-03", "Onsite_Test_Report", "tested"), { ...event("2026-10-03", "Onsite_Test_Report", "tested"), line_number: 3 }]),
+      item("TX6-CROSS-CT01", [event("2026-10-03", "Onsite_Test_Report", "tested")]),
+    ];
+    render(<DailyReportAuditPanel audit={{ ...audit, items: records }} />);
+    expect(screen.getByText("TX6-LINES")).toBeInTheDocument();
+    expect(screen.queryByText("TX6-CROSS-CT01")).not.toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText("Repeat review"), "crossSite");
+    expect(screen.queryByText("TX6-LINES")).not.toBeInTheDocument();
+    expect(screen.getByText("Cross-site repeat")).toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText("Test site"), "onsite");
+    const row = screen.getByText("TX6-CROSS").closest("tr")!;
+    await user.click(within(row).getByText("Report history (3 entries)"));
+    expect(within(row).getByText("2025-01-01 · Tested / Passed")).toBeVisible();
+    expect(within(row).getByText("2026-10-03 · Failed")).toBeVisible();
+    expect(within(row).getByText(/offsite · Offsite Test Report/)).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "All repeat history" }));
+    await user.selectOptions(screen.getByLabelText("Test site"), "offsite");
+    expect(screen.getByText("TX6-CROSS")).toBeInTheDocument();
   });
 
   it("reports unavailable data and source coverage instead of presenting false zeroes", () => {

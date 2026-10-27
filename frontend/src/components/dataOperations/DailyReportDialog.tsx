@@ -119,7 +119,7 @@ export function DailyReportDialog({
   }, [initialReport, open, reportKind]);
 
   const activeSectionKeys: Array<keyof ReportEditorSections> = reportKind === "mv"
-    ? ["tested_and_passed", "partially_tested", "failed", "retested_and_passed"]
+    ? ["tested_and_passed", "failed", "retested_and_passed"]
     : ["failed", "retested_and_passed", "tested"];
 
   const localCounts = useMemo(
@@ -175,13 +175,13 @@ export function DailyReportDialog({
         ? await (async () => {
             await validateMvDailyReport({
               tested_and_passed: sections.tested_and_passed,
-              partially_tested: sections.partially_tested,
+              partially_tested: "",
               failed: sections.failed,
               retested_and_passed: sections.retested_and_passed,
             });
             return saveMvDailyReport(reportName, {
               tested_and_passed: sections.tested_and_passed,
-              partially_tested: sections.partially_tested,
+              partially_tested: "",
               failed: sections.failed,
               retested_and_passed: sections.retested_and_passed,
               overwrite,
@@ -256,12 +256,6 @@ export function DailyReportDialog({
       label: "Tested And Passed",
       tone: "border-emerald-200 bg-emerald-50/50",
       placeholder: "FD01-IAD06-TX6-01A",
-    },
-    {
-      key: "partially_tested",
-      label: "Partially Tested",
-      tone: "border-amber-200 bg-amber-50/50",
-      placeholder: "FD02-IAD06-TX6-01B",
     },
     {
       key: "failed",

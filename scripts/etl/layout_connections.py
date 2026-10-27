@@ -79,6 +79,11 @@ def build_layout_connections(
             "feeder_cable_atp_required": atp_required,
             "feeder_cable_atp_status": atp_status,
             "mv_daily_test_status": latest["status"] if latest else None,
+            "daily_report_history": list({
+                (event["source"], event["report_name"], event["line_number"]): event
+                for result in [*history, *eps_history] for event in result.get("events", [])
+            }.values()),
+            "daily_report_conflict": bool((latest and latest.get("conflict")) or (latest_eps and latest_eps.get("conflict"))),
             "mv_daily_test_date": latest["date"] if latest else None,
             "eps_daily_test_status": latest_eps["status"] if latest_eps else None,
             "eps_daily_test_date": latest_eps["date"] if latest_eps else None,

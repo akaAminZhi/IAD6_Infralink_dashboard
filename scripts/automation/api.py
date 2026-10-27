@@ -21,6 +21,7 @@ from scripts.automation.daily_reports import (
     validate_sections,
     write_mv_report,
     write_report,
+    list_site_reports, read_site_report, validate_site_sections, write_site_report,
 )
 from scripts.automation.mv_comments import (
     add_mv_equipment_comment,
@@ -75,6 +76,14 @@ class MvDailyReportRequest(BaseModel):
 
     tested_and_passed: str = ""
     partially_tested: str = ""
+    failed: str = ""
+    retested_and_passed: str = ""
+    overwrite: bool = False
+
+
+class SiteDailyReportRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    tested_and_passed: str = ""
     failed: str = ""
     retested_and_passed: str = ""
     overwrite: bool = False
@@ -199,6 +208,7 @@ def create_app(
             "eps_tracker_exists": resolved_config.eps_root.is_dir(),
             "report_directory": str(resolved_config.report_dir),
             "mv_report_directory": str(resolved_config.mv_report_dir),
+            "site_report_directories": {site: str(resolved_config.site_report_dir(site)) for site in ("onsite", "offsite")},
             "runtime_directory": str(resolved_config.runtime_root),
             "sessions": {
                 "jc2": _file_status(resolved_config.session_path(user_id, "jc2")),
@@ -427,6 +437,48 @@ def create_app(
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         except (RuntimeError, ValueError) as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    @app.get("/api/automation/site-daily-reports/{site}")
+    def site_reports(site: Literal["onsite", "offsite"]) -> list[dict[str, Any]]:
+        return list_site_reports(resolved_config.site_report_dir(site), site)
+
+    @app.get("/api/automation/site-daily-reports/{site}/{report_name}")
+    def site_report(site: Literal["onsite", "offsite"], report_name: str) -> dict[str, Any]:
+        try:
+            return read_site_report(resolved_config.site_report_dir(site), report_name, site)
+        except FileNotFoundError as exc:
+            raise HTTPException(404, "Daily report not found.") from exc
+        except ReportNameError as exc:
+            raise HTTPException(422, str(exc)) from exc
+
+    @app.post("/api/automation/site-daily-reports/{site}/validate")
+    def validate_site_report(site: Literal["onsite", "offsite"], request: SiteDailyReportRequest) -> dict[str, Any]:
+        try:
+            return validate_site_sections(request.tested_and_passed, request.failed, request.retested_and_passed)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+
+    @app.put("/api/automation/site-daily-reports/{site}/{report_name}", status_code=202)
+    def save_site_report(site: Literal["onsite", "offsite"], report_name: str, request: SiteDailyReportRequest,
+                         user_id: str = Depends(require_operator)) -> dict[str, Any]:
+        if task_manager.has_active_run():
+            raise HTTPException(409, "Wait for the active automation run before saving a daily report.")
+        try:
+            validation = validate_site_sections(request.tested_and_passed, request.failed, request.retested_and_passed)
+            path = write_site_report(resolved_config.site_report_dir(site), report_name,
+                                     validation["sections"], overwrite=request.overwrite)
+        except FileExistsError as exc:
+            raise HTTPException(409, str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        # A saved report remains available even if summary scheduling fails.
+        try:
+            wash_run = task_manager.start_job("wash_daily_reports", owner_user_id=user_id)
+            rebuild_error = None
+        except (RuntimeError, ValueError) as exc:
+            wash_run, rebuild_error = None, str(exc)
+        return {"report": read_site_report(resolved_config.site_report_dir(site), path.name, site),
+                "validation": validation, "wash_run": wash_run, "rebuild_error": rebuild_error}
 
     @app.get("/api/automation/mv-equipment-comments")
     def mv_equipment_comments() -> dict[str, list[dict[str, str]]]:

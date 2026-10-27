@@ -74,6 +74,12 @@ class AutomationConfig:
     def mv_report_dir(self) -> Path:
         return self.eps_root / "MV_Daily_test_report"
 
+    def site_report_dir(self, site: str) -> Path:
+        directories = {"onsite": "Onsite_Test_Report", "offsite": "Offsite_Test_Report"}
+        if site not in directories:
+            raise ValueError("Unknown daily report site.")
+        return self.eps_root / directories[site]
+
     @property
     def neta_report_results_path(self) -> Path:
         return self.eps_root / "NETA_eport_To_GC" / "test_reports_result.json"
@@ -102,7 +108,7 @@ JOB_DEFINITIONS: dict[str, JobDefinition] = {
     "wash_daily_reports": JobDefinition(
         "wash_daily_reports",
         "Rebuild Daily Test Summary",
-        "Clean daily reports and rebuild daily_tested_equipment.md.",
+        "Rebuild EPS + Onsite + Offsite daily_tested_equipment.md without rewriting raw reports.",
         "eps",
         "wash_daily_test_report_data.py",
         ("dry_run",),

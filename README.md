@@ -124,34 +124,56 @@ Open `http://127.0.0.1:5173/data-operations` to:
 - Run the dashboard ETL as a resumable daily workflow.
 - Preview or explicitly confirm CxAlloy uploads as a separate operation.
 
-EPS reports are stored in the tracker `Daily_test_report/` directory and saving
-one rebuilds `daily_tested_equipment.md`. MV reports are stored separately in
-`MV_Daily_test_report/`; saving an MV report does not run the EPS wash script.
+Daily reports now use two new mixed-equipment directories in the tracker:
+`Onsite_Test_Report/` and `Offsite_Test_Report/`. Ordinary equipment, MV devices
+and complete cable IDs share the same report. Use **New Onsite Daily Report** or
+**New Offsite Daily Report** under Data Operations' **Daily Test Report Entry**.
+The Onsite/Offsite panel is visible by default; **Legacy Reports** starts collapsed.
+Both lists share the same table styling. Site lists show the latest report first;
+**Browse All** opens five reports per page, and **Show Latest Only** collapses them.
+Filenames are `YYYY-MM-DD.md`;
+the sections are Tested And Passed, Failed, and Retested And Passed. Duplicate
+lines and cross-section entries are preserved. Saving the same filename in the
+other site is independent; replacing a report within one site requires confirmation.
 
-EPS Test Execution also includes an **EPS + MV Daily Reports / Repeat Test
-Review** panel. It reads both raw report directories and combines Tested/Passed,
-Failed, and Retested And Passed entries; Partially Tested is ignored. The review
-only lists repeated items, defaulting to repeat dates in the last seven calendar
-days including today (America/New_York), newest first, with 10 records per page.
-Previous/Next controls stay below a fixed-height, internally scrollable records
-area, keeping the module height stable on short pages and expanded histories.
-Use All repeat history to review older repeats; Reset returns to the recent
-seven-day view. Filter by item/PDM/report, repeat source/date range, repeated
-dates, same-day entries, or items in both sources. Each item shows its first
-recorded date and every later date; the PDM/equipment association column is omitted.
-Expand Report history for outcomes, source filenames and line numbers. Filters
-retain the item's full history. A repeated complete item ID is a review
-candidate, including planned retests, rather than proof of a repeated procedure.
-Same-day entries are separate from cross-date repeats. M-D filenames infer the
-year from file modification time, matching the existing MV date rule; the UI
-marks these dates with `*`. Missing directories and undated files are visible.
+`Daily_test_report/` and `MV_Daily_test_report/` remain Legacy sources. Do not move
+or reclassify their history. Legacy reports remain available for corrections.
+Partially Tested is ignored everywhere, including old MV reports; the original
+files are retained. Empty new directories are valid. Invalid/undated reports are
+visible in the audit and must be corrected before rebuilding the EPS summary.
 
-The combined evidence is published as `eps_daily_report_audit.json` by
-`python scripts/etl/build_eps_test_execution.py` and the full ETL, honoring
-`IAD6_EPS_TRACKER_ROOT`. Refresh the page after rebuilding. It loads only on EPS
-Test Execution. Existing tracker completion, PDM readiness and KPR calculations
-retain their EPS tracker scope. Unmatched IDs remain available for review;
-tracking-excluded IDs are labeled in the table.
+Deploy the Dashboard and Tracker changes together, including the Tracker's new
+`daily_report_sources.py`. Both the standalone wash script and Tracker Excel
+entry point use that shared reader. The wash job rebuilds
+`daily_tested_equipment.md` without rewriting the source reports. Standalone Excel
+generation refreshes this summary first. Raw legacy MV evidence retains its old
+map/audit scope and does not expand EPS completion totals. New site records enter
+the existing matching and completion flow. Tracking exclusions remain unchanged.
+New-site spaced PHASE IDs are read directly from structured evidence so the legacy
+compact summary parser cannot discard them. Historical EPS completion scope stays
+unchanged. Same-day conflicts between site reports use failure first; a later
+passing result clears failure. This does not replace Infralink NETA/report evidence
+or change energisation markers.
+
+EPS Test Execution's **Daily Reports / Repeated Tests** panel defaults to repeats
+in the last seven calendar days including today, with ten items per page in the
+existing fixed-height region.
+Any complete normalized test ID appearing twice is repeated, including same-day
+entries, duplicate lines, failures, retests and Offsite-to-Onsite testing. Different
+phases, child test items and tracker aliases are not merged. Filter all repeats,
+cross-site repeats, same-day repeats, cross-date repeats, site, source, date or ID.
+Filters preserve the full expanded evidence, including filenames and line numbers.
+Reset returns to the recent seven-day view using the America/New_York calendar;
+All repeat history clears the date bounds. Legacy M-D dates infer the year from file modification
+time and are marked with `*`. The summary file is never counted as another test.
+
+The audit is published as `eps_daily_report_audit.json` by the EPS builder and
+normal ETL, honoring `IAD6_EPS_TRACKER_ROOT`. Equipment/PDM, Power Plan, MV and
+Layout details include applicable source histories. After saving reports, verify
+the summary rebuild succeeds, run Dashboard ETL, then refresh. A saved report is
+retained if rebuilding fails so it can be retried. Restart the automation service
+and frontend after installing the new API/UI; static deployments need rebuilt
+code and refreshed generated datasets. No vendor upload is needed for this change.
 
 The automation API listens only on `127.0.0.1:8765`. It uses the sibling
 `IAD6_EPS_Testing_Tracker` directory by default. Set `IAD6_EPS_TRACKER_ROOT`

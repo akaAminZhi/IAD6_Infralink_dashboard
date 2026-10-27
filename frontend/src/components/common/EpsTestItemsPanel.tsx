@@ -7,6 +7,7 @@ import {
 import { formatDateTime, formatNumber } from "../../utils/formatters";
 import { EmptyState } from "./EmptyState";
 import { StatusBadge } from "./StatusBadge";
+import { DailyTestHistory } from "./DailyTestHistory";
 
 interface EpsTestItemsPanelProps {
   items: EpsTestItemRecord[];
@@ -81,6 +82,7 @@ export function EpsTestItemsPanel({ items }: EpsTestItemsPanelProps) {
                 >
                   <td className="px-3 py-2 font-medium">
                     {item.equipment_name ?? item.equipment_key ?? "Unnamed test item"}
+                    <DailyTestHistory events={item.daily_report_history} conflict={item.daily_report_conflict} />
                   </td>
                   <td className="px-3 py-2">{item.tracker_type ?? item.tracker_equipment_type ?? "--"}</td>
                   <td className="px-3 py-2">

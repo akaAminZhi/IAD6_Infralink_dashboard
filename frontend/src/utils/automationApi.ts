@@ -14,6 +14,7 @@ import type {
   NetaReportReviewsResponse,
   SavedDailyReport,
   SavedMvDailyReport,
+  SiteDailyReport, SavedSiteDailyReport, TestSite,
 } from "../types/automation";
 import { isLocalOperationsMode } from "./localOperations";
 
@@ -66,6 +67,18 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export function getAutomationHealth() {
   return request<AutomationHealth>("/health");
+}
+
+export function getSiteDailyReports(site: TestSite) {
+  return request<SiteDailyReport[]>(`/site-daily-reports/${site}`);
+}
+
+export function saveSiteDailyReport(site: TestSite, name: string, sections: {
+  tested_and_passed: string; failed: string; retested_and_passed: string; overwrite: boolean;
+}) {
+  return request<SavedSiteDailyReport>(`/site-daily-reports/${site}/${encodeURIComponent(name)}`, {
+    method: "PUT", body: JSON.stringify(sections),
+  });
 }
 
 export function getAutomationJobs() {

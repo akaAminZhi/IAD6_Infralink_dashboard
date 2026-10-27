@@ -39,6 +39,41 @@ def wait_until_idle(manager: TaskManager) -> None:
     assert not manager.has_active_run()
 
 
+def test_site_reports_preserve_duplicates_scope_overwrites_and_validate_paths(tmp_path: Path) -> None:
+    client, config, manager = make_client(tmp_path)
+    payload = {"tested_and_passed": "TX6-01\nTX6-01\nUTILITY6-01-A PHASE", "failed": "TX6-01"}
+    url = "/api/automation/site-daily-reports/onsite/2026-10-27.md"
+    saved = client.put(url, json=payload)
+    assert saved.status_code == 202
+    wait_until_idle(manager)
+    assert saved.json()["report"]["counts"]["tested_and_passed"] == 3
+    assert client.get(url).json()["sections"]["failed"] == ["TX6-01"]
+    assert (config.site_report_dir("onsite") / "2026-10-27.md").read_text().count("- TX6-01") == 3
+    assert client.put(url, json=payload).status_code == 409
+    offsite = client.put(url.replace("onsite", "offsite"), json=payload)
+    assert offsite.status_code == 202
+    wait_until_idle(manager)
+    assert len(client.get("/api/automation/site-daily-reports/onsite").json()) == 1
+    assert client.put(url, json={**payload, "overwrite": True}).status_code == 202
+    wait_until_idle(manager)
+    assert client.put(url.replace("2026-10-27", "10-27"), json=payload).status_code == 422
+    assert client.put(url.replace("onsite", "unknown"), json=payload).status_code == 422
+    assert client.put(url, json={"partially_tested": "TX6-01"}).status_code == 422
+    assert client.post("/api/automation/site-daily-reports/onsite/validate", json={"failed": "not an ID"}).status_code == 422
+
+
+def test_site_report_retained_if_summary_cannot_be_scheduled(tmp_path: Path, monkeypatch) -> None:
+    client, config, manager = make_client(tmp_path)
+    def unavailable(*args, **kwargs):
+        raise RuntimeError("Worker unavailable")
+    monkeypatch.setattr(manager, "start_job", unavailable)
+    result = client.put("/api/automation/site-daily-reports/offsite/2026-10-27.md", json={"failed": "TX6-01"})
+    assert result.status_code == 202
+    assert result.json()["wash_run"] is None
+    assert result.json()["rebuild_error"] == "Worker unavailable"
+    assert (config.site_report_dir("offsite") / "2026-10-27.md").is_file()
+
+
 def test_health_and_daily_report_round_trip(tmp_path: Path) -> None:
     client, config, manager = make_client(tmp_path)
     health = client.get("/api/automation/health")
@@ -119,7 +154,7 @@ def test_mv_daily_report_round_trip_does_not_start_eps_wash(tmp_path: Path) -> N
 
     loaded = client.get("/api/automation/mv-daily-reports/8-19.md")
     assert loaded.status_code == 200
-    assert loaded.json()["sections"]["partially_tested"] == ["FD2-B"]
+    assert loaded.json()["sections"]["partially_tested"] == []
     reports = client.get("/api/automation/mv-daily-reports")
     assert reports.status_code == 200
     assert reports.json()[0]["report_name"] == "8-19.md"

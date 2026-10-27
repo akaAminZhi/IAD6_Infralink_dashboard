@@ -35,11 +35,12 @@ class SchemaRecord:
 @dataclass(slots=True)
 class EpsDailyReportEvent(SchemaRecord):
     date: str
-    source: Literal["Daily_test_report", "MV_Daily_test_report"]
+    source: Literal["Daily_test_report", "MV_Daily_test_report", "Onsite_Test_Report", "Offsite_Test_Report"]
     report_name: str
     line_number: int
     status: Literal["tested", "tested_and_passed", "failed", "retested_and_passed"]
     date_basis: Literal["filename", "filename_month_day_file_year"]
+    site: Literal["legacy", "onsite", "offsite"] = "legacy"
 
 
 @dataclass(slots=True)
@@ -51,6 +52,8 @@ class EpsDailyReportItem(SchemaRecord):
     repeated_on_same_day: bool
     cross_source: bool
     test_tracking_required: bool
+    repeated: bool = False
+    cross_site: bool = False
     pdm_name: str | None = None
     module_equipment: str | None = None
     module_match_status: str = "unmatched"

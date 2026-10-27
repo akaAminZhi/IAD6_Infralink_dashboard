@@ -177,7 +177,7 @@ describe("DailyReportDialog", () => {
     );
   });
 
-  it("saves MV reports with Partially Tested without starting the EPS wash", async () => {
+  it("edits legacy MV reports without a Partial field", async () => {
     const user = userEvent.setup();
     const onSaved = vi.fn();
     vi.mocked(validateMvDailyReport).mockResolvedValue(mvValidation);
@@ -201,22 +201,19 @@ describe("DailyReportDialog", () => {
       screen.getByPlaceholderText("FD01-IAD06-TX6-01A"),
       "FD01-IAD06-TX6-01A",
     );
-    await user.type(
-      screen.getByPlaceholderText("FD02-IAD06-TX6-01B"),
-      "FD02-IAD06-TX6-01B",
-    );
+    expect(screen.queryByText("Partially Tested")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Save Report" }));
 
     await waitFor(() => expect(onSaved).toHaveBeenCalledWith(savedMv));
     expect(validateMvDailyReport).toHaveBeenCalledWith({
       tested_and_passed: "FD01-IAD06-TX6-01A",
-      partially_tested: "FD02-IAD06-TX6-01B",
+      partially_tested: "",
       failed: "",
       retested_and_passed: "",
     });
     expect(saveMvDailyReport).toHaveBeenCalledWith(
       "7-30",
-      expect.objectContaining({ partially_tested: "FD02-IAD06-TX6-01B", overwrite: false }),
+      expect.objectContaining({ partially_tested: "", overwrite: false }),
     );
     expect(saveDailyReport).not.toHaveBeenCalled();
   });

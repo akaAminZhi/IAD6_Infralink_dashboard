@@ -134,7 +134,7 @@ def test_build_power_plan_extracts_and_matches_equipment_annotations(tmp_path: P
     assert connection_record["feeder_cable_atp_files"][0]["url"].endswith(
         "/FD01-IAD06-PDU6-01A-2/FD01%20Cable%20ATP.pdf"
     )
-    assert connection_record["mv_daily_test_history"] == [
+    assert [{key: event[key] for key in ("date", "status", "report_name")} for event in connection_record["mv_daily_test_history"]] == [
         {
             "date": "2026-08-18",
             "status": "tested_and_passed",

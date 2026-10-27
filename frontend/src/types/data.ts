@@ -262,6 +262,7 @@ export interface PowerPlanRect {
 }
 
 export interface LayoutEquipmentRecord {
+  daily_report_history?: EpsDailyReportEvent[];
   annotation_id: string;
   equipment_key: string;
   label: string;
@@ -278,6 +279,8 @@ export interface LayoutEquipmentRecord {
 }
 
 export interface LayoutCableRecord {
+  daily_report_history?: EpsDailyReportEvent[];
+  daily_report_conflict?: boolean;
   cable_id: string;
   equipment_type: string;
   source_equipment_key: string | null;
@@ -344,6 +347,8 @@ export interface FeederCableAtpFile {
 }
 
 export interface PowerPlanAnnotation {
+  daily_report_history?: EpsDailyReportEvent[];
+  daily_report_conflict?: boolean;
   annotation_id: string;
   kind: "equipment" | "region" | string;
   annotation_type?: string | null;
@@ -520,7 +525,8 @@ export interface EpsDailyHistorySummary {
 
 export interface EpsDailyReportEvent {
   date: string;
-  source: "Daily_test_report" | "MV_Daily_test_report";
+  source: "Daily_test_report" | "MV_Daily_test_report" | "Onsite_Test_Report" | "Offsite_Test_Report";
+  site?: "legacy" | "onsite" | "offsite";
   report_name: string;
   line_number: number;
   status: "tested" | "tested_and_passed" | "failed" | "retested_and_passed";
@@ -534,6 +540,8 @@ export interface EpsDailyReportItem {
   repeated_on_different_dates: boolean;
   repeated_on_same_day: boolean;
   cross_source: boolean;
+  repeated?: boolean;
+  cross_site?: boolean;
   test_tracking_required: boolean;
   pdm_name: string | null;
   module_equipment: string | null;
@@ -541,14 +549,15 @@ export interface EpsDailyReportItem {
 }
 
 export interface EpsDailyReportAudit {
-  sources: Record<EpsDailyReportEvent["source"], {
+  sources: Partial<Record<EpsDailyReportEvent["source"], {
     available: boolean;
     report_count: number;
     event_count: number;
     files: SourceFileMetadata[];
     skipped_files: string[];
-  }>;
+  }>>;
   item_count: number;
+  cross_site_item_count?: number;
   event_count: number;
   repeated_item_count: number;
   same_day_item_count: number;
@@ -637,6 +646,8 @@ export interface EpsModuleExecutionRecord {
 }
 
 export interface EpsTestItemRecord {
+  daily_report_history?: EpsDailyReportEvent[];
+  daily_report_conflict?: boolean;
   item_status?: string | null;
   source_status?: string | null;
   pdm_name?: string | null;

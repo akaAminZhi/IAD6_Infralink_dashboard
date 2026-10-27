@@ -91,17 +91,17 @@ def test_mv_report_validation_format_and_atomic_write(tmp_path: Path) -> None:
 
     assert result["sections"] == {
         "tested_and_passed": ["FD1-A"],
-        "partially_tested": ["FD3-C"],
+        "partially_tested": [],
         "failed": ["FD4-D", "FD5-E"],
         "retested_and_passed": ["FD2-B", "FD6-F"],
     }
     assert result["counts"] == {
         "tested_and_passed": 1,
-        "partially_tested": 1,
+        "partially_tested": 0,
         "failed": 2,
         "retested_and_passed": 2,
     }
-    assert len(result["warnings"]) == 2
+    assert len(result["warnings"]) == 1
 
     report_dir = tmp_path / "MV_Daily_test_report"
     sections = result["sections"]
@@ -133,4 +133,4 @@ TX6-06R""",
         "TX6-06F",
         "TX6-06R",
     ]
-    assert result["sections"]["partially_tested"] == ["TX6-06B", "TX6-06D"]
+    assert result["sections"]["partially_tested"] == []

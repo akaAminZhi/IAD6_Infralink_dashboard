@@ -180,6 +180,12 @@ def build_layout_plan(
         aligned_floors[spec["floor_id"]] = floor
     mv_test_index, mv_report_files = build_mv_test_index(mv_report_dir)
     eps_daily_test_index, eps_daily_report_files = build_eps_daily_test_index(eps_daily_report_dir)
+    for record in fixed_equipment + [item for floor in floors for item in floor["equipment"]]:
+        history = [*mv_test_index.get(record["equipment_key"], []), *eps_daily_test_index.get(record["equipment_key"], [])]
+        record["daily_report_history"] = list({
+            (event["source"], event["report_name"], event["line_number"]): event
+            for result in history for event in result.get("events", [])
+        }.values())
     feeder_cable_atp_index = build_feeder_cable_atp_index(feeder_cable_atp_dir)
     layout_keys = {record["equipment_key"] for record in fixed_equipment + [record for floor in floors for record in floor["equipment"]]}
     cables, cable_diagnostics = build_layout_connections(

@@ -48,7 +48,8 @@ def test_same_day_overlap_conflicts_and_duplicate_lines_do_not_imply_a_later_ret
     audit = build_daily_report_audit(tmp_path)
     item = audit["items"][0]
     assert audit["event_count"] == 4
-    assert audit["repeated_item_count"] == 0
+    assert audit["repeated_item_count"] == 1
+    assert item["repeated"] is True
     assert audit["same_day_item_count"] == 1
     assert item["test_dates"] == ["2026-10-02"]
     assert item["repeated_on_same_day"] is True

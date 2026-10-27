@@ -32,6 +32,25 @@ Most dashboard pages read static JSON directly from `frontend/public/data/`.
 Data Operations, MV comments and local NETA review editing use the automation
 API; no database is required.
 
+## Onsite / Offsite daily reports
+
+Data Operations creates mixed equipment/MV/cable reports under Onsite or Offsite.
+The panel is inside Daily Test Report Entry and stays expanded. The original
+EPS/MV report lists are Legacy correction views, collapsed by default. New reports have
+Passed, Failed and Retested And Passed sections; Partial is excluded from both
+new and historical evidence. Duplicate records are allowed and retained.
+Site and Legacy lists share one table component, including fonts, status colors,
+column widths and Edit icons. Site lists default to the latest report; Browse All
+shows five reports per page, with Show Latest Only to return to the compact view.
+
+EPS Test Execution defaults to repeats in the last seven Eastern calendar days
+including today, with All repeat history available, and offers cross-site,
+same-day, cross-date, site/source/date and ID filters. Details preserve complete
+provenance. Existing equipment and map status rules consume the combined results;
+NETA/report evidence and energisation remain separate. Deploy the sibling Tracker's
+shared reader and updated wash/Excel entry points with these frontend/backend
+changes, restart services, run ETL and refresh the browser.
+
 ## Page loading
 
 `python scripts/start_dashboard.py --preview` builds compiled assets and serves

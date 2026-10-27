@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -45,6 +45,8 @@ vi.mock("../utils/automationApi", () => {
     getDailyReports: vi.fn(),
     getMvDailyReport: vi.fn(),
     getMvDailyReports: vi.fn(),
+    getSiteDailyReports: vi.fn().mockResolvedValue([]),
+    saveSiteDailyReport: vi.fn(),
     getRunLogs: vi.fn(),
     resumeAutomationRun: vi.fn(),
     runAutomationJob: vi.fn(),
@@ -214,6 +216,13 @@ describe("DataOperationsPage", () => {
     render(<DataOperationsPage onDashboardReload={onDashboardReload} />);
 
     expect(await screen.findByText("Local service connected")).toBeInTheDocument();
+    const entryToggle = screen.getByRole("button", { name: "Legacy Reports" });
+    expect(entryToggle).toHaveAttribute("aria-expanded", "false");
+    expect(within(screen.getByRole("region", { name: "Daily Test Report Entry" })).getByRole("button", { name: "New Onsite Daily Report" })).toBeVisible();
+    expect(screen.queryByText("7-30.md")).not.toBeInTheDocument();
+    await user.click(entryToggle);
+    expect(entryToggle).toHaveAttribute("aria-expanded", "true");
+    expect(within(screen.getByRole("region", { name: "Daily Test Report Entry" })).getByRole("button", { name: "New Onsite Daily Report" })).toBeVisible();
     expect(screen.getByText("7-30.md")).toBeInTheDocument();
     expect(screen.queryByText("7-29.md")).not.toBeInTheDocument();
     await waitFor(() => expect(onDashboardReload).toHaveBeenCalledTimes(1));
@@ -222,6 +231,10 @@ describe("DataOperationsPage", () => {
     await user.click(screen.getByRole("button", { name: "Browse All (6)" }));
     expect(screen.getByText("7-29.md")).toBeInTheDocument();
     expect(screen.queryByText("7-25.md")).not.toBeInTheDocument();
+    await user.click(entryToggle);
+    expect(screen.getByRole("button", { name: "New Offsite Daily Report" })).toBeVisible();
+    expect(screen.queryByText("7-30.md")).not.toBeInTheDocument();
+    expect(entryToggle).toHaveAttribute("aria-expanded", "false");
 
     await user.click(screen.getByRole("button", { name: "Start Daily Refresh" }));
     await waitFor(() =>
@@ -229,7 +242,7 @@ describe("DataOperationsPage", () => {
     );
   });
 
-  it("switches to MV reports and opens the MV report editor", async () => {
+  it("browses legacy MV reports and opens the new Offsite editor", async () => {
     const user = userEvent.setup();
     vi.mocked(getAutomationHealth).mockResolvedValue(health);
     vi.mocked(getAutomationJobs).mockResolvedValue([]);
@@ -240,16 +253,18 @@ describe("DataOperationsPage", () => {
 
     render(<DataOperationsPage onDashboardReload={vi.fn()} />);
 
-    await user.click(await screen.findByRole("button", { name: "MV Reports (1)" }));
+    await user.click(await screen.findByRole("button", { name: "Legacy Reports" }));
+    await user.click(await screen.findByRole("button", { name: "Legacy MV Reports (1)" }));
     expect(screen.getByText("C:/tracker/MV_Daily_test_report", { exact: false })).toBeInTheDocument();
-    expect(screen.getByText("Partially Tested")).toBeInTheDocument();
+    expect(screen.queryByText("Partially Tested")).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "New MV Daily Report" }));
-    expect(screen.getByRole("heading", { name: "New MV Daily Test Report" })).toBeInTheDocument();
-    expect(screen.getByText("Saved separately from EPS reports; no EPS wash is started.")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "New Offsite Daily Report" }));
+    expect(screen.getByRole("heading", { name: "Offsite Daily Test Report" })).toBeInTheDocument();
+    expect(screen.queryByText("Partially Tested")).not.toBeInTheDocument();
   });
 
   it("keeps existing EPS reports visible when the MV endpoint is unavailable", async () => {
+    const user = userEvent.setup();
     vi.mocked(getAutomationHealth).mockResolvedValue(health);
     vi.mocked(getAutomationJobs).mockResolvedValue([]);
     vi.mocked(getAutomationRuns).mockResolvedValue([]);
@@ -258,7 +273,8 @@ describe("DataOperationsPage", () => {
 
     render(<DataOperationsPage onDashboardReload={vi.fn()} />);
 
+    await user.click(await screen.findByRole("button", { name: "Legacy Reports" }));
     expect(await screen.findByText("7-30.md")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "EPS Reports (1)" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Legacy EPS Reports (1)" })).toBeInTheDocument();
   });
 });

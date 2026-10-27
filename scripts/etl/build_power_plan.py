@@ -13,8 +13,10 @@ import fitz
 
 try:
     from .json_utils import file_metadata, load_records_json, write_json
+    from .daily_report_sources import history_index, parse_events, read_report_family, report_date
 except ImportError:
     from json_utils import file_metadata, load_records_json, write_json
+    from daily_report_sources import history_index, parse_events, read_report_family, report_date
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -116,58 +118,27 @@ def mv_report_date(path: Path) -> str | None:
 
 
 def parse_mv_report(path: Path) -> dict[str, list[str]]:
-    raw_sections = {name: [] for name in MV_SECTION_NAMES.values()}
-    current_section: str | None = None
-    for raw_line in path.read_text(encoding="utf-8-sig").splitlines():
-        line = raw_line.strip()
-        if line.startswith("#"):
-            current_section = MV_SECTION_NAMES.get(line.lstrip("#").strip().lower())
-            continue
-        if current_section is None:
-            continue
-        item = re.sub(r"^\s*(?:(?:[-*+])|(?:\d+[.)]))\s+", "", raw_line).strip()
-        if item and " " not in item and "-" in item and any(char.isdigit() for char in item):
-            raw_sections[current_section].append(item)
-
-    kept_keys: set[str] = set()
-    sections = {name: [] for name in raw_sections}
-    for section_name in MV_SECTION_PRIORITY:
-        seen_in_section: set[str] = set()
-        for item in raw_sections[section_name]:
-            key = normalize_equipment_key(item)
-            if not key or key in kept_keys or key in seen_in_section:
-                continue
-            kept_keys.add(key)
-            seen_in_section.add(key)
-            sections[section_name].append(item)
+    sections = {name: [] for name in MV_SECTION_NAMES.values()}
+    for event in parse_events(path.read_text(encoding="utf-8-sig"), source="MV_Daily_test_report",
+                              report_name=path.name, day=report_date(path) or ""):
+        status = "tested_and_passed" if event["status"] == "tested" else event["status"]
+        sections[status].append(event["equipment_key"])
+    # Keep the legacy within-report precedence without treating Partial as evidence.
+    kept = set()
+    for status in MV_SECTION_PRIORITY:
+        sections[status] = list(dict.fromkeys(item for item in sections[status] if item not in kept))
+        kept.update(sections[status])
     return sections
 
 
-def build_mv_test_index(
-    report_dir: Path,
-) -> tuple[dict[str, list[dict[str, str]]], list[Path]]:
-    if not report_dir.exists():
-        return {}, []
-
-    dated_reports = [
-        (report_date, path)
-        for path in report_dir.glob("*.md")
-        if (report_date := mv_report_date(path)) is not None
-    ]
-    dated_reports.sort(key=lambda item: (item[0], item[1].name.lower()))
-    index: dict[str, list[dict[str, str]]] = {}
-    for report_date, path in dated_reports:
-        for status, items in parse_mv_report(path).items():
-            for item in items:
-                key = normalize_equipment_key(item)
-                index.setdefault(key, []).append(
-                    {
-                        "date": report_date,
-                        "status": status,
-                        "report_name": path.name,
-                    }
-                )
-    return index, [path for _, path in dated_reports]
+def build_mv_test_index(report_dir: Path):
+    events, files = read_report_family(report_dir, "MV_Daily_test_report")
+    index = history_index(events)
+    for history in index.values():
+        for event in history:
+            if event["status"] == "tested":
+                event["status"] = "tested_and_passed"
+    return index, files
 
 
 def slugify(value: str) -> str:
@@ -305,6 +276,8 @@ def annotation_record(
         "mv_daily_test_date": latest_mv_test["date"] if latest_mv_test else None,
         "mv_daily_tested_dates": list(dict.fromkeys(mv_tested_dates)),
         "mv_daily_test_history": mv_test_history,
+        "daily_report_history": [event for result in mv_test_history for event in result.get("events", [])],
+        "daily_report_conflict": bool(latest_mv_test and latest_mv_test.get("conflict")),
         "feeder_cable_atp_names": feeder_cable_atp_names,
         "feeder_cable_atp_files": feeder_cable_atp_files,
         "feeder_cable_atp_required": feeder_cable_atp_required,

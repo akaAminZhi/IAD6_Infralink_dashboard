@@ -1,5 +1,75 @@
 ﻿# Codex Handoff
 
+## Current update (2026-10-27): Onsite / Offsite daily reports
+
+- Implemented mixed-equipment `Onsite_Test_Report/` and `Offsite_Test_Report/`
+  sources in the sibling Tracker. Both currently exist and are empty. The 95
+  EPS and 27 MV original reports remain Legacy; all 122 report hashes are unchanged.
+- Deploy both projects together. The Tracker now owns `daily_report_sources.py`,
+  used by its updated wash/Excel entry points and the Dashboard adapter. Include
+  those three Python files and new Tracker tests when transferring this work;
+  they are outside this Dashboard repository. Wash rebuilds the compatibility
+  summary without rewriting raw reports; undated inputs stop summary replacement.
+- New entries have Passed, Failed and Retested And Passed only; historical
+  Partial evidence is ignored. New-site complete IDs, including PHASE, feed EPS
+  progress; legacy MV stays outside EPS completion scope. Same-day conflicts
+  across site reports use failure first; later passing evidence clears failure.
+  Compound utility IDs (WAY1&2 and whitespace/-EXTERNAL suffixes) are preserved.
+- Data Operations has site entry/list/edit views with fixed site enums, ISO date
+  names, per-site overwrite confirmation, atomic saves and summary jobs. Legacy
+  lists remain correction views. Duplicate lines/cross-section entries survive.
+- UI follow-up: the Onsite/Offsite panel now sits inside Daily Test Report Entry
+  and stays visible. Only Legacy Reports defaults to collapsed, with its existing
+  latest/all-history controls inside. The fold control exposes aria-expanded.
+- Onsite/Offsite editors now match the Legacy EPS dialog: wide modal, red Failed,
+  teal Retested And Passed and green Tested panels in that order, live nonblank
+  line counts, matching monospace/resizable inputs, placeholders and fixed footer.
+  Report date stays as a date picker. The Tested label still saves to the existing
+  tested_and_passed field; duplicates and per-site overwrite behavior are retained.
+- Editor follow-up validation: strict preview build passed; real Chromium reviewed
+  both dialogs, including 17-row counts/scrolling and duplicate-preserving saves,
+  with no page errors. All 331 frontend tests passed across runs: the broad run
+  passed 285, a timed-out export test passed individually, and the 45 Layout tests
+  passed after its worker failed to start. The 13 editor/operations tests also
+  passed across targeted runs. Artifacts: `runtime/automation/report-editor-ui*`.
+  Original user build-info bytes restored; no backend/data changes in this follow-up.
+- List follow-up: site and Legacy reports now use the same DailyReportTable,
+  including fixed column widths/order, uppercase muted headers, status colors,
+  Modified formatting and FileText/ghost Edit controls. Site tabs and pagination
+  use the Legacy typography, spacing and chevrons. Site reports default to latest
+  only; Browse All opens five reports per page, sharing the Legacy page-size
+  constant. Show Latest Only and site changes reset pagination appropriately.
+- List validation: 9 site/operations tests passed; strict preview build passed.
+  Chromium compared actual fonts/colors/padding, column coordinates and Edit SVGs
+  between site and Legacy rows and found them identical; verified an eight-report
+  latest/all/page-two flow with no page errors. Artifacts are in ignored
+  `runtime/automation/report-list-ui*`. No backend/data changes or service restart.
+- Repeated Tests defaults to the last seven Eastern calendar days including
+  today and filters all/cross-site/same-day/
+  cross-date/multi-source repeats, site, source, date and ID. Every repeated full
+  normalized ID counts, including failures and retests. Source lines and complete
+  history remain visible; aliases and different phases are not merged. Current
+  evidence: 2,443 EPS + 90 MV events, 101 repeated IDs, zero same-day or cross-site
+  repeats. Equipment/PDM, Power Plan, MV and Layout details carry applicable
+  histories. NETA/report and energisation rules are unchanged.
+- Reset restores the seven-day window with all repeat types; All repeat history
+  clears date bounds. Date filters apply to actual repeated occurrences, so a
+  first event in the window with a future-only repeat does not appear as recent.
+- Final validation: Dashboard pytest 288 passed; Tracker pytest 180 passed;
+  all 50 frontend files / 331 tests passed (forks, one worker); 17 Node tests
+  passed. Preview-mode npm build, including strict TypeScript, passed with existing
+  chunk/plugin warnings. An initial thread startup timeout was resolved by forks;
+  an existing stale EPS empty-state assertion was corrected to current wording.
+- Full offline ETL completed (18 steps). All 95 historical EPS dates retain
+  identical cumulative passing/failing evidence versus the original summary.
+  Real Chromium compiled-preview smoke verified cross-site/earliest-site filters,
+  full history, the three-field editor and duplicate save payloads; no page errors.
+  Operational API calls in this smoke used in-memory fixtures only.
+- Backups/checks/logs/smoke/screenshots: ignored `runtime/automation/onsite-offsite*`.
+  Original user-modified build-info bytes restored. No commit, real test-report
+  creation, vendor write or user service restart. Restart backend/frontend after
+  syncing, then refresh. Compiled assets and live datasets are rebuilt locally.
+
 ## Current update (2026-10-27): Layout cable missing-report warning
 
 - Green updated cables without a listed Feeder Cable ATP or NETA report now

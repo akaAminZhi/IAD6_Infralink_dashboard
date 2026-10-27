@@ -154,6 +154,20 @@ export interface SavedMvDailyReport {
   validation: MvDailyReportValidation;
 }
 
+export type TestSite = "onsite" | "offsite";
+export interface SiteDailyReport {
+  report_name: string;
+  site: TestSite;
+  modified_at: string;
+  sections: { tested_and_passed: string[]; failed: string[]; retested_and_passed: string[] };
+  counts: { tested_and_passed: number; failed: number; retested_and_passed: number };
+}
+export interface SavedSiteDailyReport {
+  report: SiteDailyReport;
+  wash_run: AutomationRun | null;
+  rebuild_error: string | null;
+}
+
 export interface MvEquipmentComment {
   comment_id: string;
   annotation_id: string;

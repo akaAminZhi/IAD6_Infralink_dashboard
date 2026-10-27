@@ -1,3 +1,4 @@
+import { DailyTestHistory } from "../components/common/DailyTestHistory";
 import {
   useEffect,
   useMemo,
@@ -994,6 +995,7 @@ function EquipmentDetail({
                     <span>{item.tracker_type ?? "Unknown tracker"}</span>
                     {item.date_tested && <span>{item.date_tested}</span>}
                   </div>
+                  <DailyTestHistory events={item.daily_report_history} conflict={item.daily_report_conflict} />
                   {(item.follow_up_req || item.comments) && (
                     <p
                       className={cn(

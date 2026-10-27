@@ -291,8 +291,19 @@ API groups:
 The daily pipeline runs preflight, JC2 workbook refresh, daily report wash,
 NETA/Feeder ATP/issue downloads, GC organization, and dashboard ETL. It stops at
 the first failure and can resume from a failed/auth-required/interrupted step.
-Saving an EPS daily report atomically writes the Markdown file and starts the
-wash job; saving an MV report does not run the EPS wash.
+Onsite/Offsite daily-report endpoints accept a fixed site enum and ISO date
+filenames. Their three-section editor preserves duplicate evidence. Saves are
+atomic and schedule the allowlisted wash job; saved evidence remains recoverable
+if scheduling fails. Legacy endpoints remain for corrections. The shared parser
+and daily result projection live in the sibling Tracker's `daily_report_sources.py`;
+Dashboard adapters load that module using the configured tracker root. Both projects
+must be deployed together. It reads all four raw source directories, keeps exact
+normalized IDs and source line numbers, ignores Partial, and projects daily status
+separately from the raw audit. The EPS compatibility summary excludes legacy MV;
+MV and Layout projections retain their historical source scopes plus new site
+records. Cross-report same-day site conflicts use failure first. Rebuilding does
+not normalize or rewrite raw files. The standalone Tracker Excel entry point
+refreshes its summary through the same module before using it.
 
 Commands are assembled from `JOB_DEFINITIONS`; clients cannot submit script
 paths or arbitrary commands. Options are validated per job. Live CxAlloy upload

@@ -298,7 +298,8 @@ def clean_daily_equipment_name(line: str) -> str | None:
     if line.lower() in ignored_words or line.startswith("#"):
         return None
 
-    if " " in line or "-" not in line or not any(char.isdigit() for char in line):
+    # Legacy exports use both NBSP and ordinary whitespace before -EXTERNAL.
+    if (" " in line and not re.fullmatch(r"\S+\s+-EXTERNAL", line, re.I)) or "-" not in line or not any(char.isdigit() for char in line):
         return None
 
     return line
@@ -2191,6 +2192,12 @@ def build_eps_test_execution(
     tracker_path: str | Path | None = None,
 ) -> dict[str, Any]:
     tracker_input_path = Path(tracker_path) if tracker_path else get_tracker_input_path()
+    if DAILY_TESTED_EQUIPMENT_PATH.parent == EPS_ROOT and any(
+        next((EPS_ROOT / source).glob("*.md"), None) is not None
+        for source in ("Daily_test_report", "Onsite_Test_Report", "Offsite_Test_Report")
+    ):
+        from scripts.etl.daily_report_sources import rebuild_summary
+        rebuild_summary(EPS_ROOT, DAILY_TESTED_EQUIPMENT_PATH)
     missing_inputs = [
         path
         for path in [
@@ -2212,6 +2219,21 @@ def build_eps_test_execution(
         DAILY_TESTED_EQUIPMENT_PATH,
         reference_date=current_date,
     )
+    # Keep the legacy completion scope while reading every valid new-site ID
+    # from structured evidence (including PHASE IDs the old compact parser skips).
+    if DAILY_TESTED_EQUIPMENT_PATH.parent == EPS_ROOT:
+        from scripts.etl.daily_report_sources import EPS_SOURCES, daily_results, read_events
+        raw_events, _ = read_events(EPS_ROOT, EPS_SOURCES)
+        site_items = {(event["equipment_key"], event["date"]) for event in raw_events if event["site"] != "legacy"}
+        for event in daily_results(raw_events):
+            if (event["equipment_key"], event["date"]) not in site_items:
+                continue
+            values = daily_history.records_by_date.setdefault(date.fromisoformat(event["date"]),
+                                                               {"tested": set(), "retested": set(), "failed": set()})
+            for items in values.values():
+                items.discard(event["equipment_key"])
+            field = "failed" if event["status"] == "failed" else "retested" if event["status"] == "retested_and_passed" else "tested"
+            values[field].add(event["equipment_key"])
     current_source_date = daily_history.latest_date
     if current_source_date is None:
         raise ValueError(
@@ -2388,6 +2410,20 @@ def build_eps_test_execution(
     # Keep raw evidence independent of washed EPS tracker totals. This includes
     # MV results and unmatched IDs without inventing tracker completion.
     audit = build_daily_report_audit(EPS_ROOT)
+    evidence_by_key = {item["equipment_key"]: item["events"] for item in audit["items"]}
+    from scripts.etl.daily_report_sources import EPS_SOURCES, daily_results
+    latest_evidence = {entry["equipment_key"]: entry for entry in daily_results(
+        {"equipment_key": item["equipment_key"], **event}
+        for item in audit["items"] for event in item["events"] if event["source"] in EPS_SOURCES
+    )}
+    for records in (test_items, failed_items, incomplete_items, not_found_records):
+        for record in records:
+            record["daily_report_history"] = evidence_by_key.get(
+                compact_equipment_key(record.get("equipment_key") or record.get("equipment_name")), []
+            )
+            record["daily_report_conflict"] = bool(latest_evidence.get(
+                compact_equipment_key(record.get("equipment_key") or record.get("equipment_name")), {}
+            ).get("conflict"))
     module_link_index = build_module_link_index(module_links)
     for item in audit["items"]:
         link, match_status = find_module_link_for_equipment_key(

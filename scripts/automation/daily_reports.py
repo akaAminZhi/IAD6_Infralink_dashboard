@@ -182,7 +182,7 @@ def validate_mv_sections(
 ) -> dict[str, object]:
     original = {
         "tested_and_passed": normalize_mv_items(tested_and_passed),
-        "partially_tested": normalize_mv_items(partially_tested),
+        "partially_tested": [],
         "failed": normalize_mv_items(failed),
         "retested_and_passed": normalize_mv_items(retested_and_passed),
     }
@@ -277,6 +277,8 @@ def parse_mv_report_text(text: str) -> dict[str, list[str]]:
         if line.startswith("#"):
             heading = line.lstrip("#").strip().lower()
             current_section = MV_HEADING_MAP.get(heading)
+            if current_section == "partially_tested":
+                current_section = None
             continue
         if current_section is not None:
             raw_sections[current_section].append(raw_line)
@@ -408,3 +410,62 @@ def write_mv_report(
         format_mv_report(sections),
         overwrite=overwrite,
     )
+
+
+def site_report_name(value: str) -> str:
+    name = normalize_report_name(value)
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}\.md", name, re.I):
+        raise ReportNameError("Onsite/Offsite reports require YYYY-MM-DD.md.")
+    return name
+
+
+def validate_site_sections(tested_and_passed: str, failed: str, retested_and_passed: str) -> dict[str, object]:
+    from scripts.etl.daily_report_sources import clean_item
+    sections: dict[str, list[str]] = {}
+    for status, text in (("tested_and_passed", tested_and_passed), ("failed", failed),
+                         ("retested_and_passed", retested_and_passed)):
+        items = []
+        for line in text.splitlines():
+            if not line.strip():
+                continue
+            item = clean_item(line)
+            if item is None:
+                raise ValueError(f"Invalid test item in {status}: {line.strip()}")
+            items.append(item)
+        # Preserve repeated lines and cross-section occurrences for the audit.
+        sections[status] = items
+    return {"sections": sections, "counts": {name: len(items) for name, items in sections.items()}, "warnings": []}
+
+
+def read_site_report(report_dir: Path, report_name: str, site: str) -> dict[str, object]:
+    from scripts.etl.daily_report_sources import parse_events
+    path = report_path(report_dir, site_report_name(report_name))
+    text = path.read_text(encoding="utf-8-sig")
+    source = "Onsite_Test_Report" if site == "onsite" else "Offsite_Test_Report"
+    sections: dict[str, list[str]] = {name: [] for name in ("tested_and_passed", "failed", "retested_and_passed")}
+    for event in parse_events(text, source=source, report_name=path.name, day=path.stem):
+        status = "tested_and_passed" if event["status"] == "tested" else event["status"]
+        sections[status].append(event["equipment_key"])
+    return {"report_name": path.name, "site": site,
+            "modified_at": datetime.fromtimestamp(path.stat().st_mtime).astimezone().isoformat(),
+            "sections": sections, "counts": {name: len(items) for name, items in sections.items()}}
+
+
+def list_site_reports(report_dir: Path, site: str) -> list[dict[str, object]]:
+    reports = []
+    for path in report_dir.glob("*.md"):
+        try:
+            reports.append(read_site_report(report_dir, path.name, site))
+        except (ReportNameError, OSError, UnicodeError):
+            # The audit exposes skipped filenames; malformed files must not hide
+            # every valid report in the editor's list.
+            continue
+    return sorted(reports, key=lambda report: str(report["report_name"]), reverse=True)
+
+
+def write_site_report(report_dir: Path, report_name: str, sections: dict[str, list[str]], *, overwrite: bool) -> Path:
+    lines = []
+    for name, heading in (("tested_and_passed", "Tested And Passed"), ("failed", "Failed"),
+                          ("retested_and_passed", "Retested And Passed")):
+        lines.extend([f"# {heading}", "", *[f"- {item}" for item in sections[name]], ""])
+    return _write_report_content(report_dir, site_report_name(report_name), "\n".join(lines).rstrip() + "\n", overwrite=overwrite)

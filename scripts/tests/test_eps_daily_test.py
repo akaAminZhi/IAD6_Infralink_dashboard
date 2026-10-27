@@ -17,7 +17,7 @@ def test_indexes_exact_ids_and_latest_eps_daily_outcome(tmp_path):
 
     assert [file.name for file in files] == ["2026-10-13.md", "2026-10-14.md"]
     assert [entry["status"] for entry in index[cable_id]] == ["failed", "retested_and_passed"]
-    assert index[cable_id][-1] == {
+    assert {key: index[cable_id][-1][key] for key in ("date", "status", "report_name")} == {
         "date": "2026-10-14", "status": "retested_and_passed", "report_name": "2026-10-14.md",
     }
     assert len(index[neighboring_id]) == 1

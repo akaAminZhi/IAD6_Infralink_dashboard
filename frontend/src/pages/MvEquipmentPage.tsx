@@ -1,3 +1,4 @@
+import { DailyTestHistory } from "../components/common/DailyTestHistory";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -658,6 +659,7 @@ function RelatedIssuesPanel({
 }
 
 function MvDailyTestPanel({ annotation }: { annotation: PowerPlanAnnotation }) {
+  if (annotation.daily_report_history?.length) return <DailyTestHistory events={annotation.daily_report_history} conflict={annotation.daily_report_conflict} />;
   const history = annotation.mv_daily_test_history ?? [];
   if (history.length === 0) return null;
 

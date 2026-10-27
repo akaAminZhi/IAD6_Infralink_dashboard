@@ -1,11 +1,11 @@
+import { DAILY_REPORT_PAGE_SIZE, DailyReportTable } from "../components/dataOperations/DailyReportTable";
+import { SiteDailyReportsPanel } from "../components/dataOperations/SiteDailyReportsPanel";
 import {
   AlertCircle,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
   CircleStop,
-  FileEdit,
-  FileText,
   LoaderCircle,
   LogIn,
   Play,
@@ -77,7 +77,7 @@ const defaultPipelineSteps = [
   "Organize GC Reports",
   "Run Dashboard ETL",
 ];
-const REPORT_PAGE_SIZE = 5;
+const REPORT_PAGE_SIZE = DAILY_REPORT_PAGE_SIZE;
 
 function formatDateTime(value: string | null | undefined): string {
   if (!value) {
@@ -143,10 +143,6 @@ function ErrorBanner({ message, onClose }: { message: string; onClose: () => voi
   );
 }
 
-function isMvDailyReport(report: DailyReport | MvDailyReport): report is MvDailyReport {
-  return "partially_tested" in report.sections;
-}
-
 export function DataOperationsPage({ onDashboardReload }: DataOperationsPageProps) {
   const [loginProvider, setLoginProvider] = useState<"jc2" | "cxalloy" | null>(null);
   const [health, setHealth] = useState<AutomationHealth | null>(null);
@@ -159,6 +155,7 @@ export function DataOperationsPage({ onDashboardReload }: DataOperationsPageProp
   const [actionError, setActionError] = useState<string | null>(null);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [logText, setLogText] = useState("");
+  const [legacyReportsOpen, setLegacyReportsOpen] = useState(false);
   const [reportsExpanded, setReportsExpanded] = useState(false);
   const [reportPage, setReportPage] = useState(1);
   const [reportDialogOpen, setReportDialogOpen] = useState(false);
@@ -486,10 +483,26 @@ export function DataOperationsPage({ onDashboardReload }: DataOperationsPageProp
         </section>
       ) : null}
 
-      <section className="rounded-lg border bg-card">
+      <section className="rounded-lg border bg-card" aria-labelledby="daily-test-report-entry-title">
+        <h2 id="daily-test-report-entry-title" className="border-b px-5 py-4 text-lg font-semibold tracking-normal">
+          Daily Test Report Entry
+        </h2>
+        <SiteDailyReportsPanel serviceBusy={serviceBusy} onSaved={(run) => { if (run) setSelectedRunId(run.run_id); void refreshService(); }} />
+        <h3 className="border-t">
+          <button
+            type="button"
+            className="flex w-full items-center gap-2 rounded-lg px-5 py-4 text-left font-semibold hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            aria-expanded={legacyReportsOpen}
+            aria-controls="legacy-test-report-content"
+            onClick={() => setLegacyReportsOpen((current) => !current)}
+          >
+            <ChevronRight className={cn("h-4 w-4 transition-transform", legacyReportsOpen && "rotate-90")} aria-hidden="true" />
+            Legacy Reports
+          </button>
+        </h3>
+        {legacyReportsOpen ? <div id="legacy-test-report-content" className="border-t">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b px-5 py-4">
           <div>
-            <h2 className="text-lg font-semibold tracking-normal">Daily Test Report Entry</h2>
             <p className="mt-1 break-all text-sm text-muted-foreground">
               {reportView === "mv" ? "MV reports" : "EPS reports"} are saved to{" "}
               {reportView === "mv" ? health.mv_report_directory : health.report_directory}.
@@ -513,27 +526,7 @@ export function DataOperationsPage({ onDashboardReload }: DataOperationsPageProp
                 {reportsExpanded ? "Show Latest Only" : `Browse All (${activeReports.length})`}
               </Button>
             ) : null}
-            <Button
-              disabled={serviceBusy}
-              onClick={() => {
-                setReportView("eps");
-                setEditingReport(null);
-                setReportDialogOpen(true);
-              }}
-              variant="outline"
-            >
-              <FileEdit className="mr-2 h-4 w-4" /> New EPS Daily Report
-            </Button>
-            <Button
-              disabled={serviceBusy}
-              onClick={() => {
-                setReportView("mv");
-                setEditingReport(null);
-                setReportDialogOpen(true);
-              }}
-            >
-              <FileEdit className="mr-2 h-4 w-4" /> New MV Daily Report
-            </Button>
+
           </div>
         </div>
         <div className="flex gap-1 border-b bg-muted/20 px-5 pt-3">
@@ -550,7 +543,7 @@ export function DataOperationsPage({ onDashboardReload }: DataOperationsPageProp
             }}
             type="button"
           >
-            EPS Reports ({reports.length})
+            Legacy EPS Reports ({reports.length})
           </button>
           <button
             className={cn(
@@ -565,90 +558,16 @@ export function DataOperationsPage({ onDashboardReload }: DataOperationsPageProp
             }}
             type="button"
           >
-            MV Reports ({mvReports.length})
+            Legacy MV Reports ({mvReports.length})
           </button>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[720px] text-left text-sm">
-            <thead className="border-b bg-muted/35 text-xs uppercase text-muted-foreground">
-              <tr>
-                <th className="px-5 py-3 font-medium">Report</th>
-                {reportView === "mv" ? (
-                  <>
-                    <th className="px-4 py-3 font-medium">Tested + Passed</th>
-                    <th className="px-4 py-3 font-medium">Partially Tested</th>
-                    <th className="px-4 py-3 font-medium">Failed</th>
-                    <th className="px-4 py-3 font-medium">Retested + Passed</th>
-                  </>
-                ) : (
-                  <>
-                    <th className="px-4 py-3 font-medium">Failed</th>
-                    <th className="px-4 py-3 font-medium">Retested + Passed</th>
-                    <th className="px-4 py-3 font-medium">Tested</th>
-                  </>
-                )}
-                <th className="px-4 py-3 font-medium">Modified</th>
-                <th className="px-5 py-3 text-right font-medium">Action</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {visibleReports.map((report) => {
-                const isMvReport = isMvDailyReport(report);
-                return (
-                  <tr key={report.report_name}>
-                    <td className="px-5 py-3 font-semibold">{report.report_name}</td>
-                    {isMvReport ? (
-                      <>
-                        <td className="px-4 py-3 text-emerald-700">
-                          {report.counts.tested_and_passed}
-                        </td>
-                        <td className="px-4 py-3 text-amber-700">
-                          {report.counts.partially_tested}
-                        </td>
-                        <td className="px-4 py-3 text-red-700">{report.counts.failed}</td>
-                        <td className="px-4 py-3 text-teal-700">
-                          {report.counts.retested_and_passed}
-                        </td>
-                      </>
-                    ) : (
-                      <>
-                        <td className="px-4 py-3 text-red-700">{report.counts.failed}</td>
-                        <td className="px-4 py-3 text-teal-700">
-                          {report.counts.retested_and_passed}
-                        </td>
-                        <td className="px-4 py-3 text-emerald-700">{report.counts.tested}</td>
-                      </>
-                    )}
-                    <td className="px-4 py-3 text-muted-foreground">
-                      {formatDateTime(report.modified_at)}
-                    </td>
-                    <td className="px-5 py-3 text-right">
-                      <Button
-                        disabled={loadingReport || serviceBusy}
-                        onClick={() =>
-                          void openExistingReport(report.report_name, isMvReport ? "mv" : "eps")
-                        }
-                        variant="ghost"
-                      >
-                        <FileText className="mr-2 h-4 w-4" /> Edit
-                      </Button>
-                    </td>
-                  </tr>
-                );
-              })}
-              {activeReports.length === 0 ? (
-                <tr>
-                  <td
-                    className="px-5 py-8 text-center text-muted-foreground"
-                    colSpan={reportView === "mv" ? 7 : 6}
-                  >
-                    No {reportView === "mv" ? "MV " : "EPS "}daily report files found.
-                  </td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
-        </div>
+        <DailyReportTable<DailyReport | MvDailyReport>
+          reports={visibleReports}
+          reportKind={reportView}
+          emptyMessage={`No ${reportView === "mv" ? "MV " : "EPS "}daily report files found.`}
+          disabled={loadingReport || serviceBusy}
+          onEdit={(report) => void openExistingReport(report.report_name, reportView)}
+        />
         {reportsExpanded && activeReports.length > REPORT_PAGE_SIZE ? (
           <div className="flex items-center justify-between gap-3 border-t px-5 py-3 text-sm">
             <span className="text-muted-foreground">
@@ -680,6 +599,7 @@ export function DataOperationsPage({ onDashboardReload }: DataOperationsPageProp
             </div>
           </div>
         ) : null}
+        </div> : null}
       </section>
 
       <section className="rounded-lg border bg-card">
