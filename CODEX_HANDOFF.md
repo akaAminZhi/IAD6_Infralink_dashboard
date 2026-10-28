@@ -1,5 +1,26 @@
 ﻿# Codex Handoff
 
+## Current update (2026-10-27): Layout room-to-upper-device cable arcs
+
+- Scope corrected after user clarification: connections between rooms retain
+  their original vertical risers, rounded overhead trays and fan-lane routing.
+  Broad cubic arcs apply only when one endpoint is inside a drawn room and the
+  other is outside all rooms and above that room in plan coordinates. Room
+  membership uses equipment centers and the current floor's room regions;
+  missing room metadata retains original routing. Nearby and FIX routes retain
+  their existing geometry. Overhead arcs use separate bundle lanes and cannot
+  alter room-to-room tray lanes. Fit bounds and warnings follow each route type.
+- The Layout page passes floor-specific regions to connection placement and
+  all-floor fit calculations. No ETL or data-contract changes are required.
+- Verification: 17 geometry tests and 48 Layout/search tests passed; preview-mode
+  frontend build passed with existing chunk/plugin warnings. A geometry fork
+  worker timed out before running; the threads retry passed. Real Chromium
+  confirmed MDB-to-CRAH trays and MDB-to-upper-MP arcs on both floors, warning
+  alignment, hide/show and 2D/2.5D switching, with no page errors. Screenshots
+  visually reviewed; ignored artifacts: `runtime/automation/layout-long-arc-*`
+  and `layout_long_arc_smoke.py`. Compiled assets rebuilt; refresh Layout.
+  Original user build-info bytes restored. No data changes or service restart.
+
 ## Current update (2026-10-27): Onsite / Offsite daily reports
 
 - Implemented mixed-equipment `Onsite_Test_Report/` and `Offsite_Test_Report/`

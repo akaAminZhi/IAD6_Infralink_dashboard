@@ -60,17 +60,29 @@ export interface PlacedLayoutCable {
   cable: LayoutCableRecord;
   source: LayoutEquipmentRecord;
   target: LayoutEquipmentRecord;
+  roomToOverhead?: boolean;
 }
 
-export function placedLayoutCables(cables: LayoutCableRecord[], rows: LayoutEquipmentRecord[]): PlacedLayoutCable[] {
+export function placedLayoutCables(cables: LayoutCableRecord[], rows: LayoutEquipmentRecord[], regions: LayoutRegionRecord[] = []): PlacedLayoutCable[] {
   const placements = new Map<string, LayoutEquipmentRecord[]>();
   for (const row of rows) placements.set(row.equipment_key, [...(placements.get(row.equipment_key) ?? []), row]);
+  const rooms = regions.filter((region) => region.kind === "room");
+  const containingRoom = (row: LayoutEquipmentRecord) => {
+    const x = row.rect.x + row.rect.width / 2, y = row.rect.y + row.rect.height / 2;
+    return rooms.find(({ rect }) => x >= rect.x && x <= rect.x + rect.width && y >= rect.y && y <= rect.y + rect.height);
+  };
   return cables.flatMap((cable) => {
     const sources = placements.get(cable.source_equipment_key ?? "") ?? [];
     const targets = placements.get(cable.target_equipment_key ?? "") ?? [];
     // Repeated PDF placements have no port association. Do not choose one arbitrarily.
-    return cable.connection_status === "resolved" && sources.length === 1 && targets.length === 1
-      ? [{ cable, source: sources[0], target: targets[0] }] : [];
+    if (cable.connection_status !== "resolved" || sources.length !== 1 || targets.length !== 1) return [];
+    const source = sources[0], target = targets[0];
+    const sourceRoom = containingRoom(source), targetRoom = containingRoom(target);
+    const roomToOverhead = !source.fixed && !target.fixed && Boolean(
+      sourceRoom && !targetRoom && target.rect.y + target.rect.height / 2 < sourceRoom.rect.y ||
+      targetRoom && !sourceRoom && source.rect.y + source.rect.height / 2 < targetRoom.rect.y,
+    );
+    return [{ cable, source, target, roomToOverhead }];
   });
 }
 
@@ -93,8 +105,8 @@ export function overheadCablePoints(connection: PlacedLayoutCable, lane = 0): Po
       { x: end.x - (end.x - start.x) * 0.28, y: controlY }, end];
   }
   const start = projectLayoutPoint(ax, ay, ah), end = projectLayoutPoint(bx, by, bh);
-  if (roomConnection) {
-    // One 2:1 isometric cable-tray direction keeps distant room runs parallel above the cabinet rows.
+  if (roomConnection && !connection.roomToOverhead) {
+    // Preserve the original risers and sloping tray for connections between rooms.
     const intercept = Math.min(start.y - start.x * 0.5, end.y - end.x * 0.5) - 15 + lane;
     const direction = Math.sign(end.x - start.x) || 1;
     const bend = Math.min(18, Math.abs(end.x - start.x) * 0.22);
@@ -102,7 +114,8 @@ export function overheadCablePoints(connection: PlacedLayoutCable, lane = 0): Po
     return [start, { x: trayStartX, y: trayStartX * 0.5 + intercept },
       { x: trayEndX, y: trayEndX * 0.5 + intercept }, end];
   }
-  const lift = Math.max(8, Math.min(22, Math.hypot(ax - bx, ay - by) * 0.12));
+  const distance = Math.hypot(ax - bx, ay - by);
+  const lift = roomConnection ? Math.max(16, Math.min(60, distance * 0.18)) : Math.max(8, Math.min(22, distance * 0.12));
   const controlY = Math.min(start.y, end.y) - lift + lane;
   return [start, { x: start.x + (end.x - start.x) * 0.28, y: controlY },
     { x: end.x - (end.x - start.x) * 0.28, y: controlY }, end];
@@ -127,7 +140,7 @@ export function layoutCableLanes(connections: PlacedLayoutCable[]): number[] {
     });
   }
   const roomLongIndexes = connections.flatMap((connection, index) =>
-    !connection.source.fixed && !connection.target.fixed && !isNearbyCable(connection) ? [index] : []);
+    isRoomTrayCable(connection) ? [index] : []);
   const degree = new Map<string, number>();
   for (const index of roomLongIndexes) {
     for (const key of [connections[index].source.equipment_key, connections[index].target.equipment_key]) {
@@ -176,6 +189,10 @@ export function isNearbyCable({ source, target }: PlacedLayoutCable): boolean {
   return distance <= Math.max(28, Math.min(90, Math.max(a.width, a.height, b.width, b.height) * 2.4));
 }
 
+function isRoomTrayCable(connection: PlacedLayoutCable): boolean {
+  return !connection.source.fixed && !connection.target.fixed && !connection.roomToOverhead && !isNearbyCable(connection);
+}
+
 function roomCableCorners([start, trayStart, trayEnd, end]: PowerPlanPoint[]): PowerPlanPoint[] {
   return [{ x: start.x, y: trayStart.y - (trayStart.x - start.x) * 0.5 },
     { x: end.x, y: trayEnd.y + (end.x - trayEnd.x) * 0.5 }];
@@ -183,7 +200,7 @@ function roomCableCorners([start, trayStart, trayEnd, end]: PowerPlanPoint[]): P
 
 export function layoutConnectionBounds(connection: PlacedLayoutCable, lane = 0): PowerPlanRect {
   const route = overheadCablePoints(connection, lane);
-  const corners = !connection.source.fixed && !connection.target.fixed && !isNearbyCable(connection) ? roomCableCorners(route) : [];
+  const corners = isRoomTrayCable(connection) ? roomCableCorners(route) : [];
   const points = [...route, ...corners, ...[connection.source, connection.target].flatMap((row) =>
     [...projectedRectPoints(row.rect), ...projectedRectPoints(row.rect, layoutDeviceHeight(row) + 3)])];
   const x = Math.min(...points.map((p) => p.x)), y = Math.min(...points.map((p) => p.y));
@@ -192,9 +209,7 @@ export function layoutConnectionBounds(connection: PlacedLayoutCable, lane = 0):
 
 export function layoutCablePath(connection: PlacedLayoutCable, lane = 0): string {
   const [a, b, c, d] = overheadCablePoints(connection, lane);
-  if (!connection.source.fixed && !connection.target.fixed && !isNearbyCable(connection)) {
-    // Round the intersection of the vertical drop and the sloping tray. Using
-    // horizontal controls here can hook a bend above its lane into a neighbor.
+  if (isRoomTrayCable(connection)) {
     const [{ y: startCornerY }, { y: endCornerY }] = roomCableCorners([a, b, c, d]);
     return `M ${a.x} ${a.y} L ${a.x} ${startCornerY + 5} Q ${a.x} ${startCornerY} ${b.x} ${b.y}` +
       ` L ${c.x} ${c.y} Q ${d.x} ${endCornerY} ${d.x} ${endCornerY + 5} L ${d.x} ${d.y}`;
@@ -205,8 +220,6 @@ export function layoutCablePath(connection: PlacedLayoutCable, lane = 0): string
 /** Anchor report warnings on the actual cable route, including its bundle lane. */
 export function layoutCableMarkerPoint(connection: PlacedLayoutCable, lane = 0): PowerPlanPoint {
   const [a, b, c, d] = overheadCablePoints(connection, lane);
-  if (!connection.source.fixed && !connection.target.fixed && !isNearbyCable(connection)) {
-    return { x: (b.x + c.x) / 2, y: (b.y + c.y) / 2 };
-  }
+  if (isRoomTrayCable(connection)) return { x: (b.x + c.x) / 2, y: (b.y + c.y) / 2 };
   return { x: (a.x + 3 * b.x + 3 * c.x + d.x) / 8, y: (a.y + 3 * b.y + 3 * c.y + d.y) / 8 };
 }

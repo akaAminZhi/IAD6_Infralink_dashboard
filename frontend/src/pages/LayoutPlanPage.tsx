@@ -170,7 +170,8 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
   }, [loading]);
 
   const rows = useMemo(() => manifest ? visibleLayoutEquipment(manifest, floorId) : [], [manifest, floorId]);
-  const connections = useMemo(() => placedLayoutCables(manifest?.cables ?? [], rows), [manifest, rows]);
+  const regions = useMemo(() => manifest ? visibleLayoutRegions(manifest, floorId) : [], [manifest, floorId]);
+  const connections = useMemo(() => placedLayoutCables(manifest?.cables ?? [], rows, regions), [manifest, rows, regions]);
   const missingReportConnections = useMemo(() => connections.filter(({ cable }) => layoutCableMissingReport(cable)), [connections]);
   const missingReportCableIds = useMemo(() => new Set(missingReportConnections.map(({ cable }) => cable.cable_id)), [missingReportConnections]);
   const missingReportEndpointKeys = useMemo(() => new Set(missingReportConnections.flatMap(({ cable }) =>
@@ -207,7 +208,6 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
   const selectionRows = useMemo(() => isometric ? rows.map((row) => ({ ...row,
     rect: projectedLayoutBounds(insetEquipmentRect(row.rect), layoutDeviceHeight(row)),
   })) : rows, [rows, isometric]);
-  const regions = useMemo(() => manifest ? visibleLayoutRegions(manifest, floorId) : [], [manifest, floorId]);
   const roomLabels = useMemo(() => layoutRoomLabels(regions), [regions]);
   // One coordinate frame for every floor keeps fixed devices in the same screen positions.
   const allBounds = useMemo(() => {
@@ -217,7 +217,7 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
     const labels = layoutRoomLabels(allRegions);
     const records = [...allRecords, ...allRegions, ...labels];
     const cableBounds = manifest.floors.flatMap((floor) => {
-      const floorConnections = placedLayoutCables(manifest.cables ?? [], visibleLayoutEquipment(manifest, floor.floor_id));
+      const floorConnections = placedLayoutCables(manifest.cables ?? [], visibleLayoutEquipment(manifest, floor.floor_id), visibleLayoutRegions(manifest, floor.floor_id));
       const lanes = layoutCableLanes(floorConnections);
       return floorConnections.map((connection, index) => ({ rect: layoutConnectionBounds(connection, lanes[index]) }));
     });

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { LayoutCableRecord, LayoutEquipmentRecord, PowerPlanPoint } from "../types/data";
-import { isNearbyCable, layoutCableLanes, layoutCablePath, layoutConnectionBounds, layoutDeviceKind, overheadCablePoints, placedLayoutCables, projectLayoutPoint, projectedLayoutBounds } from "./layoutIsometricUtils";
+import type { LayoutCableRecord, LayoutEquipmentRecord, LayoutRegionRecord, PowerPlanPoint } from "../types/data";
+import { isNearbyCable, layoutCableLanes, layoutCableMarkerPoint, layoutCablePath, layoutConnectionBounds, layoutDeviceKind, overheadCablePoints, placedLayoutCables, projectLayoutPoint, projectedLayoutBounds } from "./layoutIsometricUtils";
 
 const device = (key: string, x = 0): LayoutEquipmentRecord => ({ equipment_key: key, label: key, annotation_id: key,
   rect: { x, y: 20, width: 10, height: 8 }, fixed: false, source_floor_id: "first", match_status: "matched",
@@ -11,7 +11,7 @@ const cable: LayoutCableRecord = { cable_id: "FDR-IAD06-A-IAD06-B", equipment_ty
 
 // Sample the emitted SVG rather than a second implementation of its routing rules.
 function sampleRoomPath(path: string): PowerPlanPoint[] {
-  const tokens = path.split(/\s+/), points: PowerPlanPoint[] = [];
+  const tokens = path.replace(/,/g, "").split(/\s+/), points: PowerPlanPoint[] = [];
   while (tokens.length) {
     const command = tokens.shift();
     const point = () => ({ x: Number(tokens.shift()), y: Number(tokens.shift()) });
@@ -22,6 +22,13 @@ function sampleRoomPath(path: string): PowerPlanPoint[] {
         const t = i / 40;
         points.push({ x: (1 - t) ** 2 * start.x + 2 * (1 - t) * t * control.x + t ** 2 * end.x,
           y: (1 - t) ** 2 * start.y + 2 * (1 - t) * t * control.y + t ** 2 * end.y });
+      }
+    } else if (command === "C") {
+      const start = points[points.length - 1], b = point(), c = point(), end = point();
+      for (let i = 1; i <= 40; i++) {
+        const t = i / 40;
+        points.push({ x: (1 - t) ** 3 * start.x + 3 * (1 - t) ** 2 * t * b.x + 3 * (1 - t) * t ** 2 * c.x + t ** 3 * end.x,
+          y: (1 - t) ** 3 * start.y + 3 * (1 - t) ** 2 * t * b.y + 3 * (1 - t) * t ** 2 * c.y + t ** 3 * end.y });
       }
     } else throw new Error(`Unexpected SVG command: ${command}`);
   }
@@ -122,6 +129,63 @@ describe("2.5D geometry", () => {
     expect(lanes.every((lane) => lane <= 0)).toBe(true);
     expect(layoutCablePath(forward, lanes[0])).not.toBe(layoutCablePath(reverse, lanes[1]));
     expect(layoutCablePath(forward, lanes[0])).toBe(layoutCablePath(reverse, lanes[0]));
+  });
+
+  it("only identifies a room-to-overhead connection when one endpoint is in a room and the other is above it", () => {
+    const rooms: LayoutRegionRecord[] = [0, 150].map((x) => ({ annotation_id: `ROOM-${x}`, label: `ROOM-${x}`, kind: "room",
+      fixed: false, source_floor_id: "first", rect: { x, y: 100, width: 80, height: 60 } }));
+    const source = { ...device("A", 10), rect: { x: 10, y: 120, width: 10, height: 8 } };
+    for (const [x, y, expected] of [[160, 120, false], [80, 20, true], [80, 220, false], [260, 120, false]] as const) {
+      const target = { ...device("B", x), rect: { x, y, width: 10, height: 8 } };
+      const [connection] = placedLayoutCables([cable], [source, target], rooms);
+      expect(connection.roomToOverhead).toBe(expected);
+      const [reverse] = placedLayoutCables([{ ...cable, source_equipment_key: "B", target_equipment_key: "A" }], [source, target], rooms);
+      expect(reverse.roomToOverhead).toBe(expected);
+      if (expected) {
+        expect(layoutCablePath(connection)).toContain(" C ");
+        expect(layoutCablePath(connection)).toBe(layoutCablePath(reverse));
+        expect(placedLayoutCables([cable], [source, target])[0].roomToOverhead).toBe(false);
+        expect(placedLayoutCables([cable], [source, { ...target, fixed: true }], rooms)[0].roomToOverhead).toBe(false);
+      } else {
+        expect(layoutCablePath(connection)).toContain(" L ");
+        expect(layoutCablePath(connection)).toContain(" Q ");
+      }
+    }
+  });
+
+  it("keeps the MDB6-01A to upper MP6-01A-2 feeder as a long arc with accurate warning and fit bounds", () => {
+    const source = { ...device("A"), rect: { x: 1137.914, y: 456.301, width: 3.782, height: 5.934 } };
+    const target = { ...device("B"), rect: { x: 961.293, y: 135.328, width: 2.456, height: 5.757 } };
+    const rooms: LayoutRegionRecord[] = [{ annotation_id: "ROOM", label: "E6-110-01", kind: "room", fixed: false,
+      source_floor_id: "first", rect: { x: 1136.834, y: 431.173, width: 85.064, height: 78.547 } }];
+    const [connection] = placedLayoutCables([cable], [source, target], rooms);
+    expect(connection.roomToOverhead).toBe(true);
+    const path = layoutCablePath(connection, -4), points = sampleRoomPath(path);
+    expect(path).toContain(" C ");
+    expect(path).not.toMatch(/ [LQ] /);
+    const marker = layoutCableMarkerPoint(connection, -4);
+    expect(marker.x).toBeCloseTo(points[20].x);
+    expect(marker.y).toBeCloseTo(points[20].y);
+    const bounds = layoutConnectionBounds(connection, -4);
+    for (const point of points) {
+      expect(point.x).toBeGreaterThanOrEqual(bounds.x);
+      expect(point.x).toBeLessThanOrEqual(bounds.x + bounds.width);
+      expect(point.y).toBeGreaterThanOrEqual(bounds.y);
+      expect(point.y).toBeLessThanOrEqual(bounds.y + bounds.height);
+    }
+    const tray = { ...connection, roomToOverhead: false };
+    const [, b, c] = overheadCablePoints(tray, -4);
+    expect(layoutCableMarkerPoint(tray, -4)).toEqual({ x: (b.x + c.x) / 2, y: (b.y + c.y) / 2 });
+  });
+
+  it("does not let overhead arcs change the lanes of room-to-room trays", () => {
+    const tray = { cable, source: device("A"), target: device("B", 100) };
+    const upper = { cable: { ...cable, cable_id: "UPPER" }, source: tray.source, target: device("UPPER", 200), roomToOverhead: true };
+    expect(layoutCableLanes([tray, upper])[0]).toBe(layoutCableLanes([tray])[0]);
+    const paired = { ...upper, cable: { ...cable, cable_id: "UPPER-2" } };
+    const lanes = layoutCableLanes([upper, paired]);
+    expect(lanes[0]).not.toBe(lanes[1]);
+    expect(lanes.every((lane) => lane <= 0)).toBe(true);
   });
 
   it("does not choose arbitrary repeated positions, missing floors, or unresolved endpoint pairs", () => {

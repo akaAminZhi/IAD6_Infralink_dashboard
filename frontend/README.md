@@ -107,8 +107,10 @@ backgrounds are transparent, with restrained outlines and ground shadows.
 the fitted camera. **Escape** does the same outside box
 selection. Clicking empty map space or **Clear focus** removes focus/search
 without moving the camera. Planning overrides are unaffected. Nearby cables
-use low cubic arcs. FIX-to-FIX routes keep taller arcs; longer room routes rise
-straight from each cabinet to a rounded overhead band along the cabinet rows.
+use low cubic arcs. FIX-to-FIX routes keep taller arcs. Longer connections
+between rooms retain vertical risers and a rounded overhead band. Only feeders
+from a device inside a room to a device outside and above that room use broad,
+continuous cubic arcs. Room boundaries determine this distinction on each floor.
 Tested routes use solid green or blue
 lines; failed and unconfirmed routes remain dashed. Room lines are
 lighter than FIX lines. Multiple cables between the
