@@ -94,7 +94,9 @@ The first search loads the shared equipment dataset; loading failures offer retr
 Layout opens in **2.5D** by default; **2D plan** restores the original rectangle
 view. The last view choice is saved in this browser. TX6, Utility, GEN6, and TX
 use MV transformer, MV switchgear, generator, and LV transformer models;
-other devices use cabinet models. Footprints retain the PDF coordinates;
+UPS6 uses a separate charcoal-gray floor-standing UPS model with three dark module bays,
+a control display and ventilation grilles; simplified and dense-floor models
+retain its distinctive front. Other devices use cabinet models. Footprints retain the PDF coordinates;
 heights and overhead cable routes are illustrative, not surveyed geometry.
 Models use one orthographic 2:1 isometric grid, with filled light top, medium
 left and dark right faces. MV transformers include an oil tank, radiator bank,

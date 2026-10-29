@@ -14,13 +14,18 @@ const STATUS_PALETTES: Record<LayoutStatus, EnclosurePalette> = {
 };
 const BASE: EnclosurePalette = { top: "#beced5", left: "#8fa5b1", right: "#718a99" };
 const DARK: EnclosurePalette = { top: "#9bb0bd", left: "#7c95a4", right: "#5f7888" };
-const SIMPLE_KINDS: LayoutDeviceKind[] = ["mvTransformer", "utility", "generator", "lvTransformer", "cabinet"];
+const UPS_ENCLOSURE: EnclosurePalette = { top: "#4b5563", left: "#374151", right: "#252d38" };
+const UPS_BASE: EnclosurePalette = { top: "#374151", left: "#273240", right: "#19212b" };
+function equipmentPalette(kind: LayoutDeviceKind, status: LayoutStatus): EnclosurePalette {
+  return kind === "ups" && (status === "notEnergized" || status === "unknown") ? UPS_ENCLOSURE : STATUS_PALETTES[status];
+}
+const SIMPLE_KINDS: LayoutDeviceKind[] = ["mvTransformer", "utility", "generator", "lvTransformer", "ups", "cabinet"];
 const SIMPLE_STATUSES: LayoutStatus[] = ["notEnergized", "energizeToday", "energized", "unknown"];
 
 /** Shared silhouettes keep dense floors to one SVG shape per unselected device. */
 export function SimpleIsometricSymbols() {
   return <defs>{SIMPLE_STATUSES.flatMap((status) => SIMPLE_KINDS.map((kind) => {
-    const colors = STATUS_PALETTES[status];
+    const colors = equipmentPalette(kind, status);
     return <symbol key={`${kind}-${status}`} id={`layout-simple-${kind}-${status}`} viewBox="0 0 100 100">
       <path d="M 12 76 L 55 96 L 99 74 L 56 53 Z" fill="#526a78" opacity="0.12" />
       <polygon points="7,37 52,57 52,91 7,70" fill={colors.left} stroke="#8197a4" strokeWidth="0.8" />
@@ -33,21 +38,27 @@ export function SimpleIsometricSymbols() {
         : kind === "generator" ? <>
           <path d="M 70 25 V 3" stroke="#5f7888" strokeWidth="3" />
           <circle cx="43" cy="37" r="5" fill="#8fa5b1" />
+        </> : kind === "ups" ? <>
+          <path d="M 55 59 L 90 41 V 68 L 55 86 Z" fill="#31434e" />
+          <path d="M 66 54 V 80 M 78 48 V 74 M 58 72 L 87 57 M 58 77 L 87 62" stroke="#8fa5b1" strokeWidth="1" />
+          <path d="M 58 60 L 63 57 V 62 L 58 65 Z" fill="#8dcbd8" />
+          <path d="M 13 54 L 46 69 M 13 59 L 46 74" stroke="#5f7888" strokeWidth="1.4" />
         </> : kind === "lvTransformer" ? <path d="M 13 49 L 46 65 M 13 57 L 46 73 M 13 65 L 46 81" stroke="#718a99" strokeWidth="1.4" />
           : <path d="M 15 45 L 43 58 V 79 L 15 66 Z M 39 64 V 68" fill="none" stroke="#718a99" strokeWidth="1.2" />}
     </symbol>;
   }))}</defs>;
 }
 
-/** Five industrial illustrations built in the same world-space grid as their cables. */
+/** Industrial illustrations built in the same world-space grid as their cables. */
 const EquipmentModel = memo(function EquipmentModel({ record, status, detailed, showLabel, compact }: {
   record: LayoutEquipmentRecord; status: LayoutStatus; detailed: boolean; showLabel: boolean; compact: boolean;
 }) {
   const rect = insetEquipmentRect(record.rect);
   const { x, y, width: w, height: d } = rect;
   const h = layoutDeviceHeight(record), kind = layoutDeviceKind(record), s = Math.min(w, d);
-  const outline = "#8197a4", detail = "#5f7888", lineWidth = Math.max(0.055, Math.min(0.2, s * 0.009));
-  const palette = STATUS_PALETTES[status];
+  const outline = kind === "ups" ? "#56616f" : "#8197a4", detail = kind === "ups" ? "#8a98a7" : "#5f7888";
+  const lineWidth = Math.max(0.055, Math.min(0.2, s * 0.009));
+  const palette = equipmentPalette(kind, status);
   const p = (u: number, v: number, z: number) => projectLayoutPoint(x + u * w, y + v * d, z);
   const polygon = (coords: [number, number, number][], fill: string, extra = {}) =>
     <polygon points={svgPoints(coords.map(([u, v, z]) => p(u, v, z)))} fill={fill} {...extra} />;
@@ -99,6 +110,26 @@ const EquipmentModel = memo(function EquipmentModel({ record, status, detailed, 
   const label = p(0.5, 1.05, -Math.max(1.3, s * 0.08));
   const labelText = record.label.replace(/^IAD06-/i, "");
   const labelSize = Math.min(4, Math.max(0.9, s * 0.18), (w + d) * 1.4 / (Math.max(4, labelText.length) * 0.55));
+  const upsFront = (full: boolean) => <g data-model-part="ups-module-bays">
+    {[0, 1, 2].map((i) => {
+      const v = 0.11 + i * 0.26;
+      const panel = (v0: number, v1: number, z0: number, z1: number, fill: string) =>
+        polygon([[0.904, v0, z0 * h], [0.904, v1, z0 * h], [0.904, v1, z1 * h], [0.904, v0, z1 * h]], fill,
+          { stroke: "#718a99", strokeWidth: lineWidth * 0.8 });
+      return <g key={i} data-model-part="ups-module-door">
+        {panel(v, v + 0.235, 0.13, 0.86, "#31434e")}
+        {full ? <>
+          {line([0.906, v + 0.025, h * 0.43], [0.906, v + 0.025, h * 0.6], "#d0dce2", lineWidth * 2)}
+          {vent(0.906, v + 0.045, h * 0.2, 0.15, h * 0.18, "right")}
+          {vent(0.906, v + 0.045, h * 0.65, 0.15, h * 0.12, "right")}
+        </> : line([0.906, v + 0.04, h * 0.29], [0.906, v + 0.2, h * 0.29], "#8fa5b1")}
+        {i === 2 ? <g data-model-part="ups-display">
+          {panel(v + 0.06, v + 0.18, 0.54, 0.7, "#182a36")}
+          {panel(v + 0.075, v + 0.165, 0.57, 0.67, "#8dcbd8")}
+        </g> : null}
+      </g>;
+    })}
+  </g>;
   if (compact && !detailed) {
     const extent = projectedLayoutBounds(rect, h);
     return <g data-device-model={kind} data-device-detail="compact">
@@ -124,6 +155,10 @@ const EquipmentModel = memo(function EquipmentModel({ record, status, detailed, 
       {box(0.1, 0.1, 0.8, 0.8, 0, h * 0.84)}
       {line([0.2, 0.91, h * 0.26], [0.78, 0.91, h * 0.26])}
       {line([0.2, 0.91, h * 0.38], [0.78, 0.91, h * 0.38])}
+    </> : kind === "ups" ? <>
+      {box(0.1, 0.08, 0.8, 0.84, h * 0.07, h * 0.83)}
+      {upsFront(false)}
+      {line([0.2, 0.924, h * 0.25], [0.8, 0.924, h * 0.25])}
     </> : <>
       {box(0.12, 0.12, 0.76, 0.76, 0, h * 0.9)}
       {line([0.8, 0.88, h * 0.24], [0.8, 0.88, h * 0.45])}
@@ -183,6 +218,15 @@ const EquipmentModel = memo(function EquipmentModel({ record, status, detailed, 
       {vent(0.845, 0.23, h * 0.21, 0.5, h * 0.38, "right")}
       {line([0.36, 0.16, h * 0.86], [0.36, 0.3, h * 0.86], "#889fac", s * 0.06)}
       {line([0.65, 0.16, h * 0.86], [0.65, 0.3, h * 0.86], "#889fac", s * 0.06)}
+    </>;
+  } else if (kind === "ups") {
+    model = <>
+      {box(0.08, 0.06, 0.84, 0.88, 0, h * 0.07, UPS_BASE, "ups-base")}
+      {box(0.1, 0.08, 0.8, 0.84, h * 0.07, h * 0.83, palette, "ups-enclosure")}
+      {upsFront(true)}
+      {vent(0.19, 0.924, h * 0.2, 0.62, h * 0.22)}
+      {vent(0.19, 0.924, h * 0.65, 0.62, h * 0.15)}
+      {box(0.08, 0.06, 0.84, 0.88, h * 0.9, h * 0.035, palette, "ups-roof")}
     </>;
   } else {
     model = <>

@@ -191,7 +191,9 @@ Linked ATP/NETA names are shown once; equipment PDF previews prefer GC-renamed
 links. In 2.5D, selection only changes emphasis and detail state; explicit
 Zoom actions own camera changes.
 Equipment illustrations use closed, independently shaded top/left/right faces
-and separate structures for the five device types. Nearby connections use low
+and separate structures for six device types. UPS6 uses modular UPS cabinets
+with dark segmented doors, a display and vents at full/simple/compact detail.
+Nearby connections use low
 cubic arcs; longer paths have rounded bends. Cable path bounds are included in
 the shared fit frame and connection zoom. Global view/Escape clear focus and
 search and restore the full camera without changing energisation overrides;

@@ -2,11 +2,11 @@ import type { LayoutCableRecord, LayoutEquipmentRecord, LayoutRegionRecord, Powe
 import { insetEquipmentRect } from "./layoutPlanUtils";
 
 export const LAYOUT_VIEW_KEY = "iad6-layout-view-v1";
-export type LayoutDeviceKind = "mvTransformer" | "utility" | "generator" | "lvTransformer" | "cabinet";
+export type LayoutDeviceKind = "mvTransformer" | "utility" | "generator" | "lvTransformer" | "ups" | "cabinet";
 
 export const DEVICE_KIND_LABELS: Record<LayoutDeviceKind, string> = {
   mvTransformer: "MV transformer", utility: "MV switchgear", generator: "Generator",
-  lvTransformer: "LV transformer", cabinet: "Electrical cabinet",
+  lvTransformer: "LV transformer", ups: "UPS system", cabinet: "Electrical cabinet",
 };
 
 export function layoutDeviceKind(record: LayoutEquipmentRecord): LayoutDeviceKind {
@@ -15,6 +15,7 @@ export function layoutDeviceKind(record: LayoutEquipmentRecord): LayoutDeviceKin
   if (/^UTILITY/.test(key)) return "utility";
   if (/^GEN6(?:-|$)/.test(key)) return "generator";
   if (/^TX(?:-|$)/.test(key)) return "lvTransformer";
+  if (/^UPS6(?:-|$)/.test(key)) return "ups";
   return "cabinet";
 }
 

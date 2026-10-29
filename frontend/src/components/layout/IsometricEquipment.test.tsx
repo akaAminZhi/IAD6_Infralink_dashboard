@@ -14,6 +14,7 @@ describe("industrial isometric equipment models", () => {
   it.each([
     ["TX6-01A", "tank-lid"], ["UTILITY6-01", "switchgear-bay"],
     ["GEN6-01A", "generator-roof"], ["TX-UPP6-01A", "overhanging-cover"], ["MDS6-01A", "cabinet-roof"],
+    ["UPS6-01A", "ups-roof"],
   ])("colors the visible roof of %s in both electrical hazard states at every detail level", (key, roof) => {
     const device = record(key);
     const { container, rerender } = render(<svg />);
@@ -66,6 +67,7 @@ describe("industrial isometric equipment models", () => {
     ["GEN6-01A", "generator-acoustic-enclosure", "cooling-fan"],
     ["TX-UPP6-01A", "dry-transformer-enclosure", "overhanging-cover"],
     ["MDS6-01A", "cabinet-enclosure", "cabinet-door"],
+    ["UPS6-01A", "ups-enclosure", "ups-display"],
   ])("gives %s distinct structure and three opaque, differently shaded visible faces", (key, body, feature) => {
     const { container } = render(<svg><IsometricEquipment record={record(key)} status="notEnergized" selected={false} /></svg>);
     const part = container.querySelector(`[data-model-part="${body}"]`)!;
@@ -74,5 +76,19 @@ describe("industrial isometric equipment models", () => {
     const faces = ["left", "right", "top"].map((face) => part.querySelector(`[data-enclosure-face="${face}"]`));
     expect(faces.every((face) => face?.getAttribute("fill") && face.getAttribute("fill") !== "none")).toBe(true);
     expect(new Set(faces.map((face) => face?.getAttribute("fill"))).size).toBe(3);
+  });
+  it("distinguishes UPS module bays from ordinary panel cabinets at every detail level", () => {
+    const { container, rerender } = render(<svg />);
+    for (const detailed of [true, false]) {
+      rerender(<svg><IsometricEquipment record={record("UPS6-01A")} status="notEnergized" selected={false} detailed={detailed} /></svg>);
+      expect(container.querySelectorAll('[data-model-part="ups-module-door"]')).toHaveLength(3);
+      expect(container.querySelector('[data-model-part="ups-display"]')).toBeInTheDocument();
+      expect(container.querySelector('[data-model-part="cabinet-door"]')).not.toBeInTheDocument();
+    }
+    rerender(<svg><SimpleIsometricSymbols /><IsometricEquipment record={record("UPS6-01A")} status="notEnergized" selected={false} detailed={false} compact /></svg>);
+    expect(container.querySelector("use")).toHaveAttribute("href", "#layout-simple-ups-notEnergized");
+    rerender(<svg><IsometricEquipment record={record("MDB6-01A")} status="notEnergized" selected={false} /></svg>);
+    expect(container.querySelector('[data-model-part="cabinet-door"]')).toBeInTheDocument();
+    expect(container.querySelector('[data-model-part="ups-module-bays"]')).not.toBeInTheDocument();
   });
 });

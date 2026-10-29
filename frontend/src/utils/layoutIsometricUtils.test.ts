@@ -107,7 +107,9 @@ describe("2.5D geometry", () => {
     expect(layoutCableLanes(reversed).reverse()).toEqual(lanes);
   });
   it.each([["TX6-01A", "mvTransformer"], ["UTILITY6-01", "utility"], ["GEN6-01A", "generator"],
-    ["TX-UPP6-06A", "lvTransformer"], ["ATS-TX-HTP6-01A", "cabinet"], ["UPS6-01A", "cabinet"]])("models %s as %s", (key, kind) => {
+    ["TX-UPP6-06A", "lvTransformer"], ["ATS-TX-HTP6-01A", "cabinet"], ["UPS6-01A", "ups"],
+    ["iad06-ups6-01a-3", "ups"], ["TX-UPS6-01A", "lvTransformer"], ["UPS60-01A", "cabinet"],
+    ["CUPP6-01A", "cabinet"], ["MDB6-01A", "cabinet"]])("models %s as %s", (key, kind) => {
     expect(layoutDeviceKind(device(key))).toBe(kind);
   });
 

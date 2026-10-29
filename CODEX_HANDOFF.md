@@ -1,5 +1,30 @@
 ﻿# Codex Handoff
 
+## Current update (2026-10-29): Distinct UPS appearance in Layout
+
+- Started from the user's clean revert of the panelboard changes. Only UPS6
+  receives a new model: a floor-standing enclosure with three dark module bays,
+  a control display, door handles and ventilation grilles. Simple/compact models
+  retain the segmented dark front and display. The shell, roof and base now use
+  charcoal gray at every detail level; orange/red hazard shading still colors
+  the shell/roof. The drawing does not indicate live UPS telemetry.
+- Ordinary panels retain their original cabinet model and orientation. Source
+  footprints, heights, cable routing, 2D, tracking rules and data contracts are
+  unchanged. UPS6 now shows UPS system in the existing model-type inspector.
+- Strict preview build passed with existing chunk/plugin warnings. Real Chromium
+  verified UPS6-01A/01B versus unchanged MDB6-01A, inspector type and 2D/2.5D
+  switching with no page errors. Comparison screenshot visually reviewed:
+  ignored `runtime/automation/ups-model-comparison.png`; page screenshot and
+  smoke script use the `ups-layout` / `ups_model_smoke` names in that directory.
+  Compiled preview assets rebuilt; refresh Layout. No ETL/service restart.
+- Targeted tests: 22 classification/geometry and 16 model tests passed. The
+  combined forks run failed to start the model worker; its isolated threads
+  retry passed. `git diff --check` passed.
+- Dark-color follow-up: all 16 existing model tests passed again, strict preview
+  build passed, and the same Chromium comparison was rerun and visually reviewed
+  with no page errors. Full/simple/compact UPS shells use the same dark palette;
+  red/orange status shading and ordinary panel colors are preserved.
+
 ## Current update (2026-10-27): Layout room-to-upper-device cable arcs
 
 - Scope corrected after user clarification: connections between rooms retain
