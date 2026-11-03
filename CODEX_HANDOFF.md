@@ -1,5 +1,27 @@
 ﻿# Codex Handoff
 
+## Current update (2026-11-03): Layout exterior cable trays
+
+- Follow-up replaces the fixed right-edge detour with a run to the room's back
+  boundary, lateral travel along that boundary toward the target column, a long
+  run above that equipment column and a direct roof drop. This keeps long runs
+  away from the open center, without reversing in plan coordinates. Vertical
+  risers and small rounded elbows remain; the target-side elbow was removed
+  because it could cross its own drop in projection. MDB6-01B to MP6-01B-2 is
+  the specific regression example; both floors use the same geometry rule.
+- Floor-local room metadata stays on placed connections. Stable per-room lanes
+  separate exterior feeders in both height and projected side position. Bounds
+  include all turns and report warnings sit on the longest straight tray segment. Room-to-room,
+  ordinary nearby and FIX routing, equipment footprints and data contracts remain.
+- Verification: 27 geometry and 45 Layout page tests passed; strict TypeScript
+  and preview-mode build passed with the existing large-chunk warning. Chromium
+  checked MP6-01B-2, MP6-01A-1/2 and second-floor MP6-01E-2, vertical
+  end sections, no backtracking, fit bounds, warning placement, cable visibility, 2D/2.5D and
+  responsive widths without page errors. Screenshots were visually reviewed;
+  ignored artifacts: `runtime/automation/layout-boundary-*` and
+  `layout_boundary_routing_smoke.py`. Compiled assets rebuilt for port 5173;
+  refresh Layout. No ETL or external writes.
+
 ## Current update (2026-11-03): Equipment page design
 
 - Report-name follow-up: the report count now only expands/collapses the list.

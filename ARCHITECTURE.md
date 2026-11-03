@@ -195,7 +195,13 @@ and separate structures for six device types. UPS6 uses modular UPS cabinets
 with dark segmented doors, a display and vents at full/simple/compact detail.
 Nearby connections use low
 cubic arcs; longer paths have rounded bends. Cable path bounds are included in
-the shared fit frame and connection zoom. Global view/Escape clear focus and
+the shared fit frame and connection zoom. Room-to-upper-outdoor feeders instead
+use vertical risers/drops and grid-aligned trays along the room's back boundary
+and above the target equipment column, keeping long runs away from the open
+center. Approach coordinates stay within the endpoint span to avoid backtracking.
+Small rounded elbows and separate boundary/column lanes remain. Their warnings
+follow the longest straight tray segment and bounds include every turn. Other routes retain
+their existing geometry. Global view/Escape clear focus and
 search and restore the full camera without changing energisation overrides;
 blank map clicks clear focus while retaining the current camera.
 Layout performance separates static model geometry from selection overlays and

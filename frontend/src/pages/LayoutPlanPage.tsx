@@ -179,7 +179,7 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
   const cableGeometry = useMemo(() => {
     const lanes = layoutCableLanes(connections);
     return connections.map((connection, index) => ({ connection,
-      path: layoutCablePath(connection, lanes[index]), route: isNearbyCable(connection) ? "arc" as const : "long" as const,
+      path: layoutCablePath(connection, lanes[index]), route: !connection.roomToOverhead && isNearbyCable(connection) ? "arc" as const : "long" as const,
       markerPoint: layoutCableMarkerPoint(connection, lanes[index]),
       zone: connection.source.fixed && connection.target.fixed ? "fixed" as const
         : connection.source.fixed || connection.target.fixed ? "mixed" as const : "room" as const,

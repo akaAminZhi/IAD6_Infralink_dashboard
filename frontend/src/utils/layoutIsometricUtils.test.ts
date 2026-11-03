@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { LayoutCableRecord, LayoutEquipmentRecord, LayoutRegionRecord, PowerPlanPoint } from "../types/data";
-import { isNearbyCable, layoutCableLanes, layoutCableMarkerPoint, layoutCablePath, layoutConnectionBounds, layoutDeviceKind, overheadCablePoints, placedLayoutCables, projectLayoutPoint, projectedLayoutBounds } from "./layoutIsometricUtils";
+import { isNearbyCable, layoutCableLanes, layoutCableMarkerPoint, layoutCablePath, layoutConnectionBounds, layoutDeviceHeight, layoutDeviceKind, overheadCablePoints, placedLayoutCables, projectLayoutPoint, projectedLayoutBounds } from "./layoutIsometricUtils";
 
 const device = (key: string, x = 0): LayoutEquipmentRecord => ({ equipment_key: key, label: key, annotation_id: key,
   rect: { x, y: 20, width: 10, height: 8 }, fixed: false, source_floor_id: "first", match_status: "matched",
@@ -144,7 +144,9 @@ describe("2.5D geometry", () => {
       const [reverse] = placedLayoutCables([{ ...cable, source_equipment_key: "B", target_equipment_key: "A" }], [source, target], rooms);
       expect(reverse.roomToOverhead).toBe(expected);
       if (expected) {
-        expect(layoutCablePath(connection)).toContain(" C ");
+        expect(layoutCablePath(connection)).toContain(" L ");
+        expect(layoutCablePath(connection)).toContain(" Q ");
+        expect(layoutCablePath(connection)).not.toContain(" C ");
         expect(layoutCablePath(connection)).toBe(layoutCablePath(reverse));
         expect(placedLayoutCables([cable], [source, target])[0].roomToOverhead).toBe(false);
         expect(placedLayoutCables([cable], [source, { ...target, fixed: true }], rooms)[0].roomToOverhead).toBe(false);
@@ -155,19 +157,59 @@ describe("2.5D geometry", () => {
     }
   });
 
-  it("keeps the MDB6-01A to upper MP6-01A-2 feeder as a long arc with accurate warning and fit bounds", () => {
-    const source = { ...device("A"), rect: { x: 1137.914, y: 456.301, width: 3.782, height: 5.934 } };
-    const target = { ...device("B"), rect: { x: 961.293, y: 135.328, width: 2.456, height: 5.757 } };
+  it.each([["MP6-01A-1", 1271.636, 155.336], ["MP6-01A-2", 961.293, 135.328],
+    ["MP6-01B-1", 1271.707, 162.836], ["MP6-01B-2", 961.191, 143.376]])(
+    "reaches %s along the room boundary and target column without reversing or crossing the open center", (key, x, y) => {
+    const fromB = String(key).includes("01B");
+    const source = { ...device(fromB ? "MDB6-01B" : "MDB6-01A"), rect: fromB
+      ? { x: 1058.713, y: 456.406, width: 3.551, height: 5.084 }
+      : { x: 1137.914, y: 456.301, width: 3.782, height: 5.934 } };
+    const target = { ...device(key), rect: { x, y, width: 2.456, height: 5.757 } };
+    const record = { ...cable, cable_id: `FDR-IAD06-${source.equipment_key}-IAD06-${key}`,
+      source_equipment_key: source.equipment_key, target_equipment_key: target.equipment_key };
     const rooms: LayoutRegionRecord[] = [{ annotation_id: "ROOM", label: "E6-110-01", kind: "room", fixed: false,
-      source_floor_id: "first", rect: { x: 1136.834, y: 431.173, width: 85.064, height: 78.547 } }];
-    const [connection] = placedLayoutCables([cable], [source, target], rooms);
+      source_floor_id: "first", rect: fromB
+        ? { x: 1057.537, y: 430.766, width: 79.497, height: 78.954 }
+        : { x: 1136.834, y: 431.173, width: 85.064, height: 78.547 } }];
+    const [connection] = placedLayoutCables([record], [source, target], rooms);
     expect(connection.roomToOverhead).toBe(true);
     const path = layoutCablePath(connection, -4), points = sampleRoomPath(path);
-    expect(path).toContain(" C ");
-    expect(path).not.toMatch(/ [LQ] /);
+    expect(path).toContain(" L ");
+    expect(path).toContain(" Q ");
+    expect(path).not.toContain(" C ");
+    expect(pathsCross(points, points)).toBe(false);
+    const route = overheadCablePoints(connection, -4);
+    const [start, rise, exit, columnStart, drop, end] = route;
+    // Roof ports have straight vertical risers/drops, with no lateral drift.
+    const sourcePort = projectLayoutPoint(source.rect.x + source.rect.width / 2,
+      source.rect.y + source.rect.height / 2, layoutDeviceHeight(source));
+    const targetPort = projectLayoutPoint(target.rect.x + target.rect.width / 2,
+      target.rect.y + target.rect.height / 2, layoutDeviceHeight(target));
+    expect(start.x).toBeCloseTo(sourcePort.x);
+    expect(start.y).toBeCloseTo(sourcePort.y);
+    expect(end.x).toBeCloseTo(targetPort.x);
+    expect(end.y).toBeCloseTo(targetPort.y);
+    expect(rise.x).toBe(start.x);
+    expect(rise.y).toBeLessThan(start.y);
+    expect(drop.x).toBe(end.x);
+    expect(drop.y).toBeLessThan(end.y);
+    expect(points[1].x).toBe(start.x);
+    expect(points[points.length - 2].x).toBe(end.x);
+    // Keep lateral travel on the room boundary and long runs beside the target column.
+    expect((exit.y - rise.y) / (exit.x - rise.x)).toBeCloseTo(-0.5);
+    expect((columnStart.y - exit.y) / (columnStart.x - exit.x)).toBeCloseTo(0.5);
+    expect((drop.y - columnStart.y) / (drop.x - columnStart.x)).toBeCloseTo(-0.5);
+    const height = layoutDeviceHeight(source) + 22;
+    const world = route.slice(1, -1).map((point) => ({ x: point.y + height + point.x / 2, y: point.y + height - point.x / 2 }));
+    expect(world[1].y).toBeLessThan(rooms[0].rect.y);
+    expect(world[2].y).toBeCloseTo(world[1].y);
+    expect(world[2].x).toBeCloseTo(target.rect.x + target.rect.width / 2);
+    expect(world[3].x).toBeCloseTo(world[2].x);
+    // Total tray travel equals the endpoint Manhattan distance, with no U-turns.
+    const travel = world.slice(1).reduce((sum, point, i) => sum + Math.abs(point.x - world[i].x) + Math.abs(point.y - world[i].y), 0);
+    expect(travel).toBeCloseTo(Math.abs(world[3].x - world[0].x) + Math.abs(world[3].y - world[0].y));
     const marker = layoutCableMarkerPoint(connection, -4);
-    expect(marker.x).toBeCloseTo(points[20].x);
-    expect(marker.y).toBeCloseTo(points[20].y);
+    expect(marker).toEqual({ x: (columnStart.x + drop.x) / 2, y: (columnStart.y + drop.y) / 2 });
     const bounds = layoutConnectionBounds(connection, -4);
     for (const point of points) {
       expect(point.x).toBeGreaterThanOrEqual(bounds.x);
@@ -180,9 +222,56 @@ describe("2.5D geometry", () => {
     expect(layoutCableMarkerPoint(tray, -4)).toEqual({ x: (b.x + c.x) / 2, y: (b.y + c.y) / 2 });
   });
 
-  it("does not let overhead arcs change the lanes of room-to-room trays", () => {
+  it("uses the same exterior route regardless of endpoint order and separates the room's feeders", () => {
+    const source = { ...device("Z", 10), rect: { x: 10, y: 120, width: 10, height: 8 } };
+    const targets = [device("A", 80), device("B", 160)];
+    const room: LayoutRegionRecord = { annotation_id: "ROOM", label: "ROOM", kind: "room", fixed: false,
+      source_floor_id: "first", rect: { x: 0, y: 100, width: 80, height: 60 } };
+    const records = targets.map((target) => ({ ...cable, cable_id: `Z-${target.equipment_key}`,
+      source_equipment_key: "Z", target_equipment_key: target.equipment_key }));
+    const connections = placedLayoutCables(records, [source, ...targets], [room]);
+    const lanes = layoutCableLanes(connections);
+    expect(lanes[0]).not.toBe(lanes[1]);
+    const exteriorIntercepts = connections.map((connection, i) => {
+      const [, , side] = overheadCablePoints(connection, lanes[i]);
+      return side.y + side.x * 0.5;
+    });
+    expect(exteriorIntercepts[0]).not.toBeCloseTo(exteriorIntercepts[1]);
+    const reversed = placedLayoutCables([...records].reverse().map((record) => ({ ...record,
+      source_equipment_key: record.target_equipment_key, target_equipment_key: record.source_equipment_key })),
+    [source, ...targets], [room]);
+    expect(layoutCableLanes(reversed).reverse()).toEqual(lanes);
+    connections.forEach((connection, i) => {
+      expect(layoutCablePath(connection, lanes[i])).toBe(layoutCablePath(reversed[1 - i], lanes[i]));
+      const [start, rise, exit, approach, drop, end] = overheadCablePoints(connection, lanes[i]);
+      expect(start.x).toBe(rise.x);
+      expect(end.x).toBe(drop.x);
+      expect(exit).not.toEqual(approach);
+    });
+  });
+
+  it("routes even a nearby room-to-outdoor feeder around the perimeter while retaining FIX arcs", () => {
+    const source = { ...device("A"), rect: { x: 10, y: 102, width: 10, height: 8 } };
+    const target = { ...device("B"), rect: { x: 10, y: 86, width: 10, height: 8 } };
+    const room: LayoutRegionRecord = { annotation_id: "ROOM", label: "ROOM", kind: "room", fixed: false,
+      source_floor_id: "first", rect: { x: 0, y: 100, width: 40, height: 60 } };
+    const [connection] = placedLayoutCables([cable], [source, target], [room]);
+    expect(isNearbyCable(connection)).toBe(true);
+    expect(connection.roomToOverhead).toBe(true);
+    expect(layoutCablePath(connection)).not.toContain(" C ");
+    expect(layoutCablePath(connection)).toContain(" Q ");
+    const [fixed] = placedLayoutCables([cable], [{ ...source, fixed: true }, { ...target, fixed: true }], [room]);
+    expect(fixed.roomToOverhead).toBe(false);
+    expect(layoutCablePath(fixed)).toContain(" C ");
+  });
+
+  it("does not let exterior routes change the lanes of room-to-room trays", () => {
     const tray = { cable, source: device("A"), target: device("B", 100) };
-    const upper = { cable: { ...cable, cable_id: "UPPER" }, source: tray.source, target: device("UPPER", 200), roomToOverhead: true };
+    const room: LayoutRegionRecord = { annotation_id: "ROOM", label: "ROOM", kind: "room", fixed: false,
+      source_floor_id: "first", rect: { x: 0, y: 0, width: 40, height: 60 } };
+    const upper = { cable: { ...cable, cable_id: "UPPER" }, source: tray.source,
+      target: { ...device("UPPER", 200), rect: { x: 200, y: -100, width: 10, height: 8 } },
+      roomToOverhead: true, overheadRoom: room };
     expect(layoutCableLanes([tray, upper])[0]).toBe(layoutCableLanes([tray])[0]);
     const paired = { ...upper, cable: { ...cable, cable_id: "UPPER-2" } };
     const lanes = layoutCableLanes([upper, paired]);

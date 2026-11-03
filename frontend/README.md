@@ -110,9 +110,13 @@ the fitted camera. **Escape** does the same outside box
 selection. Clicking empty map space or **Clear focus** removes focus/search
 without moving the camera. Planning overrides are unaffected. Nearby cables
 use low cubic arcs. FIX-to-FIX routes keep taller arcs. Longer connections
-between rooms retain vertical risers and a rounded overhead band. Only feeders
-from a device inside a room to a device outside and above that room use broad,
-continuous cubic arcs. Room boundaries determine this distinction on each floor.
+between rooms retain vertical risers and a rounded overhead band. Feeders
+from a device inside a room to a device outside and above that room rise vertically,
+exit through the room's back edge and follow that boundary toward the target's
+equipment column. Long runs align above that column and drop directly onto the target roof.
+Approaches stay within the endpoint span to avoid U-turns and long runs through
+the open center. These grid-aligned runs have small rounded elbows and separate
+boundary/column lanes. Room boundaries determine this distinction on each floor.
 Tested routes use solid green or blue
 lines; failed and unconfirmed routes remain dashed. Room lines are
 lighter than FIX lines. Multiple cables between the
