@@ -17,6 +17,42 @@ describe("EquipmentPage", () => {
     clearPublishedNetaReviewCache();
   });
   afterEach(() => vi.restoreAllMocks());
+  it("switches report names with a separate button and uses the report count only to expand or collapse", async () => {
+    const user = userEvent.setup();
+    const data = makeDashboardData({
+      pdms: [],
+      equipment: [{ equipment_id: "EQ-REPORTS", neta_test_report: "Original-1.pdf; Original-2.pdf" }],
+      netaReportManifest: { records: [
+        { source_key: "downloaded", report_name: "Original-1.pdf", url: "/neta-reports/Original-1.pdf" },
+        { source_key: "gc", source_report_name: "Original-1.pdf", report_name: "GC-Equipment-Report.pdf", url: "/gc-reports/GC-Equipment-Report.pdf" },
+        { source_key: "downloaded", report_name: "Original-2.pdf", url: "/neta-reports/Original-2.pdf" },
+      ] },
+    });
+    render(<MemoryRouter><NetaReportManifestProvider manifest={data.netaReportManifest}><EquipmentPage data={data} /></NetaReportManifestProvider></MemoryRouter>);
+    const row = screen.getByRole("cell", { name: "EQ-REPORTS" }).closest("tr")!;
+    const reports = () => within(row).getByRole("button", { name: "2 reports" });
+    expect(within(row).queryByRole("button", { name: "Show GC report names" })).not.toBeInTheDocument();
+
+    await user.click(reports());
+    expect(within(row).getByRole("button", { name: "Original-1.pdf" })).toBeInTheDocument();
+    await user.click(within(row).getByRole("button", { name: "Show GC report names" }));
+    expect(reports()).toHaveAttribute("aria-expanded", "true");
+    expect(within(row).queryByRole("button", { name: "Original-1.pdf" })).not.toBeInTheDocument();
+    expect(within(row).getByRole("button", { name: "Original-2.pdf" })).toBeInTheDocument();
+    expect(screen.queryByText("Asset Information")).not.toBeInTheDocument();
+    await user.click(within(row).getByRole("button", { name: "GC-Equipment-Report.pdf" }));
+    expect(document.querySelector('iframe[title="GC-Equipment-Report.pdf"]')).toHaveAttribute("src", "/gc-reports/GC-Equipment-Report.pdf");
+    await user.click(screen.getByRole("button", { name: "Close NETA report preview" }));
+    await user.click(within(row).getByRole("button", { name: "Show original report names" }));
+    expect(within(row).getByRole("button", { name: "Original-1.pdf" })).toBeInTheDocument();
+    await user.click(within(row).getByRole("button", { name: "Show GC report names" }));
+    await user.click(reports());
+    expect(reports()).toHaveAttribute("aria-expanded", "false");
+    expect(within(row).queryByRole("button", { name: "Show original report names" })).not.toBeInTheDocument();
+    await user.click(reports());
+    expect(within(row).getByRole("button", { name: "Original-1.pdf" })).toBeInTheDocument();
+  });
+
   it("shows cable ATP completion consistently in table, summary, filters and details", async () => {
     const user = userEvent.setup();
     const cableId = "FDR-IAD06-MDS6-01B-IAD06-CH607-01B";
@@ -62,7 +98,7 @@ describe("EquipmentPage", () => {
     render(<MemoryRouter><NetaReportManifestProvider manifest={null}><EquipmentPage data={data} /></NetaReportManifestProvider></MemoryRouter>);
     const ids = () => screen.getAllByRole("row").slice(1).map((row) => within(row).getAllByRole("cell")[0].textContent);
     expect(ids()[0]).toBe(cableId);
-    await user.click(screen.getByRole("button", { name: "Search & Filters" }));
+    expect(screen.getByRole("button", { name: "More filters" })).toHaveAttribute("aria-expanded", "false");
     const search = screen.getByPlaceholderText("Search equipment ID or source label");
     await user.type(search, "eq");
     await waitFor(() => expect(ids().slice(0, 2)).toEqual(regularIds));
@@ -74,6 +110,16 @@ describe("EquipmentPage", () => {
     await user.clear(search);
     await user.type(search, cableId + "-A");
     await waitFor(() => expect(ids()).toEqual([cableId + "-A"]));
+    await user.click(screen.getByRole("button", { name: "Remove Equipment filter" }));
+    await waitFor(() => expect(ids()).toHaveLength(4));
+    await user.click(screen.getByRole("button", { name: "More filters" }));
+    await user.selectOptions(screen.getByLabelText("Equipment Type", { exact: true }), "Switchgear");
+    await waitFor(() => expect(ids()).toHaveLength(2));
+    await user.click(screen.getByRole("button", { name: /More filters/ }));
+    expect(screen.queryByLabelText("Equipment Type", { exact: true })).not.toBeInTheDocument();
+    expect(ids()).toHaveLength(2);
+    await user.click(screen.getByRole("button", { name: "Remove Equipment type filter" }));
+    await waitFor(() => expect(ids()).toHaveLength(4));
   });
 
   it("searches cables, terminations and other Excel IDs outside PDMs without NETA evidence", async () => {
@@ -90,7 +136,6 @@ describe("EquipmentPage", () => {
       cases: [{ case_id: "CABLE-ISSUE", equipment_id: cableId, status: "Open", issue_image: "evidence.jpg", corrective_images: "repair.jpg" }],
     });
     render(<MemoryRouter><NetaReportManifestProvider manifest={null}><EquipmentPage data={data} /></NetaReportManifestProvider></MemoryRouter>);
-    await user.click(screen.getByRole("button", { name: "Search & Filters" }));
     const search = screen.getByPlaceholderText("Search equipment ID or source label");
     for (const id of [cableId, "IAD06-TERM-1", "IAD06-INV6-01"]) {
       await user.clear(search);

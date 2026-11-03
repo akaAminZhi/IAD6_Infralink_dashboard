@@ -6,7 +6,7 @@ import {
   type SortingState,
   useReactTable,
 } from "@tanstack/react-table";
-import { ArrowDown, ArrowUp, ChevronsUpDown } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronsUpDown, Repeat2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { useNetaReportManifest } from "../../contexts/NetaReportManifestContext";
@@ -20,7 +20,7 @@ import {
   hasMissingNetaReport,
   type FlattenedEquipmentRow,
 } from "../../utils/equipmentUtils";
-import { getNetaReportLinks } from "../../utils/netaReports";
+import { hasGcNetaReportLinks } from "../../utils/netaReports";
 import { equipmentSearchPriority } from "../../utils/searchUtils";
 import { EmptyState } from "../common/EmptyState";
 import { NetaReportChips } from "../common/NetaReportChips";
@@ -82,23 +82,25 @@ export function EquipmentTable({ rows, selectedRowId, onSelectEquipment, priorit
   );
   const netaReportManifest = useNetaReportManifest();
 
-  function hasGcReportLinks(reportNames: string[]): boolean {
-    return reportNames.some((reportName) =>
-      getNetaReportLinks(reportName, netaReportManifest).some((link) => link.sourceKey === "gc"),
-    );
-  }
-
-  function toggleReports(rowId: string, canShowGcNames: boolean) {
+  function toggleReports(rowId: string) {
     setExpandedReportModes((current) => {
       const next = new Map(current);
       const currentMode = next.get(rowId);
-      if (currentMode === "original" && canShowGcNames) {
-        next.set(rowId, "gc");
-      } else if (currentMode === "original" || currentMode === "gc") {
+      if (currentMode) {
         next.delete(rowId);
       } else {
         next.set(rowId, "original");
       }
+      return next;
+    });
+  }
+
+  function toggleReportNames(rowId: string) {
+    setExpandedReportModes((current) => {
+      const mode = current.get(rowId);
+      if (!mode) return current;
+      const next = new Map(current);
+      next.set(rowId, mode === "original" ? "gc" : "original");
       return next;
     });
   }
@@ -108,7 +110,18 @@ export function EquipmentTable({ rows, selectedRowId, onSelectEquipment, priorit
       {
         accessorKey: "display_equipment_id",
         header: "Equipment ID",
-        cell: ({ row }) => <span className="font-medium">{row.original.display_equipment_id}</span>,
+        cell: ({ row }) => (
+          <button
+            className="equipment-id-button"
+            onClick={(event) => {
+              event.stopPropagation();
+              onSelectEquipment(row.original);
+            }}
+            type="button"
+          >
+            {row.original.display_equipment_id}
+          </button>
+        ),
       },
       {
         accessorKey: "pdm_name",
@@ -135,18 +148,35 @@ export function EquipmentTable({ rows, selectedRowId, onSelectEquipment, priorit
                 expandedMode ? "w-[520px] max-w-[520px]" : "max-w-[640px]",
               )}
             >
-              <Button
-                aria-expanded={expandedMode !== undefined}
-                className="h-8 px-2 text-xs"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  toggleReports(row.original.row_id, hasGcReportLinks(reportNames));
-                }}
-                type="button"
-                variant="outline"
-              >
-                {formatNumber(reportCount)} reports
-              </Button>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  aria-expanded={expandedMode !== undefined}
+                  className="h-8 px-2 text-xs"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    toggleReports(row.original.row_id);
+                  }}
+                  type="button"
+                  variant="outline"
+                >
+                  {formatNumber(reportCount)} reports
+                </Button>
+                {expandedMode && hasGcNetaReportLinks(reportNames, netaReportManifest) ? (
+                  <Button
+                    aria-pressed={expandedMode === "gc"}
+                    className="h-8 gap-1.5 border-blue-200 bg-blue-50 px-2 text-xs text-blue-900"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      toggleReportNames(row.original.row_id);
+                    }}
+                    type="button"
+                    variant="outline"
+                  >
+                    <Repeat2 className="h-3.5 w-3.5" aria-hidden="true" />
+                    {expandedMode === "gc" ? "Show original report names" : "Show GC report names"}
+                  </Button>
+                ) : null}
+              </div>
               {expandedMode ? (
                 <>
                   {reportNames.length ? <NetaReportChips compactNameMode={expandedMode} reports={reportNames} /> : null}
@@ -202,7 +232,7 @@ export function EquipmentTable({ rows, selectedRowId, onSelectEquipment, priorit
         enableSorting: false,
       },
     ],
-    [expandedReportModes],
+    [expandedReportModes, onSelectEquipment, netaReportManifest],
   );
 
   const table = useReactTable({
@@ -228,7 +258,7 @@ export function EquipmentTable({ rows, selectedRowId, onSelectEquipment, priorit
   }, [rows, sorting]);
 
   return (
-    <Card>
+    <Card className="equipment-lookup">
       <CardHeader className="gap-2 md:flex-row md:items-start md:justify-between">
         <div>
           <CardTitle>Equipment Lookup Table</CardTitle>
@@ -242,20 +272,30 @@ export function EquipmentTable({ rows, selectedRowId, onSelectEquipment, priorit
             : `${formatNumber(rows.length)} shown`}
         </StatusBadge>
       </CardHeader>
-      <CardContent>
+      <CardContent className="equipment-lookup-content">
         {rows.length === 0 ? (
           <EmptyState
             title="No equipment matches the current filters"
             description="Clear filters or search for a different equipment ID."
           />
         ) : (
-          <div className="overflow-x-auto">
+          <div>
+            <div aria-label="Equipment results" className="equipment-table-scroll" role="region" tabIndex={0}>
             <table className="w-full min-w-[1420px] text-left text-sm">
+              <caption className="sr-only">Equipment, PDM associations, test reports and open cases. Select an equipment ID to open its details.</caption>
               <thead className="border-b text-xs uppercase text-muted-foreground">
                 {table.getHeaderGroups().map((headerGroup) => (
                   <tr key={headerGroup.id}>
                     {headerGroup.headers.map((header) => (
-                      <th className="px-3 py-2 font-medium" key={header.id}>
+                      <th
+                        aria-sort={header.column.getCanSort()
+                          ? header.column.getIsSorted() === "asc" ? "ascending"
+                            : header.column.getIsSorted() === "desc" ? "descending" : "none"
+                          : undefined}
+                        className="px-3 py-2 font-medium"
+                        scope="col"
+                        key={header.id}
+                      >
                         {header.isPlaceholder ? null : (
                           <SortableHeader column={header.column}>
                             {String(
@@ -283,6 +323,7 @@ export function EquipmentTable({ rows, selectedRowId, onSelectEquipment, priorit
                         "cursor-pointer border-b align-top transition-colors last:border-0 hover:bg-muted/50",
                         isSelected ? "bg-primary/5" : "",
                       )}
+                      data-selected={isSelected}
                       key={row.id}
                       onClick={() => onSelectEquipment(original)}
                     >
@@ -304,6 +345,7 @@ export function EquipmentTable({ rows, selectedRowId, onSelectEquipment, priorit
                 })}
               </tbody>
             </table>
+            </div>
             {rows.length > PAGE_SIZE ? (
               <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t pt-4 text-sm">
                 <div className="text-muted-foreground">

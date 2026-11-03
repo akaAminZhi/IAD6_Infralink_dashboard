@@ -1,5 +1,39 @@
 ﻿# Codex Handoff
 
+## Current update (2026-11-03): Equipment page design
+
+- Report-name follow-up: the report count now only expands/collapses the list.
+  Expanded rows with GC mappings show an explicit Show GC report names / Show
+  original report names button. Unmapped PDFs retain their original names;
+  reopening starts with original names. Existing PDF preview links are retained.
+  All 9 EquipmentPage tests pass, covering switching, partial GC mappings,
+  preview URLs and collapse/reopen. Chromium verified all 15 report names on
+  a real mapped PDU, keyboard switching and no unintended equipment drawer;
+  screenshots use `equipment-original-report-names` / `equipment-gc-report-names`.
+- Applied the requested frontend-design skill with the same engineering-blue,
+  Segoe UI and tabular-number treatment as EPS. Equipment inventory is labelled
+  separately from overlapping readiness/exception metrics; no completion ratio
+  is inferred from the full inventory. Summary values retain existing helpers.
+- Equipment/PDM search is always visible. More filters defaults to collapsed;
+  active search/type/status/NETA/exception conditions have removable chips, remain
+  effective while collapsed, and retain the existing Reset and URL cohort rules.
+- Equipment results scroll in a bounded region with sticky headers and a sticky
+  ID column. IDs are real keyboard-accessible buttons; row selection, report
+  expansion, sorting, equipment-first search grouping and pagination remain.
+  Pagination is outside the horizontal scroll region. Changes use page-scoped
+  CSS; data contracts, tracking, evidence and report-upload rules are unchanged.
+- All 16 targeted EquipmentPage/CxalloyUploadBadge tests passed, including cable
+  ATP completion, source IDs, search grouping, KPR cohorts, review permissions,
+  report file counts and filter removal after collapsing advanced controls.
+  Strict TypeScript/preview build passed with the existing large-chunk warning.
+- Real Chromium verified search, advanced filters, chips, sticky header/ID
+  geometry, keyboard details, exceptions, sorting and pagination. No page errors
+  or document overflow at 390/768/1280px. Desktop/mobile screenshots visually
+  reviewed; ignored artifacts use `runtime/automation/equipment-after-*`,
+  `equipment-sticky-table.png` and `equipment_ui_smoke.py`.
+- Preview remains on port 5174. No ETL, vendor writes or user-service restart.
+  Compiled frontend assets rebuilt.
+
 ## Current update (2026-11-03): EPS execution page design
 
 - Follow-up: PDM Execution Table and Test Items Table now default to collapsed,

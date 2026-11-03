@@ -9,7 +9,6 @@ import {
   TrendingUp,
 } from "lucide-react";
 
-import { StatusBadge } from "../common/StatusBadge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
 import { cn } from "../../utils/cn";
 import { formatNumber } from "../../utils/formatters";
@@ -73,6 +72,7 @@ export function EquipmentSummaryCards({
       activeClass: "text-red-700",
       alertClass: "text-red-700",
       available: netaReportReviewsAvailable,
+      tone: "equipment-exception-red",
     },
     {
       description: "Equipment with a NETA report awaiting manual review.",
@@ -83,6 +83,7 @@ export function EquipmentSummaryCards({
       activeClass: "text-orange-700",
       alertClass: "text-orange-700",
       available: netaReportReviewsAvailable,
+      tone: "equipment-exception-amber",
     },
     {
       description: "GC report packages not confirmed as uploaded.",
@@ -93,6 +94,7 @@ export function EquipmentSummaryCards({
       activeClass: "text-blue-700",
       alertClass: "text-blue-700",
       available: true,
+      tone: "equipment-exception-blue",
     },
     {
       description: "NETA complete equipment missing report evidence.",
@@ -103,6 +105,7 @@ export function EquipmentSummaryCards({
       activeClass: "text-red-700",
       alertClass: "text-red-700",
       available: true,
+      tone: "equipment-exception-red",
     },
     {
       description: "Related cases without issue image references.",
@@ -113,19 +116,17 @@ export function EquipmentSummaryCards({
       activeClass: "text-amber-700",
       alertClass: "text-amber-700",
       available: true,
+      tone: "equipment-exception-amber",
     },
   ];
 
   return (
-    <Card className="overflow-hidden">
+    <Card className="equipment-summary overflow-hidden">
       <CardHeader className="gap-3 border-b bg-slate-50/60 md:flex-row md:items-center md:justify-between">
         <div>
-          <CardTitle>Equipment Readiness & Exceptions</CardTitle>
-          <CardDescription>Use each metric to filter the equipment lookup table.</CardDescription>
+          <CardTitle>Readiness &amp; exceptions</CardTitle>
+          <CardDescription>Select a metric to focus the equipment list. Counts can overlap.</CardDescription>
         </div>
-        <StatusBadge tone="muted">
-          {`${formatNumber(metrics.uniqueEquipmentIds)} unique equipment IDs`}
-        </StatusBadge>
       </CardHeader>
 
       <CardContent className="p-0">
@@ -210,7 +211,8 @@ export function EquipmentSummaryCards({
               <button
                 aria-pressed={isActive}
                 className={cn(
-                  "flex min-h-24 items-center gap-3 px-5 py-4 text-left transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+                  "equipment-exception flex min-h-24 items-center gap-3 px-5 py-4 text-left transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+                  hasException ? item.tone : "equipment-exception-neutral",
                   index < exceptions.length - 1 ? "border-b xl:border-b-0 xl:border-r" : "",
                   isActive ? "bg-blue-50/70" : "bg-background",
                 )}

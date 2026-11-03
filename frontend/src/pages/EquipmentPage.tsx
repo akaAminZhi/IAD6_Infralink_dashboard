@@ -1,5 +1,6 @@
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import { Database, ShieldCheck } from "lucide-react";
 
 import { EmptyState } from "../components/common/EmptyState";
 import { EquipmentDetailDrawer } from "../components/equipment/EquipmentDetailDrawer";
@@ -29,6 +30,8 @@ import {
 } from "../utils/equipmentUtils";
 import { matchesSearchQuery } from "../utils/searchUtils";
 import { getEquipmentNetaReviewState, type EquipmentNetaReviewState } from "../utils/netaReportReviews";
+import { formatNumber } from "../utils/formatters";
+import "./EquipmentPage.css";
 
 interface EquipmentPageProps {
   data: DashboardData;
@@ -444,7 +447,17 @@ export function EquipmentPage({ data }: EquipmentPageProps) {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
+    <div className="equipment-page mx-auto flex w-full max-w-[1440px] flex-col gap-5">
+      <div className="equipment-page-heading">
+        <div>
+          <h2>Equipment</h2>
+          <p>Find an asset, check its test evidence and follow up on open issues.</p>
+        </div>
+        <div className="equipment-inventory-note">
+          <Database className="h-4 w-4" aria-hidden="true" />
+          <span><strong>{formatNumber(summaryMetrics.uniqueEquipmentIds)}</strong> equipment IDs<br />Includes cables and terminations</span>
+        </div>
+      </div>
       <EquipmentSummaryCards
         activeFilter={activeQuickFilter}
         historyComparison={data.historyComparison}
@@ -457,11 +470,14 @@ export function EquipmentPage({ data }: EquipmentPageProps) {
       />
 
       {netaReportReviews && !netaReviewsEditable ? (
-        <p className="text-xs text-muted-foreground">
+        <p className="equipment-review-note">
+          <ShieldCheck className="h-4 w-4 shrink-0" aria-hidden="true" />
+          <span>
           NETA review results: read-only published snapshot
           {netaReportReviews.published_at
             ? ` · Published ${new Date(netaReportReviews.published_at).toLocaleString()}`
             : ""}. Changes are made locally and appear after the next data publication.
+          </span>
         </p>
       ) : null}
 
