@@ -1,8 +1,11 @@
-import { ResponsivePie } from "@nivo/pie";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   Activity,
+  ArrowDown,
+  CalendarDays,
+  RotateCcw,
+  X,
   AlertTriangle,
   ArrowDownRight,
   ArrowUpRight,
@@ -32,6 +35,7 @@ import { cn } from "../utils/cn";
 import { getEpsTestItemStatusLabel } from "../utils/epsTestItemUtils";
 import { formatNumber } from "../utils/formatters";
 import { matchesSearchQuery } from "../utils/searchUtils";
+import "./EpsTestExecutionPage.css";
 
 interface EpsTestExecutionPageProps {
   data: DashboardData;
@@ -822,7 +826,7 @@ function EpsActivityCards({
       className: isBetter ? "text-emerald-700" : "text-red-700",
       Icon,
       label: `${sign}${formatNumber(Math.abs(delta))} vs previous 7d`,
-      motionClass: delta > 0 ? "animate-trend-rise" : "animate-trend-fall",
+      motionClass: "",
     };
   }
 
@@ -940,7 +944,7 @@ function EpsActivityCards({
     <Card>
       <CardHeader className="gap-2 md:flex-row md:items-start md:justify-between">
         <div>
-          <CardTitle>Testing Activity vs 7-Day Baseline</CardTitle>
+          <CardTitle>Recent testing activity</CardTitle>
           <CardDescription>
             Daily passed equipment and 7-day execution movement from EPS snapshots.
           </CardDescription>
@@ -949,6 +953,8 @@ function EpsActivityCards({
           {activeFilter ? <StatusBadge tone="default">Activity filter active</StatusBadge> : null}
           <button
             className="rounded-md border px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            aria-expanded={advancedOpen}
+            aria-controls="eps-advanced-activity"
             onClick={() => setAdvancedOpen((current) => !current)}
             type="button"
           >
@@ -957,7 +963,7 @@ function EpsActivityCards({
         </div>
       </CardHeader>
       <CardContent>
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+        <div className="eps-activity-grid">
           {cards.map((card) => {
             const Icon = card.icon;
             const TrendIcon = card.trend?.Icon ?? Minus;
@@ -968,9 +974,9 @@ function EpsActivityCards({
               <button
                 aria-pressed={isActive}
                 className={cn(
-                  "rounded-md border p-4 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  "eps-activity-cell rounded-md border p-4 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                   card.tone,
-                  isActive ? "ring-2 ring-primary" : "hover:-translate-y-0.5 hover:shadow-sm",
+                  isActive ? "ring-2 ring-primary" : "hover:border-primary/50",
                   !card.enabled ? "cursor-not-allowed opacity-70 hover:translate-y-0 hover:shadow-none" : "",
                 )}
                 disabled={!card.enabled}
@@ -979,7 +985,7 @@ function EpsActivityCards({
                 type="button"
               >
                 <div className="flex items-start justify-between gap-3">
-                  <div className="text-xs font-medium uppercase text-muted-foreground">{card.label}</div>
+                  <div className="text-xs font-medium text-muted-foreground">{card.label}</div>
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-background/70 ring-1 ring-border/70">
                     <Icon className={`h-5 w-5 ${card.iconClassName}`} aria-hidden="true" />
                   </div>
@@ -992,7 +998,7 @@ function EpsActivityCards({
                     <TrendIcon className={`h-4 w-4 ${card.trend.motionClass}`} aria-hidden="true" />
                     {card.trend.label}
                   </div>
-                ) : null}
+                ) : <div aria-hidden="true" className="mt-2 h-5" />}
                 <div className="mt-2 text-xs font-medium text-muted-foreground">
                   {isActive ? "Filtered" : card.note}
                 </div>
@@ -1001,7 +1007,7 @@ function EpsActivityCards({
           })}
         </div>
         {advancedOpen ? (
-          <div className="mt-4 rounded-md border bg-muted/20 p-4">
+          <div id="eps-advanced-activity" className="mt-4 rounded-md border bg-muted/20 p-4">
             {advancedAvailable ? (
               <div className="grid gap-4 xl:grid-cols-2">
                 <div className="rounded-md border bg-background p-4">
@@ -1038,7 +1044,7 @@ function EpsActivityCards({
                       onClick={() => onSelectFilter("advancedDailyPassed", advancedDailyPassedEquipment)}
                       type="button"
                     >
-                      <div className="text-xs font-medium uppercase text-muted-foreground">Passed</div>
+                      <div className="text-xs font-medium text-muted-foreground">Passed</div>
                       <div className="mt-2 text-3xl font-semibold tracking-normal">
                         {formatNumber(advancedDailyPassedEquipment.length)}
                       </div>
@@ -1054,7 +1060,7 @@ function EpsActivityCards({
                       onClick={() => onSelectFilter("advancedDailyFailed", advancedDailyFailedEquipment)}
                       type="button"
                     >
-                      <div className="text-xs font-medium uppercase text-muted-foreground">Failed</div>
+                      <div className="text-xs font-medium text-muted-foreground">Failed</div>
                       <div className="mt-2 text-3xl font-semibold tracking-normal">
                         {formatNumber(advancedDailyFailedEquipment.length)}
                       </div>
@@ -1113,7 +1119,7 @@ function EpsActivityCards({
                       }
                       type="button"
                     >
-                      <div className="text-xs font-medium uppercase text-muted-foreground">New Passed</div>
+                      <div className="text-xs font-medium text-muted-foreground">New Passed</div>
                       <div className="mt-2 text-3xl font-semibold tracking-normal">
                         {formatNumber(advancedCumulativePassedEquipment.length)}
                       </div>
@@ -1133,7 +1139,7 @@ function EpsActivityCards({
                       }
                       type="button"
                     >
-                      <div className="text-xs font-medium uppercase text-muted-foreground">New Failed</div>
+                      <div className="text-xs font-medium text-muted-foreground">New Failed</div>
                       <div className="mt-2 text-3xl font-semibold tracking-normal">
                         {formatNumber(advancedCumulativeFailedEquipment.length)}
                       </div>
@@ -1176,7 +1182,7 @@ function TestItemBreakdownPanel({
         <div className="flex items-start justify-between gap-3">
           <div>
             <CardTitle className="text-base">Test Item Breakdown</CardTitle>
-            <CardDescription>Field execution status by individual EPS tracker test item.</CardDescription>
+            <CardDescription>Select a result to filter the PDM and test item tables.</CardDescription>
           </div>
           <StatusBadge
             tone={
@@ -1192,51 +1198,22 @@ function TestItemBreakdownPanel({
         </div>
       </CardHeader>
       <CardContent>
-        <div className="grid gap-6 md:grid-cols-[minmax(0,1.35fr)_minmax(280px,0.65fr)] md:items-center">
-          <div className="relative h-[300px] rounded-md border bg-muted/20 p-3">
-            <ResponsivePie
-              activeOuterRadiusOffset={8}
-              arcLabel={(datum) => String(datum.value)}
-              arcLabelsRadiusOffset={0.55}
-              arcLabelsSkipAngle={8}
-              arcLabelsTextColor="#ffffff"
-              borderColor="#ffffff"
-              borderWidth={2}
-              colors={({ data: datum }) => datum.color}
-              cornerRadius={3}
-              data={data}
-              enableArcLinkLabels={false}
-              innerRadius={0.62}
-              margin={{ top: 18, right: 18, bottom: 18, left: 18 }}
-              onClick={(datum) => onSelectFilter(String(datum.id) as EpsTestItemFilter)}
-              padAngle={1}
-              role="application"
-              theme={{
-                text: {
-                  fill: "#0f172a",
-                  fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif",
-                  fontSize: 12,
-                },
-                tooltip: {
-                  container: {
-                    borderRadius: 6,
-                    boxShadow: "0 10px 24px rgba(15, 23, 42, 0.16)",
-                    fontSize: 12,
-                  },
-                },
-              }}
-            />
-            <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-              <div className="rounded-full bg-card/95 px-5 py-4 text-center shadow-sm">
-                <div className="text-3xl font-semibold leading-none tracking-normal">
-                  {formatNumber(total)}
-                </div>
-                <div className="mt-1 text-xs font-medium uppercase text-muted-foreground">Test Items</div>
-              </div>
-            </div>
+        <div className="eps-item-breakdown">
+          <div aria-label="Test item status distribution" className="eps-status-track">
+            {data.filter((entry) => entry.value > 0).map((entry) => (
+              <button
+                aria-label={`${entry.name}: ${formatNumber(entry.value)} test items`}
+                aria-pressed={activeFilter === entry.id}
+                className="eps-status-segment"
+                key={entry.id}
+                onClick={() => onSelectFilter(entry.id)}
+                style={{ flexGrow: entry.value, backgroundColor: entry.color }}
+                title={`${entry.name}: ${formatNumber(entry.value)}`}
+                type="button"
+              />
+            ))}
           </div>
-
-          <div className="space-y-3">
+          <div className="eps-breakdown-legend">
             <button
               aria-pressed={!activeFilter}
               className={cn(
@@ -1246,7 +1223,7 @@ function TestItemBreakdownPanel({
               onClick={() => onSelectFilter("")}
               type="button"
             >
-              <div className="text-xs font-medium uppercase text-muted-foreground">Total Test Items</div>
+              <div className="text-xs font-medium text-muted-foreground">Total test items</div>
               <div className="mt-1 text-2xl font-semibold tracking-normal">{formatNumber(total)}</div>
             </button>
             <button
@@ -1260,7 +1237,7 @@ function TestItemBreakdownPanel({
             >
               <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
                 <div>
-                  <div className="text-xs font-semibold uppercase text-teal-800">Failure History</div>
+                  <div className="text-xs font-semibold text-teal-800">Failure History</div>
                   <div className="mt-1 text-2xl font-semibold tracking-normal text-red-600">
                     {formatNumber(failureHistoryCount)}
                   </div>
@@ -1348,50 +1325,7 @@ function FailureHistoryTrackerTypeBreakdownPanel({
         {total === 0 ? (
           <EmptyState title="No failure history found." />
         ) : (
-          <div className="grid gap-6 md:grid-cols-[minmax(0,1.35fr)_minmax(280px,0.65fr)] md:items-center">
-            <div className="relative h-[300px] rounded-md border bg-muted/20 p-3">
-              <ResponsivePie
-                activeOuterRadiusOffset={8}
-                arcLabel={(datum) => String(datum.value)}
-                arcLabelsRadiusOffset={0.55}
-                arcLabelsSkipAngle={8}
-                arcLabelsTextColor="#ffffff"
-                borderColor="#ffffff"
-                borderWidth={2}
-                colors={({ data: datum }) => datum.color}
-                cornerRadius={3}
-                data={data}
-                enableArcLinkLabels={false}
-                innerRadius={0.62}
-                margin={{ top: 18, right: 18, bottom: 18, left: 18 }}
-                onClick={(datum) => onSelectTrackerType(String(datum.id))}
-                padAngle={1}
-                role="application"
-                theme={{
-                  text: {
-                    fill: "#0f172a",
-                    fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif",
-                    fontSize: 12,
-                  },
-                  tooltip: {
-                    container: {
-                      borderRadius: 6,
-                      boxShadow: "0 10px 24px rgba(15, 23, 42, 0.16)",
-                      fontSize: 12,
-                    },
-                  },
-                }}
-              />
-              <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                <div className="rounded-full bg-card/95 px-5 py-4 text-center shadow-sm">
-                  <div className="text-3xl font-semibold leading-none tracking-normal">
-                    {formatNumber(total)}
-                  </div>
-                  <div className="mt-1 text-xs font-medium uppercase text-muted-foreground">Failure History</div>
-                </div>
-              </div>
-            </div>
-
+          <div className="eps-failure-breakdown">
             <div className="space-y-3">
               <button
                 aria-pressed={isFailureHistoryFilterActive && !activeTrackerType}
@@ -1404,7 +1338,7 @@ function FailureHistoryTrackerTypeBreakdownPanel({
                 onClick={onSelectAllFailureHistory}
                 type="button"
               >
-                <div className="text-xs font-medium uppercase text-muted-foreground">
+                <div className="text-xs font-medium text-muted-foreground">
                   Total Historical Failures
                 </div>
                 <div className="mt-1 text-2xl font-semibold tracking-normal">{formatNumber(total)}</div>
@@ -1429,6 +1363,7 @@ function FailureHistoryTrackerTypeBreakdownPanel({
                     )}
                     key={entry.id}
                     onClick={() => onSelectTrackerType(entry.id)}
+                    title={entry.name}
                     type="button"
                   >
                     <div className="flex min-w-0 items-center gap-2">
@@ -1441,6 +1376,9 @@ function FailureHistoryTrackerTypeBreakdownPanel({
                     </div>
                     <span className="shrink-0 text-muted-foreground">
                       {formatNumber(entry.value)} - {entry.percent === 0 && entry.value > 0 ? "<1%" : `${entry.percent}%`}
+                    </span>
+                    <span aria-hidden="true" className="eps-type-track">
+                      <span style={{ width: `${(entry.value / Math.max(...data.map((row) => row.value), 1)) * 100}%`, backgroundColor: entry.color }} />
                     </span>
                   </button>
                 );
@@ -1504,27 +1442,30 @@ function StatusBreakdown({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Execution Status Breakdown</CardTitle>
+        <CardTitle>Module equipment status</CardTitle>
         <CardDescription>
           Field-test status by module equipment, separate from Infralink NETA closeout.
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+        <div className="eps-module-status-grid">
           {rows.map((row) => (
             <button
+              aria-label={row.label}
               aria-pressed={activeStatus === row.label}
-              className={`rounded-md border p-4 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${row.className} ${
+              className={`eps-module-status rounded-md border p-4 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${row.className} ${
                 activeStatus === row.label
                   ? "ring-2 ring-primary"
-                  : "hover:-translate-y-0.5 hover:shadow-sm"
+                  : "hover:border-primary/50"
               }`}
               key={row.label}
               onClick={() => onSelectStatus(row.label)}
               type="button"
             >
               <div className="flex items-start justify-between gap-3">
-                <div className="text-xs font-medium uppercase text-muted-foreground">{row.label}</div>
+                <div className="text-xs font-medium text-muted-foreground">
+                  {row.label === STATUS_WAITING_INFRALINK_NETA ? "Awaiting Infralink NETA" : row.label}
+                </div>
                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-background/70 ring-1 ring-border/70">
                   {row.icon}
                 </div>
@@ -1557,7 +1498,7 @@ function EpsFilters({
   const activeCount = [filters.search.trim(), filters.status].filter(Boolean).length;
 
   return (
-    <CollapsibleFilterCard activeCount={activeCount}>
+    <CollapsibleFilterCard activeCount={activeCount} defaultOpen title="Find PDM equipment">
       <div className="grid gap-3 lg:grid-cols-[minmax(260px,1.4fr)_minmax(220px,0.7fr)_auto]">
         <label className="flex min-w-0 flex-col gap-1 text-sm font-medium">
           Search
@@ -1622,7 +1563,7 @@ function PdmExecutionTable({
   testItemFilter: EpsTestItemFilter;
   testItems: EpsTestItemRecord[];
 }) {
-  const [isVisible, setIsVisible] = useState(true);
+  const [isVisible, setIsVisible] = useState(false);
   const [expandedPdm, setExpandedPdm] = useState<string | null>(null);
   const [expandedModules, setExpandedModules] = useState<Set<string>>(() => new Set());
   const [currentPage, setCurrentPage] = useState(1);
@@ -1707,6 +1648,7 @@ function PdmExecutionTable({
           <StatusBadge tone="muted">{`${formatNumber(rows.length)} PDMs`}</StatusBadge>
           <button
             className="rounded-md border px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            aria-expanded={isVisible}
             onClick={() => setIsVisible((current) => !current)}
             type="button"
           >
@@ -2070,7 +2012,7 @@ function TestItemTable({
   title: string;
   description: string;
 }) {
-  const [isVisible, setIsVisible] = useState(true);
+  const [isVisible, setIsVisible] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
   useEffect(() => {
@@ -2102,6 +2044,7 @@ function TestItemTable({
           <StatusBadge tone="muted">{`${formatNumber(rows.length)} items`}</StatusBadge>
           <button
             className="rounded-md border px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            aria-expanded={isVisible}
             onClick={() => setIsVisible((current) => !current)}
             type="button"
           >
@@ -2358,66 +2301,133 @@ export function EpsTestExecutionPage({ data }: EpsTestExecutionPageProps) {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
-      <DailyReportAuditPanel audit={data.epsDailyReportAudit} />
-      <h2 className="text-xl font-semibold">EPS Tracker Execution</h2>
-      <EpsActivityCards
-        activeFilter={activityFilter}
-        onSelectFilter={selectActivityFilter}
-        summary={summary}
-      />
-      <TestItemBreakdownPanel
-        activeFilter={testItemFilter}
-        items={data.epsTestItems}
-        onSelectFilter={(filter) =>
-          setTestItemFilter((currentFilter) => (currentFilter === filter ? "" : filter))
-        }
-      />
-      <FailureHistoryTrackerTypeBreakdownPanel
-        activeTestItemFilter={testItemFilter}
-        activeTrackerType={trackerTypeFilter}
-        items={data.epsTestItems}
-        onSelectAllFailureHistory={selectAllFailureHistoryTestItems}
-        onSelectTrackerType={selectFailureHistoryTrackerType}
-      />
-      <StatusBreakdown
-        activeStatus={filters.status}
-        onSelectStatus={(status) =>
-          setFilters((currentFilters) => ({
-            ...currentFilters,
-            status: currentFilters.status === status ? "" : status,
-          }))
-        }
-        summary={summary}
-      />
-      <EpsFilters
-        filters={filters}
-        onChange={setFilters}
-        onReset={() => setFilters(defaultFilters)}
-        statuses={statusOptions}
-      />
-      <PdmExecutionTable
-        activityFilter={activityFilter}
-        activityEquipmentKeys={activityEquipmentKeys}
-        activeTrackerType={trackerTypeFilter}
-        moduleRecords={filteredModuleRecords}
-        onSelectTrackerType={selectTrackerType}
-        rows={filteredPdmRows}
-        testItemFilter={testItemFilter}
-        testItems={data.epsTestItems}
-      />
-      <TestItemTable
-        activeTrackerType={trackerTypeFilter}
-        description={
-          testItemFilter || trackerTypeFilter || activityFilter
-            ? `Showing filtered test items from EPS execution data.`
-            : "All EPS tracker and daily-report test item records."
-        }
-        onClearTrackerType={() => setTrackerTypeFilter("")}
-        onSelectTrackerType={selectTrackerType}
-        rows={filteredTestItems}
-        title="Test Items Table"
-      />
+    <div className="eps-execution mx-auto flex w-full max-w-[1440px] flex-col gap-5">
+      <div className="eps-page-heading">
+        <div>
+          <h2>EPS Tracker Execution</h2>
+          <p>Track field progress, resolve failures and trace every test to its PDM.</p>
+        </div>
+        <div className="eps-snapshot">
+          <CalendarDays className="h-4 w-4" aria-hidden="true" />
+          <span>EPS snapshot <strong>{summary.source_date_label || summary.snapshot_date || "Unavailable"}</strong></span>
+        </div>
+      </div>
+      <nav aria-label="EPS page sections" className="eps-section-nav">
+        <a href="#eps-progress">Execution overview</a>
+        <a href="#eps-pdms">PDM &amp; test items <ArrowDown className="h-3.5 w-3.5" aria-hidden="true" /></a>
+        <a href="#eps-daily-review">Daily report review <ArrowDown className="h-3.5 w-3.5" aria-hidden="true" /></a>
+      </nav>
+      <section id="eps-progress" aria-label="Execution overview" className="eps-section">
+        <StatusBreakdown
+          activeStatus={filters.status}
+          onSelectStatus={(status) =>
+            setFilters((currentFilters) => ({
+              ...currentFilters,
+              status: currentFilters.status === status ? "" : status,
+            }))
+          }
+          summary={summary}
+        />
+        <EpsActivityCards
+          activeFilter={activityFilter}
+          onSelectFilter={selectActivityFilter}
+          summary={summary}
+        />
+        <div className="eps-analysis-grid">
+          <TestItemBreakdownPanel
+            activeFilter={testItemFilter}
+            items={data.epsTestItems}
+            onSelectFilter={(filter) =>
+              setTestItemFilter((currentFilter) => (currentFilter === filter ? "" : filter))
+            }
+          />
+          <FailureHistoryTrackerTypeBreakdownPanel
+            activeTestItemFilter={testItemFilter}
+            activeTrackerType={trackerTypeFilter}
+            items={data.epsTestItems}
+            onSelectAllFailureHistory={selectAllFailureHistoryTestItems}
+            onSelectTrackerType={selectFailureHistoryTrackerType}
+          />
+        </div>
+      </section>
+      <section id="eps-pdms" aria-label="PDM and test item details" className="eps-section">
+        <div className="eps-detail-heading">
+          <div>
+            <h3>PDM &amp; test item details</h3>
+            <p>Expand a PDM to inspect its equipment and test items.</p>
+          </div>
+          <span className="eps-result-count">{formatNumber(filteredPdmRows.length)} PDMs in view</span>
+        </div>
+        {(testItemFilter || trackerTypeFilter || activityFilter) && (
+          <div aria-label="Active execution filters" className="eps-active-filters">
+            <span>Filtering by</span>
+            {testItemFilter && (
+              <button type="button" onClick={() => setTestItemFilter("")}>
+                {testItemFilterLabel(testItemFilter)}
+                <X className="h-3.5 w-3.5" aria-hidden="true" />
+                <span className="sr-only">Remove test result filter</span>
+              </button>
+            )}
+            {trackerTypeFilter && (
+              <button type="button" onClick={() => setTrackerTypeFilter("")}>
+                {trackerTypeFilter}
+                <X className="h-3.5 w-3.5" aria-hidden="true" />
+                <span className="sr-only">Remove tracker type filter</span>
+              </button>
+            )}
+            {activityFilter && (
+              <button type="button" onClick={() => {
+                setActivityFilter("");
+                setCustomActivityEquipmentValues([]);
+              }}>
+                Testing activity
+                <X className="h-3.5 w-3.5" aria-hidden="true" />
+                <span className="sr-only">Remove activity filter</span>
+              </button>
+            )}
+            <button type="button" onClick={() => {
+              setTestItemFilter("");
+              setTrackerTypeFilter("");
+              setActivityFilter("");
+              setCustomActivityEquipmentValues([]);
+            }}>
+              <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
+              Clear execution filters
+            </button>
+          </div>
+        )}
+        <EpsFilters
+          filters={filters}
+          onChange={setFilters}
+          onReset={() => setFilters(defaultFilters)}
+          statuses={statusOptions}
+        />
+        <PdmExecutionTable
+          activityFilter={activityFilter}
+          activityEquipmentKeys={activityEquipmentKeys}
+          activeTrackerType={trackerTypeFilter}
+          moduleRecords={filteredModuleRecords}
+          onSelectTrackerType={selectTrackerType}
+          rows={filteredPdmRows}
+          testItemFilter={testItemFilter}
+          testItems={data.epsTestItems}
+        />
+        <TestItemTable
+          activeTrackerType={trackerTypeFilter}
+          description={
+            testItemFilter || trackerTypeFilter || activityFilter
+              ? "Showing filtered test items from EPS execution data."
+              : "All EPS tracker and daily-report test item records."
+          }
+          onClearTrackerType={() => setTrackerTypeFilter("")}
+          onSelectTrackerType={selectTrackerType}
+          rows={filteredTestItems}
+          title="Test Items Table"
+        />
+      </section>
+      <section id="eps-daily-review" aria-label="Daily report review" className="eps-section">
+        <DailyReportAuditPanel audit={data.epsDailyReportAudit} />
+      </section>
     </div>
   );
 }

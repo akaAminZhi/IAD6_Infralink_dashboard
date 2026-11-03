@@ -12,6 +12,18 @@ const sourceLabels = {
   Onsite_Test_Report: "Onsite Test Report",
   Offsite_Test_Report: "Offsite Test Report",
 };
+const sourceColors: Record<keyof typeof sourceLabels, string> = {
+  Daily_test_report: "border-slate-200 border-l-slate-500 bg-slate-50 text-slate-800",
+  MV_Daily_test_report: "border-sky-200 border-l-sky-600 bg-sky-50 text-sky-900",
+  Onsite_Test_Report: "border-teal-200 border-l-teal-600 bg-teal-50 text-teal-900",
+  Offsite_Test_Report: "border-violet-200 border-l-violet-500 bg-violet-50 text-violet-900",
+};
+const historyColors: Record<EpsDailyReportEvent["status"], string> = {
+  tested: "border-emerald-200 border-l-emerald-600 bg-emerald-50/60 text-emerald-900",
+  tested_and_passed: "border-emerald-200 border-l-emerald-600 bg-emerald-50/60 text-emerald-900",
+  failed: "border-red-200 border-l-red-600 bg-red-50/60 text-red-900",
+  retested_and_passed: "border-teal-200 border-l-teal-600 bg-teal-50/60 text-teal-900",
+};
 const statusLabels: Record<EpsDailyReportEvent["status"], string> = {
   tested: "Tested / Passed",
   tested_and_passed: "Tested / Passed",
@@ -93,18 +105,18 @@ export function DailyReportAuditPanel({ audit }: { audit: EpsDailyReportAudit | 
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Daily Reports / Repeated Tests</CardTitle>
+    <Card className="eps-daily-audit">
+      <CardHeader className="rounded-t-lg border-b border-blue-100 bg-blue-50/70">
+        <CardTitle className="text-blue-900">Daily Reports / Repeated Tests</CardTitle>
         <CardDescription>
           All repeated test records across Legacy, Onsite and Offsite reports, including failures and retests. Defaults to repeats in the last 7 days, including today (Eastern Time); complete test item IDs identify repeats.
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-4 pt-5">
         {!audit ? <p className="text-sm text-muted-foreground">Daily report review data is unavailable. Run the EPS execution builder or ETL, then refresh.</p> : <>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {Object.entries(audit.sources).filter((entry) => entry[1] != null).map(([name, details]) => details && (
-              <div className="rounded-md border p-3" key={name}>
+              <div className={`rounded-md border border-l-4 p-3 ${sourceColors[name as keyof typeof sourceLabels] ?? "border-slate-200 bg-slate-50"}`} key={name}>
                 <div className="text-sm font-medium">{sourceLabels[name as keyof typeof sourceLabels]}</div>
                 <div className="mt-1 text-sm text-muted-foreground">
                   {details.available ? `${details.report_count} reports · ${details.event_count} entries` : "Source directory unavailable"}
@@ -112,18 +124,18 @@ export function DailyReportAuditPanel({ audit }: { audit: EpsDailyReportAudit | 
                 {details.skipped_files.length > 0 && <p className="mt-1 text-xs text-amber-700">Skipped undated files: {details.skipped_files.join(", ")}</p>}
               </div>
             ))}
-            <button className="rounded-md border p-3 text-left hover:bg-muted" onClick={reset} type="button"><div className="text-sm font-medium">Repeated in last 7 days</div><div className="mt-1 text-xl font-semibold">{recentRepeatCount}</div></button>
-            <button className="rounded-md border p-3 text-left hover:bg-muted" onClick={() => { setRepeat("all"); setSearch(""); setSource(""); setSite(""); setFromDate(""); setToDate(""); setPage(1); }} type="button">
+            <button className="rounded-md border border-amber-200 bg-amber-50 p-3 text-left text-amber-900 transition-colors hover:bg-amber-100" onClick={reset} type="button"><div className="text-sm font-medium">Repeated in last 7 days</div><div className="mt-1 text-xl font-semibold">{recentRepeatCount}</div></button>
+            <button className="rounded-md border border-blue-200 bg-blue-50 p-3 text-left text-blue-900 transition-colors hover:bg-blue-100" onClick={() => { setRepeat("all"); setSearch(""); setSource(""); setSite(""); setFromDate(""); setToDate(""); setPage(1); }} type="button">
               <div className="flex items-center gap-2 text-sm font-medium"><RotateCcw className="h-4 w-4" />All-time repeated items</div>
               <div className="mt-1 text-xl font-semibold">{audit.repeated_item_count}</div>
               <div className="text-xs text-muted-foreground">Same-day repeated entries: {audit.same_day_item_count} items</div>
             </button>
           </div>
-          <div className="flex gap-2 rounded-md bg-muted/50 p-3 text-xs text-muted-foreground">
+          <div className="flex gap-2 rounded-md border border-amber-200 bg-amber-50/70 p-3 text-xs text-amber-900">
             <AlertTriangle className="h-4 w-4 shrink-0" />
             <p>Any repeated complete test item ID is included, even across sites or within one report. An Offsite test followed by an Onsite test is a cross-site repeat. Failed tests and subsequent retests remain visible. Filters retain full history. M-D filenames use the file modification year (marked *). Partial records are excluded.</p>
           </div>
-          <div className="flex flex-wrap items-end gap-3">
+          <div className="flex flex-wrap items-end gap-3 rounded-md border bg-slate-50/70 p-4">
             <label className="flex flex-col gap-1 text-xs">Search repeated items
               <input className={inputClass} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Item ID, PDM, report" value={search} />
             </label>
@@ -151,8 +163,8 @@ export function DailyReportAuditPanel({ audit }: { audit: EpsDailyReportAudit | 
             <button className={inputClass} onClick={() => { setFromDate(""); setToDate(""); setPage(1); }} type="button">All repeat history</button>
             <button className={inputClass} onClick={reset} type="button">Reset daily review</button>
           </div>
-          <div className="text-sm text-muted-foreground">{filtered.length} matching repeated items · full report history shown</div>
-          <div aria-label="Repeated test records" className="h-[800px] overflow-auto overscroll-contain [overflow-anchor:none]" ref={recordsRef} role="region" tabIndex={0}>
+          <div className="rounded-md bg-blue-50 px-3 py-2 text-sm text-blue-900">{filtered.length} matching repeated items · full report history shown</div>
+          <div aria-label="Repeated test records" className="h-[800px] overflow-auto overscroll-contain rounded-md border [overflow-anchor:none]" ref={recordsRef} role="region" tabIndex={0}>
           {visible.length === 0 ? <p className="py-6 text-sm text-muted-foreground">No repeated test items match these filters.</p> :
             <table className="w-full min-w-[950px] text-left text-sm">
               <thead className="sticky top-0 z-10 border-b bg-background text-xs uppercase text-muted-foreground"><tr>
@@ -173,7 +185,7 @@ export function DailyReportAuditPanel({ audit }: { audit: EpsDailyReportAudit | 
                     {crossSite(item) && <StatusBadge tone="danger">Cross-site repeat</StatusBadge>}
                   </div>
                   <details><summary className="cursor-pointer text-primary">Report history ({item.events.length} entries)</summary>
-                    <ol className="mt-2 space-y-2">{item.events.map((event, index) => <li className="rounded border p-2 text-xs" key={`${event.source}-${event.report_name}-${event.line_number}-${index}`}>
+                    <ol className="mt-2 space-y-2">{item.events.map((event, index) => <li className={`rounded border border-l-4 p-2 text-xs ${historyColors[event.status]}`} key={`${event.source}-${event.report_name}-${event.line_number}-${index}`}>
                       <div className="font-medium">{event.date}{event.date_basis === "filename_month_day_file_year" ? " *" : ""} · {statusLabels[event.status]}</div>
                       <div className="mt-1 text-muted-foreground">{eventSite(event)} · {sourceLabels[event.source]} / {event.report_name} · line {event.line_number}</div>
                     </li>)}</ol>

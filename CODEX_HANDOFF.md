@@ -1,5 +1,34 @@
 ﻿# Codex Handoff
 
+## Current update (2026-11-03): EPS execution page design
+
+- Follow-up: PDM Execution Table and Test Items Table now default to collapsed,
+  with accessible Show/Hide state. Daily report review has a pale-blue header,
+  source-specific accents, amber recent-repeat/review notes, blue history totals
+  and green/red/teal passed/failed/retested evidence. All 10 targeted tests pass;
+  Chromium verified initial collapse, expansion and review filtering/history
+  without page errors or overflow at 390/768/1280px. Screenshots use
+  `eps-collapsed-tables` and `eps-colored-review` in the ignored runtime folder.
+- Applied the requested frontend-design skill to the existing EPS page. Module
+  equipment status and recent activity now lead the page; section links jump to
+  PDM/test-item details and the daily report audit, which retains its existing
+  seven-day default, filters, provenance, pagination and fixed-height region.
+- Replaced the two pie charts with keyboard-accessible result segments and
+  tracker-type comparison bars. Added removable result/type/activity filters,
+  an explicit clear control, visible PDM search and a source snapshot date.
+  Page-scoped Segoe UI typography, tabular numbers, compact headings and
+  responsive grids leave shared dashboard styling and data contracts intact.
+- Targeted page/audit tests: all 10 passed, including result-segment filtering
+  and removal; existing Overview/KPR URL filters still pass. Strict TypeScript
+  and preview-mode frontend build passed with the existing large-chunk warning.
+- Real Chromium on local datasets verified Advanced, keyboard result selection,
+  filter clearing, PDM expansion, ten-row repeated history and report provenance.
+  No page errors or document overflow at 390/768/1280px. Desktop and mobile
+  screenshots were visually reviewed; ignored artifacts use
+  `runtime/automation/eps-after-*` and `eps_design_smoke.py`.
+- No ETL, vendor writes or user-service restart. Compiled assets rebuilt; the
+  task's Vite development preview is on port 5174.
+
 ## Current update (2026-10-29): Distinct UPS appearance in Layout
 
 - Started from the user's clean revert of the panelboard changes. Only UPS6

@@ -1,15 +1,21 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { makeDashboardData } from "../test/fixtures";
 import type { KprSummary } from "../types/data";
 import { EpsTestExecutionPage } from "./EpsTestExecutionPage";
 
-vi.mock("@nivo/pie", () => ({
-  ResponsivePie: () => <div data-testid="nivo-pie" />,
-}));
+async function expandExecutionTables(user: ReturnType<typeof userEvent.setup>) {
+  const buttons = screen.getAllByRole("button", { name: "Show" });
+  expect(buttons).toHaveLength(2);
+  for (const button of buttons) {
+    expect(button).toHaveAttribute("aria-expanded", "false");
+    await user.click(button);
+    expect(button).toHaveAttribute("aria-expanded", "true");
+  }
+}
 
 describe("EpsTestExecutionPage", () => {
   it("filters the test item and PDM tables to current failures", async () => {
@@ -74,21 +80,27 @@ describe("EpsTestExecutionPage", () => {
       </MemoryRouter>,
     );
 
+    expect(screen.queryByText("PASS-ITEM")).not.toBeInTheDocument();
+    expect(screen.queryByText("PDM-A")).not.toBeInTheDocument();
+    await expandExecutionTables(user);
     expect(screen.getByText("PASS-ITEM")).toBeInTheDocument();
     expect(screen.getByText("FAIL-ITEM")).toBeInTheDocument();
-    const failedLabel = screen.getAllByText("Current Failed").find(
-      (element) => element.closest("button") !== null,
-    );
-    expect(failedLabel).toBeDefined();
-
-    await user.click(failedLabel!.closest("button")!);
+    await user.click(screen.getByRole("button", { name: "Current Failed: 1 test items" }));
 
     expect(screen.queryByText("PASS-ITEM")).not.toBeInTheDocument();
     expect(screen.getByText("FAIL-ITEM")).toBeInTheDocument();
     expect(screen.getByText("Current Failed filter")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "PDM and test item details" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /Remove test result filter/ }));
+
+    expect(screen.getByText("PASS-ITEM")).toBeInTheDocument();
+    expect(screen.getByText("FAIL-ITEM")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Active execution filters")).not.toBeInTheDocument();
   });
 
-  it("applies an EPS status filter supplied by an Overview URL", () => {
+  it("applies an EPS status filter supplied by an Overview URL", async () => {
+    const user = userEvent.setup();
     const data = makeDashboardData({
       epsTestSummary: {
         status_counts: {
@@ -134,11 +146,13 @@ describe("EpsTestExecutionPage", () => {
         name: /Complete, Waiting Infralink NETA Completion/i,
       }),
     ).toHaveAttribute("aria-pressed", "true");
+    await expandExecutionTables(user);
     expect(screen.getByText("PDM-WAITING")).toBeInTheDocument();
     expect(screen.queryByText("PDM-COMPLETE")).not.toBeInTheDocument();
   });
 
-  it("matches a KPR passed cohort by exact test item instead of the whole module", () => {
+  it("matches a KPR passed cohort by exact test item instead of the whole module", async () => {
+    const user = userEvent.setup();
     const data = makeDashboardData({
       kprSummary: {
         monthly_progress: {
@@ -184,6 +198,7 @@ describe("EpsTestExecutionPage", () => {
       </MemoryRouter>,
     );
 
+    await expandExecutionTables(user);
     expect(screen.getByText("ITEM-1")).toBeInTheDocument();
     expect(screen.queryByText("ITEM-2")).not.toBeInTheDocument();
   });
