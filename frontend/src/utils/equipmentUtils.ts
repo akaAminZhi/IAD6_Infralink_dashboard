@@ -391,10 +391,17 @@ export function hasMissingNetaReport(equipment: FlattenedEquipmentRow): boolean 
 }
 
 export function hasPendingCxalloyReport(equipment: FlattenedEquipmentRow): boolean {
-  return (
-    equipment.cxalloy_upload_status === "pending" ||
-    equipment.cxalloy_upload_status === "missing_pdf"
-  );
+  if (!requiresEquipmentTestTracking(equipment) || equipment.neta_complete !== true) return false;
+  if (equipment.cxalloy_reports != null) {
+    return equipment.cxalloy_reports.some((report) => report.upload_status === "pending");
+  }
+  // Legacy manifests lack file-level evidence; require a pending package with local PDFs.
+  return equipment.cxalloy_upload_status === "pending" && equipment.cxalloy_available_report_count > 0;
+}
+
+export function getPendingCxalloyEquipmentCount(equipmentRows: FlattenedEquipmentRow[]): number {
+  return new Set(equipmentRows.filter(hasPendingCxalloyReport)
+    .map((row) => normalizeLookup(row.display_equipment_id)).filter(Boolean)).size;
 }
 
 export function getNetaDisplayStatus(equipment: FlattenedEquipmentRow): EquipmentNetaDisplayStatus {
@@ -493,12 +500,7 @@ export function getEquipmentSummaryMetrics(
       (total, row) => total + getCasesMissingIssueImageCount(row),
       0,
     ),
-    cxalloyPendingEquipment: new Set(
-      equipmentRows
-        .filter(hasPendingCxalloyReport)
-        .map((row) => normalizeLookup(row.display_equipment_id))
-        .filter(Boolean),
-    ).size,
+    cxalloyPendingEquipment: getPendingCxalloyEquipmentCount(equipmentRows),
     mostCommonStatus: mostCommonStatus?.[0] ?? null,
     mostCommonStatusCount: mostCommonStatus?.[1] ?? 0,
   };

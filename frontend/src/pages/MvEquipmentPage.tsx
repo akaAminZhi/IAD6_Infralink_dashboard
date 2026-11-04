@@ -1,4 +1,5 @@
 import { DailyTestHistory } from "../components/common/DailyTestHistory";
+import { NetaReportSection } from "../components/common/NetaReportSection";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -86,6 +87,7 @@ function isTransformer(annotation: PowerPlanAnnotation): boolean {
 interface PowerPlanAnnotation extends BasePowerPlanAnnotation {
   netaComplete?: boolean;
   netaCompletedAt?: string | null;
+  netaTestReport?: string | null;
   trackingRequired?: boolean;
   failedCount?: number;
   openIssueCount?: number;
@@ -1148,6 +1150,7 @@ export function MvEquipmentPage({ data }: MvEquipmentPageProps) {
           ...annotation,
           netaComplete: row?.status === "ready",
           netaCompletedAt: row?.equipment?.neta_completed_at,
+          netaTestReport: row?.equipment?.neta_test_report,
           trackingRequired: requiresEquipmentTestTracking({
             ...row?.equipment,
             equipment_id: row?.equipment?.equipment_id ?? annotation.matched_equipment_id,
@@ -1760,6 +1763,8 @@ export function MvEquipmentPage({ data }: MvEquipmentPageProps) {
                       issues={relatedIssues}
                       onSelectIssue={setSelectedIssue}
                     />
+                    {selected.trackingRequired ? <NetaReportSection key={selected.annotation_id}
+                      equipmentId={selected.matched_equipment_id} value={selected.netaTestReport} /> : null}
                     <MvDailyTestPanel annotation={selected} />
                   </div>
                 </>

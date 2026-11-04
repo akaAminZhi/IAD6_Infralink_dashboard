@@ -12,6 +12,30 @@ import type { KprSummary } from "../types/data";
 import { EquipmentPage } from "./EquipmentPage";
 
 describe("EquipmentPage", () => {
+  it.each(["/equipment", "/equipment?quickFilter=cxalloyPending"])("limits the pending upload card and filter to complete equipment with pending PDFs (%s)", async (path) => {
+    const user = userEvent.setup();
+    const entries = [
+      { id: "EQ-PENDING", complete: true, status: "pending" as const },
+      { id: "EQ-INCOMPLETE", complete: false, status: "pending" as const },
+      { id: "EQ-UNKNOWN", complete: null, status: "pending" as const },
+      { id: "EQ-REVIEW", complete: true, status: "review_required" as const },
+      { id: "EQ-MISSING", complete: true, status: "missing_pdf" as const },
+      { id: "EQ-UPLOADED", complete: true, status: "uploaded" as const },
+    ];
+    const data = makeDashboardData({ pdms: [],
+      equipment: entries.map((entry) => ({ equipment_id: entry.id, neta_complete: entry.complete, neta_test_report: "Report.pdf" })),
+      cxalloyReportStatus: { records: entries.map((entry) => ({ equipment_id: entry.id, upload_status: "pending", reports: [
+        { report_name: "Report.pdf", report_kind: "equipment", upload_status: entry.status },
+      ] })) },
+    });
+    render(<MemoryRouter initialEntries={[path]}><EquipmentPage data={data} /></MemoryRouter>);
+    const card = screen.getByText("Pending CxAlloy Upload").closest("button")!;
+    expect(card).toHaveTextContent("1");
+    if (path === "/equipment") await user.click(card);
+    expect(screen.getByRole("cell", { name: "EQ-PENDING" })).toBeInTheDocument();
+    for (const entry of entries.slice(1)) expect(screen.queryByRole("cell", { name: entry.id })).not.toBeInTheDocument();
+  });
+
   beforeEach(() => {
     clearNetaReportReviewCache();
     clearPublishedNetaReviewCache();
@@ -83,10 +107,10 @@ describe("EquipmentPage", () => {
     expect(screen.queryByRole("cell", { name: cableId })).not.toBeInTheDocument();
   });
 
-  it("places ordinary equipment first during search while retaining column sort order within each group", async () => {
+  it("places ordinary equipment first during search while retaining column sort order for equal-length IDs", async () => {
     const user = userEvent.setup();
     const cableId = "FDR-IAD06-EQ-1-IAD06-EQ-2";
-    const regularIds = ["IAD06-EQ-1", "IAD06-EQ-CABLE-PANEL"];
+    const regularIds = ["IAD06-EQ-1", "IAD06-EQ-2"];
     const data = makeDashboardData({
       pdms: [],
       equipment: [
@@ -106,7 +130,7 @@ describe("EquipmentPage", () => {
     await user.click(screen.getByRole("button", { name: "Equipment ID" }));
     await user.click(screen.getByRole("button", { name: "Equipment ID" }));
     expect(ids().slice(0, 2)).toEqual([...regularIds].reverse());
-    expect(ids().slice(2)).toEqual([cableId + "-A", cableId]);
+    expect(ids().slice(2)).toEqual([cableId, cableId + "-A"]);
     await user.clear(search);
     await user.type(search, cableId + "-A");
     await waitFor(() => expect(ids()).toEqual([cableId + "-A"]));
@@ -120,6 +144,36 @@ describe("EquipmentPage", () => {
     expect(ids()).toHaveLength(2);
     await user.click(screen.getByRole("button", { name: "Remove Equipment type filter" }));
     await waitFor(() => expect(ids()).toHaveLength(4));
+  });
+
+  it("ranks shorter equipment IDs first in search and hides numeric-leading inventory labels", async () => {
+    const user = userEvent.setup();
+    const shortId = "IAD06-TX6-01D";
+    const sidecarId = "IAD06-TX6-01C-Sidecar";
+    const pullboxId = "IAD06-TX6-01D-PULLBOX";
+    const numericLabels = [
+      '3/4" Power (Emergency LV 277/480V) -EMT -Set Screw-23',
+      '1 1/2" Power (Life Safety 277/480V) -EMT -Set Screw-2',
+    ];
+    const data = makeDashboardData({ pdms: [], equipment: [
+      { equipment_id: sidecarId, open_issues_count_from_system_elements: 9 },
+      { equipment_id: pullboxId },
+      { equipment_id: shortId },
+      ...numericLabels.map((equipment_id) => ({ equipment_id })),
+    ] });
+    render(<MemoryRouter><NetaReportManifestProvider manifest={null}><EquipmentPage data={data} /></NetaReportManifestProvider></MemoryRouter>);
+    const ids = () => screen.getAllByRole("row").slice(1).map((row) => within(row).getAllByRole("cell")[0].textContent);
+    expect(ids()[0]).toBe(sidecarId);
+    for (const label of numericLabels) {
+      expect(screen.queryByRole("cell", { name: label })).not.toBeInTheDocument();
+    }
+    const search = screen.getByPlaceholderText("Search equipment ID or source label");
+    await user.type(search, "TX6");
+    await waitFor(() => expect(ids()).toEqual([shortId, sidecarId, pullboxId]));
+    await user.clear(search);
+    await waitFor(() => expect(ids()[0]).toBe(sidecarId));
+    await user.type(search, "Power");
+    await waitFor(() => expect(screen.queryByRole("cell")).not.toBeInTheDocument());
   });
 
   it("searches cables, terminations and other Excel IDs outside PDMs without NETA evidence", async () => {

@@ -63,6 +63,35 @@ the first search, and fetches report/device links on selection.
 ETL dashboard reload invalidates shared resources and refreshes Layout; ordinary
 navigation reuses resources already loaded in the current dashboard session.
 
+## Pending CxAlloy uploads
+
+Overview and Equipment use the same deduplicated pending-upload count and filter:
+the equipment must be tracked, have `neta_complete === true`, and contain at
+least one local PDF whose file status is `pending`. A new pending cable still
+qualifies when the equipment report is uploaded. Missing-only, review-only,
+uploaded-only and empty file inventories do not qualify. Legacy manifests need
+a pending package and positive available-PDF count. Attachment-based cable
+completion alone does not replace the explicit completion flag for this filter.
+Overview loads the equipment dataset to include standalone assets consistently
+with Equipment. Per-file badges and upload behavior are unchanged.
+
+## Temporary and formal NETA reports
+
+Equipment, PDM and Issues report views, Power Plan/MV equipment details and
+Layout inspectors use the shared report index. PDFs under `_temporary/<equipment>/`
+in the Tracker's original and GC roots show **Temporary**, with the existing
+name switching and preview behavior. Exact equipment ownership scopes links;
+explicitly named shared cable reports may reside under an endpoint directory.
+Report availability does not change completion/status metrics or tracking rules.
+
+Ready formal copies replace temporary links after a report-index/ETL rebuild
+and page refresh. Original readiness uses `download_ready`, GC uses `formal_ready`;
+failed promotion retains available temporary links. No automatic redirect from
+an already-open, deleted temporary URL is provided. Refresh the index with
+`python scripts/etl/build_neta_report_manifest.py` from the repository root, or
+use normal ETL. Rebuild/restart preview after installing frontend source changes;
+later report-only refreshes do not require a code rebuild.
+
 ## Layout
 
 Equipment lookup includes every nonblank Equipment ID in SystemElements Excel,
@@ -104,6 +133,32 @@ conservator and brown ceramic bushings; switchgear has separate instrumented
 bays; generators have a radiator, roof fans and exhaust; LV transformers use a
 ventilated housing; ordinary cabinets have a door, meter and handle. Model
 backgrounds are transparent, with restrained outlines and ground shadows.
+
+The 2.5D floor selector defaults to **All floors**. Second Floor unfolds directly
+above First Floor with the same orientation and scale. The compact lift is based
+on room depth and device height (currently 180 drawing units); empty floor extents
+may overlap. Each floor has an aligned, lightly shaded ground deck covering its
+entire equipment/room footprint, with a faint grid and shallow edge. Both decks
+sit behind equipment so neither hides the other floor's devices. Single-floor
+2.5D shows its own deck; 2D remains unchanged. Floor labels sit beside room rows.
+Shared Outdoor Equipment stays
+in its original position and is drawn once. Source PDF coordinates are unchanged.
+Single-floor choices remain available; 2D uses the last single floor, and returning
+to 2.5D restores the previous combined/single-floor choice for this visit.
+Combined searches retain both floors. Searching a drawable cross-floor cable from
+a single 2.5D floor opens All floors; **Zoom to connection** fits both endpoints
+and its complete route. Details identify the endpoints' floors or shared group.
+Shared outdoor feeders to Second Floor, including MDS6 connections, use their
+original direct cubic arcs. Unselected elevated feeds sit behind equipment;
+selection/report highlighting raises the relevant routes for tracing. Device-to-device
+cross-floor cables sharing a hub follow a common room-edge trunk corridor in
+closely spaced parallel lanes, then fan out to individual device entries on the
+destination floor. They do not remain completely coincident. Selected cables
+draw last so they remain traceable through the bundle. Limited overlap is
+intentional. Test colors/dashes remain; only active
+cables receive the white selection underlay. Room membership remains floor-specific
+even when display extents overlap. Same-floor routes and First Floor's outdoor
+feeders retain their existing geometry.
 
 **Global view** clears equipment/cable focus, search and box selection and restores
 the fitted camera. **Escape** does the same outside box

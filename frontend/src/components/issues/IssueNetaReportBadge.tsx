@@ -42,6 +42,7 @@ export function IssueNetaReportBadge({
 
   return (
     <NetaReportChips
+      equipmentId={issue.equipment_id}
       compactNameMode={compactNameMode}
       reports={references}
       showLinkedFileNames={showLinkedFileNames}

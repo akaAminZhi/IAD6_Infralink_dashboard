@@ -31,7 +31,7 @@ function dataset(): LayoutPlanManifest {
       { floor_id: "first", label: "First Floor", file_name: "first.pdf", page_number: 1, width: 100, height: 100,
         equipment: [device("EQ-1", { energized_completed_at: "2026-10-14T08:00:00" }), device("EQ-UNKNOWN", { match_status: "ambiguous" })] },
       { floor_id: "second", label: "Second Floor", file_name: "second.pdf", page_number: 1, width: 100, height: 100,
-        equipment: [device("EQ-2"), device("EQ-FIX", { annotation_id: "duplicate-fixed" })] },
+        equipment: [device("EQ-2", { source_floor_id: "second" }), device("EQ-FIX", { annotation_id: "duplicate-fixed", source_floor_id: "second" })] },
     ],
     fixed_equipment: [device("EQ-FIX", { fixed: true })],
   };
@@ -44,6 +44,92 @@ beforeEach(() => {
 });
 
 describe("2.5D Layout connections", () => {
+  it("keeps an individually selected shared-trunk cable above overlapping sibling routes", async () => {
+    const manifest = isometricDataset();
+    manifest.floors[1].equipment.push(device("EQ-3", { source_floor_id: "second", rect: { x: 55, y: 20, width: 10, height: 8 } }));
+    manifest.cables!.push(cable({ cable_id: "FDR-IAD06-EQ-1-IAD06-EQ-3", target_equipment_key: "EQ-3" }));
+    const user = userEvent.setup();
+    const { container } = render(<LayoutPlanPage />);
+    await screen.findByRole("img", { name: "All floors equipment layout" });
+    const siblings = container.querySelectorAll('[data-cable-hub="EQ-1"]');
+    expect(siblings).toHaveLength(2);
+    const id = manifest.cables![1].cable_id;
+    await user.click(container.querySelector(`[data-cable-id="${id}"]`)!);
+    expect(screen.getByLabelText("Cable details")).toHaveTextContent(id);
+    expect(container.querySelector('[data-layout-layer="cables"]')!.lastElementChild).toHaveAttribute("data-cable-id", id);
+    expect(container.querySelectorAll('[data-cable-hub="EQ-1"]')).toHaveLength(2);
+    const sceneLayers = [...container.querySelector('[data-layout-scene]')!.children].map((element) => element.getAttribute("data-layout-layer"));
+    expect(sceneLayers.indexOf("floor-grounds")).toBeLessThan(sceneLayers.indexOf("equipment"));
+  });
+
+  it("draws direct elevated outdoor feeds behind devices and raises the selected feeder for tracing", async () => {
+    const manifest = isometricDataset();
+    const id = "FDR-IAD06-EQ-FIX-IAD06-EQ-2";
+    manifest.cables!.push(cable({ cable_id: id, source_equipment_key: "EQ-FIX", target_equipment_key: "EQ-2" }));
+    const user = userEvent.setup();
+    const { container } = render(<LayoutPlanPage />);
+    await screen.findByRole("img", { name: "All floors equipment layout" });
+    const feeder = () => container.querySelector(`[data-cable-id="${id}"]`)!;
+    expect(feeder()).toHaveAttribute("data-cable-route", "arc");
+    expect(feeder().closest("[data-layout-layer]")).toHaveAttribute("data-layout-layer", "shared-feed-cables");
+    await user.click(feeder());
+    expect(screen.getByLabelText("Cable details")).toHaveTextContent(id);
+    expect(feeder().closest("[data-layout-layer]")).toHaveAttribute("data-layout-layer", "cables");
+    await user.click(screen.getByRole("button", { name: "Clear focus" }));
+    expect(feeder().closest("[data-layout-layer]")).toHaveAttribute("data-layout-layer", "shared-feed-cables");
+  });
+
+  it("retains combined and single-floor choices across 2D/2.5D switches", async () => {
+    isometricDataset();
+    const user = userEvent.setup();
+    const { container } = render(<LayoutPlanPage />);
+    const floor = await screen.findByLabelText("Floor");
+    expect(floor).toHaveValue("all-floors");
+    expect(container.querySelectorAll("[data-layout-floor]")).toHaveLength(3);
+    expect(container.querySelectorAll("[data-layout-ground]")).toHaveLength(2);
+    await user.click(screen.getByRole("button", { name: "2D plan" }));
+    expect(floor).toHaveValue("first");
+    expect(container.querySelectorAll("[data-layout-ground]")).toHaveLength(0);
+    expect(within(floor).queryByRole("option", { name: "All floors" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "2.5D" }));
+    expect(floor).toHaveValue("all-floors");
+    await user.selectOptions(floor, "second");
+    expect(container.querySelectorAll("[data-layout-floor]")).toHaveLength(0);
+    expect(container.querySelectorAll("[data-layout-ground]")).toHaveLength(1);
+    await user.click(screen.getByRole("button", { name: "2D plan" }));
+    expect(floor).toHaveValue("second");
+    await user.click(screen.getByRole("button", { name: "2.5D" }));
+    expect(floor).toHaveValue("second");
+    await user.selectOptions(floor, "all-floors");
+    await user.click(screen.getByRole("button", { name: "2D plan" }));
+    expect(floor).toHaveValue("second");
+    await user.click(screen.getByRole("button", { name: "2.5D" }));
+    expect(floor).toHaveValue("all-floors");
+  });
+
+  it("keeps equipment searches in the combined scene and opens cross-floor cables from a single floor", async () => {
+    const manifest = isometricDataset();
+    const user = userEvent.setup();
+    const { container } = render(<LayoutPlanPage />);
+    const search = await screen.findByLabelText("Find equipment");
+    await user.type(search, "EQ-2");
+    await user.click(screen.getByRole("option", { name: /^EQ-2/ }));
+    expect(screen.getByLabelText("Floor")).toHaveValue("all-floors");
+    const map = screen.getByRole("img", { name: "All floors equipment layout" });
+    const before = map.getAttribute("viewBox");
+    await user.click(screen.getByRole("button", { name: "Zoom to device" }));
+    expect(map.getAttribute("viewBox")).not.toBe(before);
+    await user.selectOptions(screen.getByLabelText("Floor"), "first");
+    await user.clear(search);
+    await user.type(search, manifest.cables![1].cable_id);
+    await user.keyboard("{Enter}");
+    expect(screen.getByLabelText("Floor")).toHaveValue("all-floors");
+    expect(screen.getByRole("button", { name: "Zoom to connection" })).toBeEnabled();
+    expect(container.querySelector('[data-cable-kind="cross-floor"]')).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Zoom to connection" }));
+    expect(screen.getByRole("img", { name: "All floors equipment layout" }).getAttribute("viewBox")).not.toBe(before);
+  });
+
   it.each(["plan", "isometric"])("finds cables across floors and unresolved cables in %s view", async (view) => {
     const manifest = isometricDataset();
     localStorage.setItem(LAYOUT_VIEW_KEY, view);
@@ -56,7 +142,7 @@ describe("2.5D Layout connections", () => {
     await user.type(search, cableId.toLowerCase());
     await user.keyboard("{Enter}");
     expect(screen.getByLabelText("Cable details")).toHaveTextContent(cableId);
-    expect(screen.getByLabelText("Floor")).toHaveValue("second");
+    expect(screen.getByLabelText("Floor")).toHaveValue(view === "isometric" ? "all-floors" : "second");
     expect(screen.getByRole("button", { name: "Zoom to connection" })).toBeEnabled();
     await user.clear(search);
     await user.type(search, "fd-unresolved");
@@ -77,7 +163,7 @@ describe("2.5D Layout connections", () => {
     </DashboardResourcesProvider>);
     const search = await screen.findByLabelText("Find equipment");
     expect(loadResources).not.toHaveBeenCalled();
-    const map = screen.getByRole("img", { name: "First Floor equipment layout" });
+    const map = screen.getByRole("img", { name: /^(First Floor|All floors) equipment layout$/ });
     const before = map.getAttribute("viewBox");
     await user.type(search, "term-1");
     expect(loadResources).toHaveBeenCalledWith(["equipment"]);
@@ -166,7 +252,7 @@ describe("2.5D Layout connections", () => {
   it.each(["plan", "isometric"])("matches a standard notch with 34 small wheel events in %s view", async (view) => {
     localStorage.setItem(LAYOUT_VIEW_KEY, view);
     render(<LayoutPlanPage />);
-    const map = await screen.findByRole("img", { name: "First Floor equipment layout" });
+    const map = await screen.findByRole("img", { name: /^(First Floor|All floors) equipment layout$/ });
     vi.spyOn(map, "getBoundingClientRect").mockReturnValue({ left: 0, top: 0, width: 600, height: 400 } as DOMRect);
     const readView = () => map.getAttribute("viewBox")!.split(" ").map(Number);
     const initial = readView();
@@ -189,7 +275,7 @@ describe("2.5D Layout connections", () => {
     expect(readView()).toEqual(initial);
   });
 
-  it("defaults to 2.5D, only draws same-view unique endpoints, and shows cable IDs and test evidence", async () => {
+  it("defaults to both floors in 2.5D, draws unique endpoints, and shows cable IDs and test evidence", async () => {
     const manifest = isometricDataset();
     manifest.cables![0].system_element_status = "L3: Pre Func Testing & Startup";
     manifest.floors[0].equipment.push(device("FD-TERM-A", { equipment_type: "Termination" }),
@@ -197,9 +283,10 @@ describe("2.5D Layout connections", () => {
     const user = userEvent.setup();
     const { container } = render(<LayoutPlanPage />);
     expect(await screen.findByRole("button", { name: "2.5D" })).toHaveAttribute("aria-pressed", "true");
-    expect(container.querySelectorAll("[data-device-kind]")).toHaveLength(3);
+    expect(screen.getByLabelText("Floor")).toHaveValue("all-floors");
+    expect(container.querySelectorAll("[data-device-kind]")).toHaveLength(4);
     expect(screen.queryByRole("button", { name: /FD-TERM-A|FD-CABLE/ })).not.toBeInTheDocument();
-    expect(container.querySelectorAll("[data-cable-id]")).toHaveLength(1);
+    expect(container.querySelectorAll("[data-cable-id]")).toHaveLength(2);
     expect(container.querySelector('[data-cable-state="updated"]')).toBeInTheDocument();
     expect(container.querySelector('[data-cable-state="updated"]')).toHaveAttribute("stroke", "#16a34a");
     expect(container.querySelector("[data-cable-missing-report]")).toBeInTheDocument();
@@ -322,8 +409,8 @@ describe("2.5D Layout connections", () => {
     await user.click(screen.getByRole("button", { name: /↔ EQ-FIX/ }));
     expect(screen.getByLabelText("Cable details")).toHaveTextContent("NETA complete but report is missing");
     await user.click(screen.getByRole("button", { name: /↔ EQ-2/ }));
-    expect(screen.getByLabelText("Cable details")).toHaveTextContent("another floor");
-    expect(screen.getByRole("button", { name: "Zoom to connection" })).toBeDisabled();
+    expect(screen.getByLabelText("Cable details")).not.toHaveTextContent("Connection is not drawn");
+    expect(screen.getByRole("button", { name: "Zoom to connection" })).toBeEnabled();
   });
 
   it("counts tested, failed, and unconfirmed connected cables from the displayed test states", async () => {
@@ -398,7 +485,7 @@ describe("2.5D Layout connections", () => {
     const toggle = await screen.findByRole("button", { name: "Highlight missing reports (2)" });
     const route = (id: string) => container.querySelector(`[data-cable-id="${id}"]`)!;
     const unrelated = screen.getByRole("button", { name: "EQ-UNKNOWN: Unknown" });
-    const map = screen.getByRole("img", { name: "First Floor equipment layout" });
+    const map = screen.getByRole("img", { name: /^(First Floor|All floors) equipment layout$/ });
     const camera = map.getAttribute("viewBox");
     await user.click(toggle);
     expect(toggle).toHaveAttribute("aria-pressed", "true");
@@ -478,7 +565,7 @@ describe("2.5D Layout connections", () => {
     const device = await screen.findByRole("button", { name: "EQ-FIX: Not Energized" });
     const model = device.querySelector("[data-device-model]");
     const pathCalls = pathSpy.mock.calls.length;
-    expect(pathCalls).toBe(1);
+    expect(pathCalls).toBeGreaterThan(0);
     await user.hover(device);
     expect(screen.getByRole("tooltip")).toHaveTextContent("EQ-FIX");
     await user.click(screen.getByRole("button", { name: "Zoom in" }));
@@ -496,7 +583,7 @@ describe("2.5D Layout connections", () => {
     const user = userEvent.setup();
     render(<LayoutPlanPage />);
     const line = await screen.findByRole("button", { name: /FDR-IAD06-EQ-1-IAD06-EQ-FIX:/ });
-    const map = screen.getByRole("img", { name: "First Floor equipment layout" });
+    const map = screen.getByRole("img", { name: /^(First Floor|All floors) equipment layout$/ });
     vi.spyOn(map, "getBoundingClientRect").mockReturnValue({ left: 0, top: 0, width: 600, height: 400 } as DOMRect);
     const original = map.getAttribute("viewBox");
     await user.pointer([
@@ -516,7 +603,7 @@ describe("2.5D Layout connections", () => {
     localStorage.setItem(LAYOUT_OVERRIDES_KEY, JSON.stringify({ "EQ-FIX": "energizeToday" }));
     const user = userEvent.setup();
     const { container } = render(<LayoutPlanPage />);
-    const map = await screen.findByRole("img", { name: "First Floor equipment layout" });
+    const map = await screen.findByRole("img", { name: /^(First Floor|All floors) equipment layout$/ });
     const original = map.getAttribute("viewBox");
     await user.type(screen.getByLabelText("Find equipment"), "EQ-1");
     await user.click(screen.getByRole("option", { name: /^EQ-1/ }));
@@ -548,7 +635,7 @@ describe("2.5D Layout connections", () => {
     isometricDataset();
     const user = userEvent.setup();
     render(<LayoutPlanPage />);
-    const map = await screen.findByRole("img", { name: "First Floor equipment layout" });
+    const map = await screen.findByRole("img", { name: /^(First Floor|All floors) equipment layout$/ });
     const original = map.getAttribute("viewBox");
     await user.click(screen.getByRole("button", { name: "EQ-1: Energized" }));
     expect(screen.getByLabelText("Connected cables")).toBeInTheDocument();
@@ -566,7 +653,7 @@ describe("2.5D Layout connections", () => {
     isometricDataset();
     const user = userEvent.setup();
     render(<LayoutPlanPage />);
-    const map = await screen.findByRole("img", { name: "First Floor equipment layout" });
+    const map = await screen.findByRole("img", { name: /^(First Floor|All floors) equipment layout$/ });
     const clearFocusButton = screen.getByText("Clear focus").closest("button")!;
     expect(clearFocusButton).toHaveClass("invisible");
     await user.click(screen.getByRole("button", { name: "Zoom in" }));
@@ -643,7 +730,7 @@ describe("LayoutPlanPage", () => {
     const user = userEvent.setup();
     render(<LayoutPlanPage />);
     await screen.findByRole("button", { name: "EQ-1: Energized" });
-    const map = screen.getByRole("img", { name: "First Floor equipment layout" });
+    const map = screen.getByRole("img", { name: /^(First Floor|All floors) equipment layout$/ });
     const original = map.getAttribute("viewBox");
     await user.type(screen.getByLabelText("Find equipment"), "EQ-UNKNOWN");
     expect(screen.getByRole("img", { name: "EQ-1 Energized lightning" }).closest("[data-lightning-key]")).toHaveAttribute("opacity", "0.2");
@@ -711,7 +798,7 @@ describe("LayoutPlanPage", () => {
     const user = userEvent.setup();
     render(<LayoutPlanPage />);
     const device = await screen.findByRole("button", { name: "EQ-FIX: Not Energized" });
-    const map = screen.getByRole("img", { name: "First Floor equipment layout" });
+    const map = screen.getByRole("img", { name: /^(First Floor|All floors) equipment layout$/ });
     const before = map.getAttribute("viewBox");
     await user.hover(device);
     expect(screen.getByRole("tooltip")).toHaveTextContent("IAD06-EQ-FIX");
@@ -764,7 +851,7 @@ describe("LayoutPlanPage", () => {
     fetchMock.mockResolvedValue(manifest);
     const { container } = render(<LayoutPlanPage />);
     await screen.findByRole("button", { name: "EQ-1: Energized" });
-    const map = screen.getByRole("img", { name: "First Floor equipment layout" });
+    const map = screen.getByRole("img", { name: /^(First Floor|All floors) equipment layout$/ });
     expect([...map.querySelector("[data-layout-scene]")!.children].map((element) => element.getAttribute("data-layout-layer"))).toEqual([
       "regions", "room-labels", "equipment", "selection", "lightning",
     ]);
@@ -779,7 +866,7 @@ describe("LayoutPlanPage", () => {
   it("box-selects devices without panning and batch-plans only unenergized equipment", async () => {
     const user = userEvent.setup();
     render(<LayoutPlanPage />);
-    const map = await screen.findByRole("img", { name: "First Floor equipment layout" });
+    const map = await screen.findByRole("img", { name: /^(First Floor|All floors) equipment layout$/ });
     vi.spyOn(map, "getBoundingClientRect").mockReturnValue({ left: 0, top: 0, width: 600, height: 400 } as DOMRect);
     const before = map.getAttribute("viewBox");
     await user.click(screen.getByRole("button", { name: "Box select" }));
@@ -819,7 +906,7 @@ describe("LayoutPlanPage", () => {
 
   it("zooms the viewBox on wheel without scrolling the page", async () => {
     render(<LayoutPlanPage />);
-    const map = await screen.findByRole("img", { name: "First Floor equipment layout" });
+    const map = await screen.findByRole("img", { name: /^(First Floor|All floors) equipment layout$/ });
     vi.spyOn(map, "getBoundingClientRect").mockReturnValue({ left: 0, top: 0, width: 600, height: 400 } as DOMRect);
     const initial = map.getAttribute("viewBox")!.split(" ").map(Number);
     const wheel = new WheelEvent("wheel", { deltaY: -100, clientX: 300, clientY: 200, bubbles: true, cancelable: true });
@@ -836,7 +923,7 @@ describe("LayoutPlanPage", () => {
     const user = userEvent.setup();
     render(<LayoutPlanPage />);
     const device = await screen.findByRole("button", { name: "EQ-1: Energized" });
-    const map = screen.getByRole("img", { name: "First Floor equipment layout" });
+    const map = screen.getByRole("img", { name: /^(First Floor|All floors) equipment layout$/ });
     vi.spyOn(map, "getBoundingClientRect").mockReturnValue({ left: 0, top: 0, width: 600, height: 400 } as DOMRect);
     const original = map.getAttribute("viewBox");
     await user.pointer([

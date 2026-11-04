@@ -86,7 +86,7 @@ export function EquipmentSummaryCards({
       tone: "equipment-exception-amber",
     },
     {
-      description: "GC report packages not confirmed as uploaded.",
+      description: "NETA complete equipment with local PDFs pending upload to CxAlloy.",
       filter: "cxalloyPending" as const,
       icon: CloudUpload,
       label: "Pending CxAlloy Upload",

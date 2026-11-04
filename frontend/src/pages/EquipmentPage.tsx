@@ -67,6 +67,9 @@ function filterEquipmentRows(
   const pdmSearch = filters.pdmSearch.trim();
 
   return rows.filter((row) => {
+    if (/^\d/.test(row.display_equipment_id.trim())) {
+      return false;
+    }
     if (
       equipmentSearch &&
       !matchesSearchQuery(

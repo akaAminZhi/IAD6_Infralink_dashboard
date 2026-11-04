@@ -105,11 +105,13 @@ function reviewTone(status: NetaReportReview["status"] | null) {
 
 function NetaReportNames({
   value,
+  equipmentId,
   reviews,
   onReviewUpdated,
   editable,
 }: {
   value: string | null;
+  equipmentId: string | null;
   reviews: NetaReportReviewsResponse | null;
   onReviewUpdated: (review: NetaReportReview) => void;
   editable: boolean;
@@ -119,7 +121,7 @@ function NetaReportNames({
   const [savingFile, setSavingFile] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const reportNames = getNetaReportNames(value);
-  const canShowGcNames = hasGcNetaReportLinks(reportNames, manifest);
+  const canShowGcNames = hasGcNetaReportLinks(reportNames, manifest, equipmentId);
 
   async function handleStatusChange(file: string, status: "PASSED" | "FAILED") {
     if (!editable) return;
@@ -215,6 +217,7 @@ function NetaReportNames({
                 </div>
               </div>
               <NetaReportChips
+                equipmentId={equipmentId}
                 className="lg:grid-cols-1"
                 compactNameMode={nameMode}
                 reports={[reportName]}
@@ -329,6 +332,7 @@ export function EquipmentDetailDrawer({
                 </div>
                 {trackingRequired ? <div>
                   <NetaReportNames
+                    equipmentId={equipment.equipment_id}
                     editable={netaReviewsEditable}
                     onReviewUpdated={onNetaReportReviewUpdated}
                     reviews={netaReportReviews}

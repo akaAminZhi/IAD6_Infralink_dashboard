@@ -1,4 +1,5 @@
 import { DailyTestHistory } from "../components/common/DailyTestHistory";
+import { NetaReportSection } from "../components/common/NetaReportSection";
 import {
   useEffect,
   useMemo,
@@ -910,6 +911,8 @@ function EquipmentDetail({
           </dl>
         </section>
 
+        {trackingRequired ? <NetaReportSection key={row.equipmentId}
+          equipmentId={row.equipment?.equipment_id ?? row.equipmentId} value={row.equipment?.neta_test_report} /> : null}
         <section>
           <h3 className="text-xs font-semibold uppercase text-muted-foreground">
             Asset Information

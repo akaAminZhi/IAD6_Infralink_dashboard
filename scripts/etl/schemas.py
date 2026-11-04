@@ -176,6 +176,20 @@ class PdmEquipmentRecord(SchemaRecord):
 
 
 @dataclass(slots=True)
+class NetaReportFileRecord(SchemaRecord):
+    source_key: str
+    source_label: str
+    equipment_id: str | None
+    report_name: str
+    source_report_name: str
+    relative_path: str
+    url: str
+    bytes: int
+    modified_at: str
+    report_stage: Literal["temporary", "formal"] = "formal"
+
+
+@dataclass(slots=True)
 class NetaValidationRecord(SchemaRecord):
     """NETA validation finding.
 

@@ -12,6 +12,7 @@ import {
 
 interface NetaReportChipsProps {
   reports: string[];
+  equipmentId?: string | null;
   className?: string;
   compactNameMode?: NetaReportNameMode;
   showLinkedFileNames?: boolean;
@@ -29,7 +30,7 @@ function makePreview(reportName: string, link: NetaReportLink): ReportPreview {
   return {
     displayName: reportName,
     fileName: link.fileName,
-    sourceLabel: link.sourceLabel,
+    sourceLabel: link.reportStage === "temporary" ? `${link.sourceLabel} · Temporary` : link.sourceLabel,
     url: link.url,
   };
 }
@@ -98,6 +99,7 @@ function ReportPreviewModal({
 
 export function NetaReportChips({
   reports,
+  equipmentId,
   className,
   compactNameMode = "original",
   showLinkedFileNames = false,
@@ -124,7 +126,7 @@ export function NetaReportChips({
         )}
       >
         {reports.map((reportName, index) => {
-          const links = getNetaReportLinks(reportName, manifest);
+          const links = getNetaReportLinks(reportName, manifest, equipmentId);
           const originalLink = links.find((link) => link.sourceKey === "downloaded") ?? null;
           const gcLink = links.find((link) => link.sourceKey === "gc") ?? null;
 
@@ -139,6 +141,9 @@ export function NetaReportChips({
                 className={cn("max-w-full overflow-hidden rounded-md border border-blue-200 bg-blue-50 text-blue-950 shadow-sm", stackedCompact ? "text-[11px]" : "text-xs")}
                 key={`${reportName}-${index}`}
               >
+                {displayLink?.reportStage === "temporary" ? (
+                  <div className="px-2.5 pt-1 text-[10px] font-semibold text-amber-800">Temporary</div>
+                ) : null}
                 {displayLink ? (
                   <button
                     className={cn("block w-full break-all text-left font-semibold underline-offset-4 hover:bg-blue-100 hover:underline", stackedCompact ? "px-2 py-1.5" : "px-3 py-2")}
@@ -173,6 +178,9 @@ export function NetaReportChips({
               key={`${reportName}-${index}`}
               title={compactDisplayName}
             >
+              {compactLink?.reportStage === "temporary" ? (
+                <span className="px-2.5 text-[10px] font-semibold text-amber-800">Temporary</span>
+              ) : null}
               {compactLink ? (
                 <button
                   className="min-w-0 flex-1 truncate px-2.5 py-1 text-left underline-offset-4 hover:bg-blue-100 hover:underline"

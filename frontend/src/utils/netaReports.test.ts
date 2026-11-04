@@ -71,17 +71,42 @@ describe("netaReports", () => {
         sourceLabel: "Original",
         url: "/reports/original.pdf",
         fileName: "IAD06-PDU6-01A-1 - NETA Test Report-01.pdf",
+        reportStage: "formal",
       },
       {
         sourceKey: "gc",
         sourceLabel: "GC",
         url: "/reports/gc.pdf",
         fileName: "IAD06-TX-PDU6-01A-1.pdf",
+        reportStage: "formal",
       },
     ]);
     expect(hasGcNetaReportLinks(["IAD06-PDU6-01A-1 - NETA Test Report-01.pdf"], manifest)).toBe(
       true,
     );
     expect(getNetaReportLinks("missing.pdf", manifest)).toEqual([]);
+  });
+
+  it("scopes identical names to equipment and prefers formal links per source", () => {
+    const data: NetaReportManifest = { records: [
+      { equipment_id: "EQ-1", source_key: "downloaded", report_name: "report.pdf", report_stage: "temporary", url: "/temp/eq1.pdf" },
+      { equipment_id: "EQ-2", source_key: "downloaded", report_name: "report.pdf", url: "/formal/eq2.pdf" },
+      { equipment_id: "EQ-1", source_key: "gc", source_report_name: "report.pdf", report_name: "GC.pdf", report_stage: "temporary", url: "/temp/gc.pdf" },
+    ] };
+    expect(getNetaReportLinks("report.pdf", data, "eq-1").map((link) => link.url)).toEqual(["/temp/eq1.pdf", "/temp/gc.pdf"]);
+    expect(getNetaReportLinks("report.pdf", data)).toEqual([]);
+    data.records!.push({ equipment_id: "EQ-1", source_key: "downloaded", report_name: "report.pdf", report_stage: "formal", url: "/formal/eq1.pdf" });
+    expect(getNetaReportLinks("report.pdf", data, "EQ-1").map((link) => link.url)).toEqual(["/formal/eq1.pdf", "/temp/gc.pdf"]);
+    expect(getNetaReportLinks("report.pdf", data, "EQ-3")).toEqual([]);
+    expect(hasGcNetaReportLinks(["report.pdf"], data, "EQ-2")).toBe(false);
+  });
+
+  it("retains old unscoped manifests and explicitly named shared cable PDFs", () => {
+    expect(getNetaReportLinks("IAD06-PDU6-01A-1 - NETA Test Report-01.pdf", manifest, "EQ-1")).toHaveLength(2);
+    const data: NetaReportManifest = { records: [
+      { equipment_id: "ENDPOINT-1", source_key: "gc", source_report_name: "FDR-EQ1-EQ2.pdf", report_name: "Cable.pdf", url: "/gc/cable.pdf" },
+    ] };
+    expect(getNetaReportLinks("FDR-EQ1-EQ2.pdf", data, "FDR-EQ1-EQ2")[0]?.url).toBe("/gc/cable.pdf");
+    expect(getNetaReportLinks("FDR-EQ1-EQ2.pdf", data, "EQ-2")).toEqual([]);
   });
 });

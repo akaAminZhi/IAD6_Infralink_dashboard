@@ -65,6 +65,12 @@ Layout cable inspectors as well as the equipment/map routes.
 `frontend/src/hooks/useDashboardData.ts` loads datasets by route, using the
 explicit dependency map in `frontend/src/utils/dashboardResources.ts`:
 
+- Overview includes equipment records so its pending CxAlloy metric covers
+  standalone assets as well as PDM equipment. It shares Equipment's pending
+  predicate: tracked, explicit NETA Complete, and at least one pending local
+  PDF. File-level evidence takes precedence; legacy pending packages require
+  positive available-file counts. Broad upload-manifest summary totals are not
+  used for this dashboard metric; per-file upload evidence remains unchanged.
 - PDMs waits only for PDM records and EPS PDM execution; its equipment section
   loads EPS module/test-item detail and report links when the drawer opens.
 - Equipment starts its equipment/PDM/case/test-item, CxAlloy, report-manifest and
@@ -95,6 +101,25 @@ explicit dependency map in `frontend/src/utils/dashboardResources.ts`:
   Issue attachments and reference drawings also use their live public roots.
   Compiled-preview startup omits public-file copying; ordinary static builds
   retain it.
+
+The NETA manifest includes `_temporary/<equipment>/` from both report roots,
+with `report_stage` (`temporary`/`formal`) and the actual equipment owner.
+GC rename metadata maps files back to their original report names, including
+absolute manifest paths and legacy flat outputs. For each owner/original-name/source,
+ready formal files suppress temporary duplicates. The optional Tracker lifecycle
+JSON gates original formal records on `download_ready` and GC records on
+`formal_ready`, both in the formal stage; retained temporary files remain candidates
+during failed promotion. Missing lifecycle entries preserve legacy behavior;
+malformed state fails the build rather than publishing unverified formal files.
+Internal underscore directories are excluded except the root `_temporary`.
+The builder honors `IAD6_EPS_TRACKER_ROOT` and rejects conflicting public links.
+
+Shared report tools accept equipment IDs, retain unambiguous legacy manifests
+without ownership, and recognize exact asset-named shared cable PDFs under
+endpoint directories. Temporary previews carry a visible label. Power Plan/MV
+equipment details use the same report section; status and readiness inputs stay
+unchanged. ETL/index rebuild plus dashboard refresh switches to the current
+paths after Tracker cleanup; there is no real-time URL resolver.
 
 The loader distinguishes initial and detail error states, but `fetchJson`
 currently converts HTTP/network/parse failures to `null` plus a console warning;
@@ -168,10 +193,36 @@ heights and overhead cable routing, while keeping source footprints unchanged.
 daily report source metadata to the Layout manifest. Classification uses normalized equipment
 Type; termination records are excluded. Complete FDR endpoint IDs are matched
 against unique equipment IDs; unresolved/single-ended FD records remain in the
-dataset. The frontend draws only unique endpoint placements visible on the chosen
-floor, avoiding invented cross-floor or duplicate-placement associations.
+dataset. The frontend draws only unique endpoint placements visible in the chosen
+scene; unresolved and duplicate-placement associations remain undrawn.
 `layoutIsometricUtils.ts` owns projection, device kinds, connection placement, and
-overhead paths. Both views share the existing camera and planning state; switching
+overhead paths. `layoutSceneUtils.ts` derives the default All floors 2.5D scene:
+Second Floor translates vertically above First Floor with a compact lift based
+on room depth and device height (currently 180 units), allowing empty extents to
+overlap. Captions follow the room rows instead of enclosing the whole floor.
+First Floor and deduplicated shared
+outdoor placements stay in place. Display copies retain equipment/annotation
+identity and floor membership without modifying manifest coordinates or contracts.
+An aligned plan footprint across both floor inventories supplies the translucent
+ground decks, faint grids and shallow edges. Shared outdoor assets are excluded
+from the decks. Ground geometry is behind all equipment, is noninteractive and
+is included in combined/single-floor isometric fit bounds; 2D remains unchanged.
+Shared feeds to elevated floors retain native direct cubic arcs and render behind
+equipment until selected/highlighted. Device cross-floor connections group by a
+shared hub and destination floor, choosing the highest-degree endpoint with an
+upper-floor/ID tie-break independent of feeder direction. Each group has a common
+room-edge trunk spine, narrow parallel paths and independent terminal branches.
+Destination positions determine stable lane ordering; individual cables remain
+separate records and selected routes draw last above their siblings. Distant
+left/right routing banks and default white crossing underlays are removed; local
+overlap is allowed. Room lookup is floor-specific so overlapping display regions
+cannot change same-floor routing. Original same-floor paths
+translate with their floor; ground/shared paths remain unchanged. Every route's
+points drive path, marker, fit bounds and culling. Search recognizes unique
+cross-floor pairs, retains All floors when selecting equipment, and opens the
+combined scene when selecting a cross-floor cable from a single 2.5D floor.
+2D retains single-floor drawings; the previous 2.5D scope is restored on return.
+Both views share the existing camera and planning state; switching
 views resets the camera/selection geometry. Layout indexes exact FDR IDs from raw
 EPS `Daily_test_report` files as well as MV daily results. `cableTestUtils.ts`
 first treats a Feeder Cable ATP filename in System Elements as an attached

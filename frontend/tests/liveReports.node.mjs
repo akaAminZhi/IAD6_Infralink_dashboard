@@ -51,6 +51,22 @@ test("updated reports are visible without a rebuild", async () => {
   assert.equal(await response.text(), pdf + "updated");
   await writeFile(file, pdf);
 });
+test("temporary PDFs support byte ranges and disappear after tracker cleanup", async () => {
+  const temporary = path.join(root, "tracker", "_temporary", "EQ-1", "Temporary #1.pdf");
+  await mkdir(path.dirname(temporary), { recursive: true });
+  await writeFile(temporary, pdf);
+  const url = `${origin}/neta-reports/_temporary/EQ-1/Temporary%20%231.pdf`;
+  const response = await fetch(url, { headers: { Range: "bytes=0-4" } });
+  assert.equal(response.status, 206);
+  assert.equal(response.headers.get("content-type"), "application/pdf");
+  assert.equal(await response.text(), "%PDF-");
+  const gcTemporary = path.join(root, "public", "neta-reports-gc", "_temporary", "EQ-1", "GC.pdf");
+  await mkdir(path.dirname(gcTemporary), { recursive: true });
+  await writeFile(gcTemporary, pdf);
+  assert.equal((await fetch(`${origin}/neta-reports-gc/_temporary/EQ-1/GC.pdf`)).status, 200);
+  await rm(temporary);
+  assert.equal((await fetch(url)).status, 404);
+});
 test("missing PDF returns 404, never dashboard or stale built report", async () => {
   for (const name of ["missing.pdf", "stale.pdf"]) {
     const response = await fetch(`${origin}/neta-reports/${name}`);

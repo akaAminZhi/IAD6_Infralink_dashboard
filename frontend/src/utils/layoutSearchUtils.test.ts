@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { LayoutEquipmentRecord, LayoutPlanManifest } from "../types/data";
 import { buildLayoutSearchEntries, searchLayoutEntries } from "./layoutSearchUtils";
+import { ALL_LAYOUT_FLOORS } from "./layoutSceneUtils";
 
 function device(key: string, id = key): LayoutEquipmentRecord {
   return { annotation_id: id, equipment_key: key, label: key, matched_equipment_id: `IAD06-${key}`,
@@ -18,6 +19,18 @@ function manifest(): LayoutPlanManifest {
 }
 
 describe("Layout search", () => {
+  it("makes unique cross-floor cables searchable in the combined scene without assigning ambiguous ports", () => {
+    const data = manifest();
+    const second = { ...device("EQ-3"), source_floor_id: "second" };
+    data.floors.push({ ...data.floors[0], floor_id: "second", label: "Second Floor", equipment: [second] });
+    const cross = { ...data.cables![0], cable_id: "CROSS", target_equipment_key: "EQ-3" };
+    data.cables!.push(cross);
+    const entries = buildLayoutSearchEntries(data, [], "first");
+    expect(entries.find((entry) => entry.label === "CROSS")).toMatchObject({ floorId: ALL_LAYOUT_FLOORS, floorLabel: "Cable · Cross-floor" });
+    expect(entries.find((entry) => entry.label === data.cables![0].cable_id)?.floorId).toBeNull();
+    data.floors[1].equipment.push({ ...second, annotation_id: "duplicate-second" });
+    expect(buildLayoutSearchEntries(data, [], ALL_LAYOUT_FLOORS).find((entry) => entry.label === "CROSS")?.floorId).toBeNull();
+  });
   it("ranks ordinary equipment before cables and terminations before applying the suggestion limit", () => {
     const data = manifest();
     const cableId = data.cables![0].cable_id;

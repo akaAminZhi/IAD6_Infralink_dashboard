@@ -63,6 +63,80 @@ export interface PlacedLayoutCable {
   target: LayoutEquipmentRecord;
   roomToOverhead?: boolean;
   overheadRoom?: LayoutRegionRecord;
+  externalKind?: "cross-floor" | "shared-feed";
+  externalRoute?: { points: PowerPlanPoint[]; hubEquipmentKey: string; trunk: PowerPlanPoint[]; bundleLane: number };
+}
+
+export function layoutExternalCableKind({ source, target }: PlacedLayoutCable, baseFloorId: string): PlacedLayoutCable["externalKind"] {
+  if (source.fixed && target.fixed) return undefined;
+  if (!source.fixed && !target.fixed) return source.source_floor_id !== target.source_floor_id ? "cross-floor" : undefined;
+  return (source.fixed ? target : source).source_floor_id !== baseFloorId ? "shared-feed" : undefined;
+}
+
+function cableRoof(row: LayoutEquipmentRecord): PowerPlanPoint {
+  return projectLayoutPoint(row.rect.x + row.rect.width / 2, row.rect.y + row.rect.height / 2, layoutDeviceHeight(row));
+}
+
+/** Fan a hub's cross-floor cables out from one room-edge trunk; outdoor feeds retain direct arcs. */
+export function routeLayoutCrossFloorCables(
+  connections: PlacedLayoutCable[], regions: LayoutRegionRecord[], floorOffsets: ReadonlyMap<string, number>,
+): PlacedLayoutCable[] {
+  const endpoint = (row: LayoutEquipmentRecord) => {
+    const offset = floorOffsets.get(row.source_floor_id) ?? 0;
+    const x = row.rect.x + row.rect.width / 2, y = row.rect.y + row.rect.height / 2;
+    const room = regions.find((region) => region.kind === "room" && region.source_floor_id === row.source_floor_id &&
+      x >= region.rect.x && x <= region.rect.x + region.rect.width && y >= region.rect.y && y <= region.rect.y + region.rect.height);
+    return { row, offset, x: x - offset, y: y - offset, room,
+      roomY: room ? room.rect.y - offset : undefined };
+  };
+  const crossFloor = connections.filter((item) => item.externalKind === "cross-floor");
+  const degree = new Map<string, number>();
+  for (const connection of crossFloor) for (const row of [connection.source, connection.target]) {
+    degree.set(row.equipment_key, (degree.get(row.equipment_key) ?? 0) + 1);
+  }
+  const groups = new Map<string, { hub: ReturnType<typeof endpoint>; entries: PlacedLayoutCable[] }>();
+  for (const connection of crossFloor) {
+    // Prefer the shared endpoint. Ties use the upper floor, then the equipment ID,
+    // so reversing the feeder record never changes the chosen trunk.
+    const [hub, other] = [endpoint(connection.source), endpoint(connection.target)].sort((a, b) =>
+      (degree.get(b.row.equipment_key) ?? 0) - (degree.get(a.row.equipment_key) ?? 0) ||
+      a.offset - b.offset || a.row.equipment_key.localeCompare(b.row.equipment_key));
+    const key = `${hub.row.annotation_id}\u0000${other.row.source_floor_id}`;
+    const group = groups.get(key) ?? { hub, entries: [] };
+    group.entries.push(connection); groups.set(key, group);
+  }
+  const routes = new Map<string, PlacedLayoutCable>();
+  for (const { hub, entries } of groups.values()) {
+    const leafFor = (connection: PlacedLayoutCable) => endpoint(connection.source.equipment_key === hub.row.equipment_key ? connection.target : connection.source);
+    entries.sort((a, b) => {
+      const ap = leafFor(a), bp = leafFor(b);
+      return ap.x - bp.x || ap.y - bp.y || a.cable.cable_id.localeCompare(b.cable.cable_id);
+    });
+    const leaves = entries.map((connection) => endpoint(connection.source.equipment_key === hub.row.equipment_key ? connection.target : connection.source));
+    const roomEdges = leaves.map((leaf) => leaf.roomY).filter((value): value is number => value !== undefined);
+    const edgeY = (hub.roomY ?? (roomEdges.length ? Math.min(...roomEdges) : Math.min(hub.y, ...leaves.map((leaf) => leaf.y)))) - 8;
+    const height = Math.max(layoutDeviceHeight(hub.row), ...leaves.map((leaf) => layoutDeviceHeight(leaf.row))) + 12;
+    const project = (x: number, y: number, offset: number, trayHeight = height) => {
+      const point = projectLayoutPoint(x, y, trayHeight);
+      return { x: point.x, y: point.y + offset };
+    };
+    const trunk = [cableRoof(hub.row), project(hub.x, hub.y, hub.offset),
+      project(hub.x, edgeY, hub.offset), project(hub.x, edgeY, leaves[0].offset)];
+    entries.forEach((connection, i) => {
+      const leaf = leaves[i];
+      // Keep individual cables close to the common spine instead of drawing one
+      // completely coincident line. Each terminal run then fans out to its own roof.
+      const bundleLane = (i - (entries.length - 1) / 2) * 2;
+      const trayHeight = height + i * 0.75;
+      const fromHub = [cableRoof(hub.row), project(hub.x, hub.y, hub.offset, trayHeight),
+        project(hub.x, edgeY, hub.offset, trayHeight), project(hub.x + bundleLane, edgeY, hub.offset, trayHeight),
+        project(hub.x + bundleLane, edgeY, leaf.offset, trayHeight), project(leaf.x, edgeY, leaf.offset, trayHeight),
+        project(leaf.x, leaf.y, leaf.offset, trayHeight), cableRoof(leaf.row)];
+      const points = hub.row.equipment_key.localeCompare(leaf.row.equipment_key) <= 0 ? fromHub : [...fromHub].reverse();
+      routes.set(connection.cable.cable_id, { ...connection, externalRoute: { points, trunk, bundleLane, hubEquipmentKey: hub.row.equipment_key } });
+    });
+  }
+  return connections.map((connection) => routes.get(connection.cable.cable_id) ?? connection);
 }
 
 export function placedLayoutCables(cables: LayoutCableRecord[], rows: LayoutEquipmentRecord[], regions: LayoutRegionRecord[] = []): PlacedLayoutCable[] {
@@ -71,7 +145,8 @@ export function placedLayoutCables(cables: LayoutCableRecord[], rows: LayoutEqui
   const rooms = regions.filter((region) => region.kind === "room");
   const containingRoom = (row: LayoutEquipmentRecord) => {
     const x = row.rect.x + row.rect.width / 2, y = row.rect.y + row.rect.height / 2;
-    return rooms.find(({ rect }) => x >= rect.x && x <= rect.x + rect.width && y >= rect.y && y <= rect.y + rect.height);
+    return rooms.find(({ rect, source_floor_id, fixed }) => (fixed || source_floor_id === row.source_floor_id) &&
+      x >= rect.x && x <= rect.x + rect.width && y >= rect.y && y <= rect.y + rect.height);
   };
   return cables.flatMap((cable) => {
     const sources = placements.get(cable.source_equipment_key ?? "") ?? [];
@@ -89,6 +164,7 @@ export function placedLayoutCables(cables: LayoutCableRecord[], rows: LayoutEqui
 }
 
 export function overheadCablePoints(connection: PlacedLayoutCable, lane = 0): PowerPlanPoint[] {
+  if (connection.externalRoute) return connection.externalRoute.points;
   // Reversed feeder pairs share one base route before their lane offsets are applied.
   const { source, target } = connection.source.equipment_key <= connection.target.equipment_key
     ? connection : { source: connection.target, target: connection.source };
@@ -203,7 +279,7 @@ export function layoutCableLanes(connections: PlacedLayoutCable[]): number[] {
   }
   const exteriorBundles = new Map<string, number[]>();
   connections.forEach((connection, index) => {
-    if (!connection.roomToOverhead || !connection.overheadRoom) return;
+    if (connection.externalKind || !connection.roomToOverhead || !connection.overheadRoom) return;
     const key = connection.overheadRoom.annotation_id;
     const indexes = exteriorBundles.get(key) ?? [];
     indexes.push(index);
@@ -224,7 +300,7 @@ export function isNearbyCable({ source, target }: PlacedLayoutCable): boolean {
 }
 
 function isRoomTrayCable(connection: PlacedLayoutCable): boolean {
-  return !connection.source.fixed && !connection.target.fixed && !connection.roomToOverhead && !isNearbyCable(connection);
+  return !connection.externalKind && !connection.source.fixed && !connection.target.fixed && !connection.roomToOverhead && !isNearbyCable(connection);
 }
 
 function roomCableCorners([start, trayStart, trayEnd, end]: PowerPlanPoint[]): PowerPlanPoint[] {
@@ -267,7 +343,7 @@ export function layoutConnectionBounds(connection: PlacedLayoutCable, lane = 0):
 
 export function layoutCablePath(connection: PlacedLayoutCable, lane = 0): string {
   const points = overheadCablePoints(connection, lane);
-  if (connection.roomToOverhead && connection.overheadRoom) return roundedCablePath(points);
+  if (connection.externalRoute || connection.roomToOverhead && connection.overheadRoom) return roundedCablePath(points);
   const [a, b, c, d] = points;
   if (isRoomTrayCable(connection)) {
     const [{ y: startCornerY }, { y: endCornerY }] = roomCableCorners([a, b, c, d]);
@@ -280,7 +356,7 @@ export function layoutCablePath(connection: PlacedLayoutCable, lane = 0): string
 /** Anchor report warnings on the actual cable route, including its bundle lane. */
 export function layoutCableMarkerPoint(connection: PlacedLayoutCable, lane = 0): PowerPlanPoint {
   const points = overheadCablePoints(connection, lane);
-  if (connection.roomToOverhead && connection.overheadRoom) {
+  if (connection.externalRoute || connection.roomToOverhead && connection.overheadRoom) {
     // The longest straight tray section stays clear of rounded elbows in either direction.
     let start = points[1], end = points[2];
     for (let i = 2; i < points.length - 2; i++) {

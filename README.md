@@ -62,6 +62,12 @@ site PDF names stop the affected upload instead of re-uploading old PDFs.
 Force upload is disabled for this job. Pending equipment includes previously
 uploaded equipment that now needs additional cable PDFs; it is not a count of
 equipment never uploaded.
+The Overview and Equipment **Pending CxAlloy Upload** count/filter requires an
+explicit NETA Complete flag and at least one local report with file status
+`pending`. Incomplete/unknown equipment and records with only uploaded,
+review-required or missing-local PDFs are excluded. Legacy status data requires
+a pending package with a positive available-PDF count. Individual report status
+and upload operations retain their existing evidence rules.
 
 Equipment details separate **Equipment Reports** from **Cable Reports**.
 Equipment reports have their own upload status; each downloaded cable PDF shows
@@ -211,6 +217,20 @@ preview launcher once after installing these changes to load the new middleware.
 
 NETA report PDFs also read live from `frontend/public/neta-reports/` and
 `frontend/public/neta-reports-gc/`, including their tracker junction targets.
+The report index includes `_temporary/<equipment>/` in both roots. Temporary
+PDFs display a **Temporary** label and support Original/GC names and previews;
+their presence does not change NETA/EPS completion or readiness metrics.
+For the same equipment, original report name and source, ready formal files
+take precedence. Tracker lifecycle state gates original formal files on
+`download_ready` and GC formal files on `formal_ready`; retained temporary
+files remain viewable during an unsuccessful promotion. Legacy formal files
+without lifecycle entries retain their existing behavior. Internal staging,
+backup and archive directories remain excluded.
+After downloading/organizing reports, run the normal ETL and refresh the page.
+To refresh only report links, run `python scripts/etl/build_neta_report_manifest.py`.
+This honors `IAD6_EPS_TRACKER_ROOT`; existing public links must point to that
+tracker. A page opened before temporary cleanup needs a refresh after indexing.
+Power Plan and MV equipment details also provide the shared report preview.
 The report middleware supports browser PDF byte-range requests. Missing reports
 return 404 instead of falling through to dashboard HTML or stale built copies.
 The report files and junctions must exist on the machine hosting the dashboard;

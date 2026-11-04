@@ -1,5 +1,97 @@
 ﻿# Codex Handoff
 
+## Current update (2026-11-04): Pending CxAlloy filter eligibility
+
+- Pending CxAlloy Upload now requires tracked equipment with explicit
+  `neta_complete === true` and at least one file whose upload status is `pending`.
+  File-level evidence overrides aggregate package status. Missing-only,
+  review-only, uploaded-only and empty file lists are excluded; legacy pending
+  packages require a positive available-PDF count. Attachment-based cable
+  completion alone does not satisfy this filter. Uploaded equipment with a new
+  pending cable remains eligible, even if another local PDF is missing.
+- Equipment card, advanced/URL quick filter and Overview management exception
+  share the predicate and deduplicated equipment count. Overview now loads the
+  equipment dataset to include standalone assets and no longer uses the broad
+  upload-manifest pending total. Per-file badges, report viewing and upload
+  execution rules are unchanged. No Python/data contracts or datasets changed.
+- Verification: 46 targeted frontend tests passed across equipmentUtils,
+  EquipmentPage, OverviewPage and useDashboardData. Strict TypeScript and
+  preview-mode build passed with existing chunk-size/plugin timing warnings.
+  Real Chromium on a private preview confirmed Overview and Equipment both show
+  10 pending devices; all 10 visible filtered rows have pending files and none
+  show Incomplete. No page errors. Screenshot/log artifacts are ignored under
+  `runtime/automation/cxalloy-pending-*`; the private preview was stopped.
+- Frontend build is refreshed; refresh the page. Existing user services were
+  not restarted. No ETL, vendor upload or git commit; prior changes preserved.
+
+## Current update (2026-11-04): Temporary/formal NETA report viewing
+
+- Report manifest includes root `_temporary/<equipment>/` for both Original and
+  GC sources, preserving the equipment ID and adding `report_stage`. GC rename
+  metadata preserves original-name aliases, including absolute paths and legacy
+  flat output ownership. Other underscore/internal trees stay excluded.
+- Tracker lifecycle JSON is read only: formal Original records require formal
+  stage plus `download_ready`; GC requires formal stage plus `formal_ready`.
+  Retained temporary files remain available during failed promotion; ready formal
+  copies suppress temporary duplicates per equipment/original-name/source.
+  Missing lifecycle entries preserve legacy files; malformed state fails the build.
+- Builder honors `IAD6_EPS_TRACKER_ROOT` and rejects public links to another root.
+  Shared links scope by equipment, support unambiguous legacy records and explicit
+  asset-named shared cable PDFs. Temporary chips and previews are labelled.
+  Equipment, PDM, Issues and Layout pass owner IDs; Power Plan and MV equipment
+  details now have shared report/name controls. Completion, tracking, readiness,
+  KPR, cable ATP and upload behavior are unchanged.
+- Regenerated only `neta_report_manifest.json`: 6,655 linked PDFs (Original:
+  949 temporary / 1,843 formal; GC: 1,143 temporary / 2,720 formal). All indexed
+  files exist. All 96 devices with temporary originals have report references in
+  existing equipment data. Generated data and report files remain ignored.
+- Verification: 17 targeted Python tests passed (lifecycle manifest, existing
+  manifests, schemas and ETL registration); 91 frontend tests passed across report
+  tools/reviews/chips and Equipment, PDM, Issues, Power Plan, MV and Layout pages.
+  Nine Node PDF-service tests passed, including temporary ranges and cleanup 404.
+  Strict TypeScript/preview-mode build passed; existing large-chunk warning remains.
+- Real Chromium against a private compiled-preview process verified Original/GC
+  temporary previews for IAD06-CDS6-01R-7, name switching, Temporary labels,
+  206 application/pdf ranges and rendered PDF pages, without page errors.
+  Screenshots were reviewed. Ignored artifacts: `runtime/automation/neta-temporary-*`
+  and `neta_temporary_report_smoke.py`. The private process was stopped.
+- Rebuild/restart host preview after installing source changes. Later downloads
+  and organization use normal ETL (or only the report manifest builder), then page
+  refresh. Already-open deleted temporary URLs have no live redirect. Existing
+  user services were not restarted. No full ETL, vendor operations, Tracker
+  mutations, report deletion or git commit; prior user changes were preserved.
+
+## Current update (2026-11-03): Floor decks and shared cross-floor trunks
+
+- All floors retains the compact 180-unit lift and original equipment coordinates.
+  Each floor now has an aligned full-footprint light ground deck, shallow edge and
+  faint grid. Decks exclude shared outdoor equipment, sit behind all devices and
+  participate in fit bounds. Single-floor 2.5D has one deck; 2D has none. Captions
+  remain beside room rows. Shared outdoor assets still appear once.
+- Cross-floor cables group by hub and destination floor, using endpoint degree
+  and an upper-floor/ID tie-break stable under feeder reversal. The group's room
+  edge/trunk spine is shared, with closely spaced parallel cable paths and separate
+  terminal branches. This incorporates the user's request to avoid complete
+  coincidence and separate the final device entries. Destination positions order
+  lanes. MDB6-01R's six links share this corridor, including both ATS-TX-INV6
+  feeders; their actual risers are two units apart. Selected routes draw last.
+- The 22 shared feeds to Second Floor, including MDS6, retain direct cubic arcs
+  behind equipment until selected/highlighted. Existing single-floor routes,
+  status/evidence rules, logical floor room membership, unique port resolution,
+  source records and data contracts remain intact. No ETL changes.
+- 85 targeted scene/projection/page tests passed, including 49 Layout page tests,
+  deck coverage/alignment, the two named ATS feeders, distinct terminal entries,
+  direction/order stability and selected-cable foreground rendering. Strict
+  TypeScript/preview build passed with the existing large-chunk warning.
+- Chromium checked both ground decks, 458 placements / 457 IDs / 527 cables,
+  all 11 cross-floor links, the 22 direct elevated feeds, six MDB6-01R bundle
+  members, distinct two-unit risers for the named pair, route fit, warning markers,
+  search/scope/visibility, second-floor box planning and responsive widths without
+  page errors. Overview and ATS branch screenshots were visually reviewed.
+  Ignored artifacts use `runtime/automation/layout-ground-trunks-*` and
+  `layout_ground_trunks_smoke.py`.
+- Compiled preview is on port 5173; refresh Layout. No ETL or vendor writes.
+
 ## Current update (2026-11-03): Layout exterior cable trays
 
 - Follow-up replaces the fixed right-edge detour with a run to the room's back

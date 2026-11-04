@@ -161,7 +161,7 @@ export function EquipmentTable({ rows, selectedRowId, onSelectEquipment, priorit
                 >
                   {formatNumber(reportCount)} reports
                 </Button>
-                {expandedMode && hasGcNetaReportLinks(reportNames, netaReportManifest) ? (
+                {expandedMode && hasGcNetaReportLinks(reportNames, netaReportManifest, row.original.equipment_id) ? (
                   <Button
                     aria-pressed={expandedMode === "gc"}
                     className="h-8 gap-1.5 border-blue-200 bg-blue-50 px-2 text-xs text-blue-900"
@@ -179,7 +179,7 @@ export function EquipmentTable({ rows, selectedRowId, onSelectEquipment, priorit
               </div>
               {expandedMode ? (
                 <>
-                  {reportNames.length ? <NetaReportChips compactNameMode={expandedMode} reports={reportNames} /> : null}
+                  {reportNames.length ? <NetaReportChips equipmentId={row.original.equipment_id} compactNameMode={expandedMode} reports={reportNames} /> : null}
                   <EquipmentCableAtpEvidence equipment={row.original} />
                 </>
               ) : null}
@@ -244,10 +244,10 @@ export function EquipmentTable({ rows, selectedRowId, onSelectEquipment, priorit
     state: { sorting },
   });
   const tableRows = table.getRowModel().rows;
-  const sortedRows = useMemo(() => prioritizeEquipment ? [
-    ...tableRows.filter((row) => equipmentSearchPriority(row.original.equipment_type) === 0),
-    ...tableRows.filter((row) => equipmentSearchPriority(row.original.equipment_type) === 1),
-  ] : tableRows, [tableRows, prioritizeEquipment]);
+  const sortedRows = useMemo(() => prioritizeEquipment ? [...tableRows].sort((a, b) =>
+    equipmentSearchPriority(a.original.equipment_type) - equipmentSearchPriority(b.original.equipment_type) ||
+    a.original.display_equipment_id.trim().length - b.original.display_equipment_id.trim().length,
+  ) : tableRows, [tableRows, prioritizeEquipment]);
   const pageCount = Math.max(1, Math.ceil(sortedRows.length / PAGE_SIZE));
   const pageStart = pageIndex * PAGE_SIZE;
   const pageEnd = Math.min(pageStart + PAGE_SIZE, sortedRows.length);

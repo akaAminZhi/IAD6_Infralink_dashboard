@@ -29,6 +29,24 @@ describe("MvEquipmentPage", () => {
     mvCommentsApi.get.mockResolvedValue({ comments: [] });
   });
 
+  it.each([false, true])("opens local NETA reports independently of completion (%s)", async (complete) => {
+    const user = userEvent.setup();
+    const id = "IAD06-TX6-01A";
+    const data = makeDashboardData({ equipment: [{ equipment_id: id, neta_complete: complete, neta_test_report: "Report.pdf" }],
+      powerPlanManifest: { pages: [{ page_id: "mv", page_label: "MV", document_name: "Electrical-IAD6-MV.pdf", page_number: 1,
+        width: 1000, height: 700, annotations: [{ annotation_id: "mv-1", kind: "equipment", label: "TX6-01A",
+          matched_equipment_id: id, rect: { x: 100, y: 100, width: 180, height: 90 }, center: { x: 190, y: 145 } }],
+      }] },
+    });
+    render(<NetaReportManifestProvider manifest={{ records: [
+      { equipment_id: id, source_key: "downloaded", report_name: "Report.pdf", report_stage: complete ? "formal" : "temporary", url: complete ? "/formal.pdf" : "/temporary.pdf" },
+    ] }}><MvEquipmentPage data={data} /></NetaReportManifestProvider>);
+    await user.click(screen.getByRole("button", { name: "TX6-01A, MV transformer" }));
+    expect(screen.getByText(complete ? "NETA Complete 1" : "NETA Complete 0")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Report.pdf" }));
+    expect(document.querySelector("iframe")).toHaveAttribute("src", complete ? "/formal.pdf" : "/temporary.pdf");
+  });
+
   it.each(["TX6-01A", "UTILITY6-01"])("shows NETA completion and current failed items for %s", async (label) => {
     const user = userEvent.setup();
     const completedAt = "2026-09-10T14:30:00";

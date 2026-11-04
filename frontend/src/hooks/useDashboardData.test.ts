@@ -182,6 +182,14 @@ describe("useDashboardData route loading", () => {
     expect(fetchJsonMock.mock.calls.filter(([path]) => path === "/data/eps_test_items.json")).toHaveLength(2);
   });
 
+  it("loads equipment completion evidence for Overview pending-upload counts", async () => {
+    setup();
+    const { result } = renderHook(() => useDashboardData("/overview"));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(fetchJsonMock).toHaveBeenCalledWith("/data/equipment.json");
+    expect(result.current.equipment).toHaveLength(1);
+  });
+
   it("loads Data Quality only when visiting it", async () => {
     setup();
     const { result } = renderHook(() => useDashboardData("/data-quality"));

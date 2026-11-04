@@ -25,7 +25,7 @@ export const dashboardResourceFiles: Record<DashboardResource, string> = {
 };
 
 const overview: DashboardResource[] = [
-  "pdms", "summary", "historyComparison", "epsTestSummary", "epsPdmExecution", "cxalloyReportStatus",
+  "pdms", "equipment", "summary", "historyComparison", "epsTestSummary", "epsPdmExecution", "cxalloyReportStatus",
 ];
 const power: DashboardResource[] = ["pdms", "equipment", "cases", "epsModuleExecution", "epsTestItems"];
 

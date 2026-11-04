@@ -13,6 +13,7 @@ import { IsometricEquipment, SimpleIsometricSymbols } from "../components/layout
 import { FeederCableAtpReports } from "../components/layout/FeederCableAtpReports";
 import { LayoutCable } from "../components/layout/LayoutCable";
 import { LayoutBackground } from "../components/layout/LayoutBackground";
+import { LayoutFloorGround } from "../components/layout/LayoutFloorGround";
 import { useFrameState } from "../hooks/useFrameState";
 import { useNetaReportManifest } from "../contexts/NetaReportManifestContext";
 import { useDashboardResources } from "../contexts/DashboardResourcesContext";
@@ -22,8 +23,9 @@ import { fetchJson } from "../utils/dataLoaders";
 import { LAYOUT_CABLE_MISSING_REPORT_MESSAGE, LAYOUT_CABLE_TEST_STATES, layoutCableMissingReport, layoutCableTestState } from "../utils/cableTestUtils";
 import { getLayoutCableReportNames } from "../utils/layoutReportUtils";
 import { getNetaReportNames } from "../utils/netaReports";
+import { ALL_LAYOUT_FLOORS, buildCombinedLayoutScene, layoutCableGeometry, layoutFloorFootprint } from "../utils/layoutSceneUtils";
 import {
-  DEVICE_KIND_LABELS, LAYOUT_VIEW_KEY, isNearbyCable, layoutCableLanes, layoutCableMarkerPoint, layoutCablePath, layoutConnectionBounds, layoutDeviceHeight, layoutDeviceKind,
+  DEVICE_KIND_LABELS, LAYOUT_VIEW_KEY, layoutCableLanes, layoutConnectionBounds, layoutDeviceHeight, layoutDeviceKind,
   placedLayoutCables, projectLayoutPoint, projectedLayoutBounds, projectedLayoutRoomLabel,
 } from "../utils/layoutIsometricUtils";
 import {
@@ -117,6 +119,8 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
   const [loading, setLoading] = useState(true);
   const [retry, setRetry] = useState(0);
   const [floorId, setFloorId] = useState("");
+  const [combinedFloors, setCombinedFloors] = useState(true);
+  const combined = isometric && combinedFloors;
   const [overrides, setOverrides] = useState(readLayoutOverrides);
   const [storageError, setStorageError] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -169,23 +173,18 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
     return () => observer.disconnect();
   }, [loading]);
 
-  const rows = useMemo(() => manifest ? visibleLayoutEquipment(manifest, floorId) : [], [manifest, floorId]);
-  const regions = useMemo(() => manifest ? visibleLayoutRegions(manifest, floorId) : [], [manifest, floorId]);
-  const connections = useMemo(() => placedLayoutCables(manifest?.cables ?? [], rows, regions), [manifest, rows, regions]);
+  const combinedScene = useMemo(() => manifest && hasIsometric ? buildCombinedLayoutScene(manifest) : null, [manifest, hasIsometric]);
+  const rows = useMemo(() => combined && combinedScene ? combinedScene.rows : manifest ? visibleLayoutEquipment(manifest, floorId) : [], [manifest, floorId, combined, combinedScene]);
+  const regions = useMemo(() => combined && combinedScene ? combinedScene.regions : manifest ? visibleLayoutRegions(manifest, floorId) : [], [manifest, floorId, combined, combinedScene]);
+  const connections = useMemo(() => combined && combinedScene ? combinedScene.connections
+    : placedLayoutCables(manifest?.cables ?? [], rows, regions), [manifest, rows, regions, combined, combinedScene]);
+  const selectedConnection = selectedCableId ? connections.find(({ cable }) => cable.cable_id === selectedCableId) : undefined;
   const missingReportConnections = useMemo(() => connections.filter(({ cable }) => layoutCableMissingReport(cable)), [connections]);
   const missingReportCableIds = useMemo(() => new Set(missingReportConnections.map(({ cable }) => cable.cable_id)), [missingReportConnections]);
   const missingReportEndpointKeys = useMemo(() => new Set(missingReportConnections.flatMap(({ cable }) =>
     [cable.source_equipment_key, cable.target_equipment_key])), [missingReportConnections]);
-  const cableGeometry = useMemo(() => {
-    const lanes = layoutCableLanes(connections);
-    return connections.map((connection, index) => ({ connection,
-      path: layoutCablePath(connection, lanes[index]), route: !connection.roomToOverhead && isNearbyCable(connection) ? "arc" as const : "long" as const,
-      markerPoint: layoutCableMarkerPoint(connection, lanes[index]),
-      zone: connection.source.fixed && connection.target.fixed ? "fixed" as const
-        : connection.source.fixed || connection.target.fixed ? "mixed" as const : "room" as const,
-      extent: layoutConnectionBounds(connection, lanes[index]),
-    }));
-  }, [connections]);
+  const cableGeometry = useMemo(() => !isometric ? [] : combined && combinedScene ? combinedScene.geometry
+    : layoutCableGeometry(connections), [connections, combined, combinedScene, isometric]);
   const connectionIds = useMemo(() => new Set(connections.map((item) => item.cable.cable_id)), [connections]);
   const cableIndex = useMemo(() => {
     const byId = new Map<string, LayoutCableRecord>(), byEquipment = new Map<string, LayoutCableRecord[]>();
@@ -222,9 +221,10 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
       return floorConnections.map((connection, index) => ({ rect: layoutConnectionBounds(connection, lanes[index]) }));
     });
     const roomCallouts = allRegions.filter((region) => region.kind === "room").map(projectedLayoutRoomLabel);
-    return { plan: layoutBounds(records), isometric: layoutBounds([...records.map((record) => ({ rect: projectedLayoutBounds(record.rect, 32) })), ...roomCallouts, ...cableBounds]) };
+    const ground = { rect: projectedLayoutBounds(layoutFloorFootprint(manifest), -3) };
+    return { plan: layoutBounds(records), isometric: layoutBounds([...records.map((record) => ({ rect: projectedLayoutBounds(record.rect, 32) })), ground, ...roomCallouts, ...cableBounds]) };
   }, [manifest]);
-  const fullBounds = isometric ? allBounds.isometric : allBounds.plan;
+  const fullBounds = combined && combinedScene ? combinedScene.bounds : isometric ? allBounds.isometric : allBounds.plan;
   const bounds = viewport ?? fullBounds;
   const overscan = 0.4;
   const cullCenter = panCullViewport ?? bounds;
@@ -271,7 +271,7 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
     counts[item.reason] = (counts[item.reason] ?? 0) + 1; return counts;
   }, {}), [manifest]);
 
-  const searchEntries = useMemo(() => manifest ? buildLayoutSearchEntries(manifest, equipment, floorId) : [], [manifest, equipment, floorId]);
+  const searchEntries = useMemo(() => manifest ? buildLayoutSearchEntries(manifest, equipment, combined ? ALL_LAYOUT_FLOORS : floorId) : [], [manifest, equipment, floorId, combined]);
   const suggestions = useMemo(() => searchLayoutEntries(searchEntries, search), [searchEntries, search]);
 
   function canvasRect(): DOMRect | undefined {
@@ -318,7 +318,9 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
   }
 
   function confirmSuggestion(suggestion: LayoutSearchEntry) {
-    if (suggestion.floorId) setFloorId(suggestion.floorId);
+    if (suggestion.floorId === ALL_LAYOUT_FLOORS) {
+      if (isometric) setCombinedFloors(true);
+    } else if (suggestion.floorId && !combined) setFloorId(suggestion.floorId);
     setSearch(suggestion.label);
     setSearchOpen(false);
     setInspection(null);
@@ -486,8 +488,20 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
   if (!manifest) return <ErrorState message="Layout data could not be loaded. Run the Layout ETL builder and retry." onRetry={() => setRetry((value) => value + 1)} />;
   if (!manifest.floors.length) return <EmptyState title="No layout floors available" description="No configured floor drawing is available. Refresh the layout data after adding it." />;
 
+  const equipmentFloorLabel = (row: LayoutEquipmentRecord) => row.fixed ? "Shared Outdoor Equipment"
+    : manifest.floors.find((floor) => floor.floor_id === row.source_floor_id)?.label ?? "Floor equipment";
   const isCableActive = (cable: LayoutCableRecord) => selectedCableId ? selectedCableId === cable.cable_id : !!selected &&
     [cable.source_equipment_key, cable.target_equipment_key].includes(selected.equipment_key);
+  const isCableHighlighted = (cable: LayoutCableRecord) => highlightMissingReports ? missingReportCableIds.has(cable.cable_id) : isCableActive(cable);
+  const backgroundFeeds = drawnCables.filter(({ connection }) => connection.externalKind === "shared-feed" &&
+    !isCableHighlighted(connection.cable));
+  const backgroundFeedIds = new Set(backgroundFeeds.map(({ connection }) => connection.cable.cable_id));
+  const foregroundCables = drawnCables.filter(({ connection }) => !backgroundFeedIds.has(connection.cable.cable_id));
+  const ordinaryCables = foregroundCables.filter(({ connection }) => !isCableHighlighted(connection.cable));
+  const highlightedCables = foregroundCables.filter(({ connection }) => isCableHighlighted(connection.cable));
+  const groundPlates = combined && combinedScene ? combinedScene.groups.flatMap((group, index) => group.groundRect
+    ? [{ id: group.id, rect: group.groundRect, raised: index > 0 }] : [])
+    : combinedScene ? [{ id: floorId, rect: combinedScene.floorFootprint, raised: floorId !== manifest.floors[0].floor_id }] : [];
   const renderCable = ({ connection, path, markerPoint, route, zone }: (typeof cableGeometry)[number]) => {
     const cable = connection.cable;
     const active = highlightMissingReports ? missingReportCableIds.has(cable.cable_id) : isCableActive(cable);
@@ -495,6 +509,7 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
       ![cable.cable_id, cable.source_equipment_key ?? "", cable.target_equipment_key ?? ""].some((key) => key.toUpperCase().includes(query)));
     return <LayoutCable key={cable.cable_id} cable={cable} path={path} route={route} zone={zone} selected={selectedCableId === cable.cable_id}
       markerPoint={markerPoint} markerSize={Number.isFinite(pixelsPerUnit) && pixelsPerUnit > 0 ? 15 / pixelsPerUnit : 7}
+      externalKind={connection.externalKind} hubEquipmentKey={connection.externalRoute?.hubEquipmentKey}
       active={active} dimmed={dimmed} selectionMode={selectionMode} onSelect={selectCable} />;
   };
 
@@ -504,8 +519,10 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
     <p className="break-all text-sm font-medium">{selectedCable.cable_id}</p>
     <InfralinkEquipmentLink equipmentId={selectedCable.cable_id} />
     <div className="space-y-1 rounded-md bg-muted p-3 text-sm">
-      <p className="break-all">From: {selectedCable.source_equipment_key ?? "Unresolved"}</p>
-      <p className="break-all">To: {selectedCable.target_equipment_key ?? "Unresolved"}</p>
+      <p className="break-all">From: {selectedCable.source_equipment_key ?? "Unresolved"}
+        {selectedConnection ? <span className="block text-xs text-muted-foreground">{equipmentFloorLabel(selectedConnection.source)}</span> : null}</p>
+      <p className="break-all">To: {selectedCable.target_equipment_key ?? "Unresolved"}
+        {selectedConnection ? <span className="block text-xs text-muted-foreground">{equipmentFloorLabel(selectedConnection.target)}</span> : null}</p>
     </div>
     <p className="text-sm font-medium" style={{ color: LAYOUT_CABLE_TEST_STATES[layoutCableTestState(selectedCable)].color }}>{LAYOUT_CABLE_TEST_STATES[layoutCableTestState(selectedCable)].label}</p>
     {layoutCableMissingReport(selectedCable) ? <p className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">
@@ -522,7 +539,7 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
     {selectedCableReports.length ? <section className="space-y-2" aria-label="Cable test reports">
       <h4 className="text-xs font-medium uppercase text-muted-foreground">Cable NETA reports</h4>
       <div className="max-h-48 overflow-y-auto pr-1 [scrollbar-gutter:stable]" role="region" aria-label="Cable NETA report list" tabIndex={0}>
-        <NetaReportChips reports={selectedCableReports} showLinkedFileNames stackedCompact />
+        <NetaReportChips equipmentId={selectedCable.cable_id} reports={selectedCableReports} showLinkedFileNames stackedCompact />
       </div>
     </section> : null}
     {selectedCable.neta_complete && !selectedCable.neta_test_report ? <p className="text-xs text-red-700">Data quality: NETA complete but report is missing.</p> : null}
@@ -544,10 +561,13 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
         <Button variant={isometric ? "secondary" : "ghost"} aria-pressed={isometric} onClick={() => switchView(true)}><Box className="mr-2 h-4 w-4" />2.5D</Button>
       </div>
       <label className="space-y-1 text-sm font-medium">Floor
-        <select aria-label="Floor" value={floorId} onChange={(event) => {
-          setFloorId(event.target.value); setSelectedId(null); setSelectedCableId(null); setUnplacedEquipment(null); setSearchOpen(false); setInspection(null); setSelectionKeys(new Set());
+        <select aria-label="Floor" value={combined ? ALL_LAYOUT_FLOORS : floorId} onChange={(event) => {
+          setCombinedFloors(event.target.value === ALL_LAYOUT_FLOORS);
+          if (event.target.value !== ALL_LAYOUT_FLOORS) setFloorId(event.target.value);
+          setViewport(null); setSelectedId(null); setSelectedCableId(null); setUnplacedEquipment(null); setSearchOpen(false); setInspection(null); setSelectionKeys(new Set());
           setHighlightMissingReports(false);
         }} className="block h-9 rounded-md border bg-background px-3">
+          {isometric ? <option value={ALL_LAYOUT_FLOORS}>All floors</option> : null}
           {manifest.floors.map((floor) => <option key={floor.floor_id} value={floor.floor_id}>{floor.label}</option>)}
         </select>
       </label>
@@ -591,14 +611,14 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
     </div>
     {isometric ? <div className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-lg border bg-card px-4 py-3 text-xs">
       <span className="inline-flex items-center font-medium"><Cable className="mr-2 h-4 w-4" />Overhead cables ({connections.length})</span>
-      <Button variant="outline" aria-pressed={!showCables} aria-controls="layout-cables" onClick={() => {
+      <Button variant="outline" aria-pressed={!showCables} aria-controls="layout-cables layout-shared-feed-cables" onClick={() => {
         setShowCables((value) => !value); setSelectedCableId(null); setHighlightMissingReports(false);
       }}>
         {showCables ? <EyeOff className="mr-2 h-4 w-4" /> : <Eye className="mr-2 h-4 w-4" />}
         {showCables ? "Hide all cables" : "Show all cables"}
       </Button>
       <Button variant={highlightMissingReports ? "secondary" : "outline"} aria-pressed={highlightMissingReports}
-        aria-controls="layout-cables" disabled={!missingReportConnections.length && !highlightMissingReports}
+        aria-controls="layout-cables layout-shared-feed-cables" disabled={!missingReportConnections.length && !highlightMissingReports}
         className={highlightMissingReports ? "border border-amber-400 bg-amber-100 text-amber-900 hover:bg-amber-200" : undefined}
         title="Highlight Infralink-updated cables with no listed ATP/NETA report on this floor."
         onClick={() => {
@@ -652,7 +672,7 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
     <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
       <div ref={mapRef} className="relative h-[68vh] min-h-[400px] overflow-hidden rounded-lg border bg-white" aria-label="Layout map">
         <div ref={panLayerRef} data-layout-pan="true" className="relative h-full w-full">
-        <svg ref={svgRef} role="img" tabIndex={0} aria-label={`${manifest.floors.find((floor) => floor.floor_id === floorId)?.label} equipment layout`}
+        <svg ref={svgRef} role="img" tabIndex={0} aria-label={`${combined ? "All floors" : manifest.floors.find((floor) => floor.floor_id === floorId)?.label} equipment layout`}
           viewBox={`${svgBounds.x} ${svgBounds.y} ${svgBounds.width} ${svgBounds.height}`} preserveAspectRatio="xMidYMid meet"
           className={`${isometric ? "absolute -left-[40%] -top-[40%] h-[180%] w-[180%]" : "h-full w-full"} select-none outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600 ${selectionMode ? "cursor-crosshair" : "cursor-grab active:cursor-grabbing"}`} style={{ touchAction: "none" }}
           onPointerDown={handlePointerDown} onPointerMove={handlePointerMove}
@@ -663,7 +683,20 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
           onClickCapture={(event) => { if (suppressClickRef.current && event.detail !== 0) { event.preventDefault(); event.stopPropagation(); } }}>
           {hasIsometric ? <SimpleIsometricSymbols /> : null}
           <g data-layout-scene="true">
+          {isometric ? <g data-layout-layer="floor-grounds" pointerEvents="none">
+            {groundPlates.map((ground) => <LayoutFloorGround key={ground.id} floorId={ground.id} rect={ground.rect} raised={ground.raised} />)}
+          </g> : null}
+          {combined && combinedScene ? <g data-layout-layer="floor-frames" pointerEvents="none">
+            {combinedScene.groups.map((group) => <g key={group.id} data-layout-floor={group.id} data-floor-offset={group.offsetY}>
+              <rect {...group.rect} fill="none" stroke="none" />
+              <text x={group.labelPosition.x} y={group.labelPosition.y} fontSize={18} fontWeight={600} fill="#36566c"
+                stroke="white" strokeWidth={4} paintOrder="stroke">{group.label}</text>
+            </g>)}
+          </g> : null}
           <LayoutBackground regions={regions} roomLabels={roomLabels} isometric={isometric} />
+          {isometric && showCables ? <g id="layout-shared-feed-cables" data-layout-layer="shared-feed-cables">
+            {backgroundFeeds.map(renderCable)}
+          </g> : null}
           <g data-layout-layer="equipment">
             {drawnRows.map((row) => {
               const selected = selectionMode ? selectionKeys.has(row.equipment_key)
@@ -679,10 +712,9 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
             })}
           </g>
           {isometric && showCables ? <g id="layout-cables" data-layout-layer="cables">
-            {highlightMissingReports ? <>
-              {drawnCables.filter(({ connection }) => !missingReportCableIds.has(connection.cable.cable_id)).map(renderCable)}
-              {drawnCables.filter(({ connection }) => missingReportCableIds.has(connection.cable.cable_id)).map(renderCable)}
-            </> : drawnCables.map(renderCable)}
+            {ordinaryCables.filter(({ connection }) => !connection.externalKind).map(renderCable)}
+            {ordinaryCables.filter(({ connection }) => connection.externalKind).map(renderCable)}
+            {highlightedCables.map(renderCable)}
           </g> : null}
           <g pointerEvents="none" data-layout-layer="selection">
             {selectionBox ? <rect {...selectionBox} fill="#2563eb" fillOpacity={0.12} stroke="#2563eb"
@@ -700,7 +732,7 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
           style={{ left: inspection.left, top: inspection.top }}>
           <p className="break-all text-base font-semibold leading-snug">{inspected.matched_equipment_id ?? inspected.label}</p>
           <p className="mt-2 text-sm font-medium" style={{ color: LAYOUT_STATUS_COLORS[statusOf(inspected)].stroke }}>{LAYOUT_STATUS_LABELS[statusOf(inspected)]}</p>
-          <p className="mt-1 text-xs text-muted-foreground">{inspected.fixed ? "Fixed across floors" : "Floor equipment"} · Select for details</p>
+          <p className="mt-1 text-xs text-muted-foreground">{equipmentFloorLabel(inspected)} · Select for details</p>
         </div> : null}
       </div>
       <div className="relative h-[68vh] min-h-[400px]">
@@ -715,7 +747,7 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
           <p className="break-all text-sm">Parent: {unplacedEquipment.parent ?? "Unknown"}</p>
           <p className="text-sm">Excel energized date: {unplacedEquipment.energized_completed_at ?? "No completed date"}</p>
           <p className="text-sm">NETA: {unplacedEquipment.neta_complete === true ? "Complete" : "Not confirmed"}</p>
-          {getNetaReportNames(unplacedEquipment.neta_test_report).length ? <NetaReportChips reports={getNetaReportNames(unplacedEquipment.neta_test_report)} showLinkedFileNames stackedCompact /> : null}
+          {getNetaReportNames(unplacedEquipment.neta_test_report).length ? <NetaReportChips equipmentId={unplacedEquipment.equipment_id} reports={getNetaReportNames(unplacedEquipment.neta_test_report)} showLinkedFileNames stackedCompact /> : null}
           {unplacedEquipment.neta_complete === true && !unplacedEquipment.neta_test_report ? <p className="text-xs text-red-700">Data quality: NETA complete but report is missing.</p> : null}
         </section> : null}
         {selected ? <div className="space-y-3">
@@ -736,7 +768,7 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
               else next[selected.equipment_key] = "energizeToday";
               saveOverrides(next);
             }}><Zap className="h-4 w-4 text-orange-500" />Energize today</Button>
-          <p className="text-xs text-muted-foreground">{selected.fixed ? "Fixed across all floors" : "Floor equipment"} · {selected.match_status}</p>
+          <p className="text-xs text-muted-foreground">{equipmentFloorLabel(selected)} · {selected.match_status}</p>
           {isometric ? <p className="text-xs text-muted-foreground">{DEVICE_KIND_LABELS[layoutDeviceKind(selected)]}</p> : null}
           <p className="text-sm">Excel energized date: {selected.energized_completed_at ?? "No completed date"}</p>
           <p className="text-sm">System status: {selected.system_element_status ?? "Unknown"}</p>
@@ -744,7 +776,7 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
           {selectedEquipmentReports.length ? <section className="space-y-2" aria-label="Equipment test reports">
             <h4 className="text-xs font-medium uppercase text-muted-foreground">NETA test reports</h4>
             <div className="h-48 overflow-y-auto pr-1 [scrollbar-gutter:stable]" role="region" aria-label="Equipment NETA report list" tabIndex={0}>
-              <NetaReportChips reports={selectedEquipmentReports} compactNameMode="gc" showLinkedFileNames stackedCompact />
+              <NetaReportChips equipmentId={selected.matched_equipment_id ?? selected.equipment_key} reports={selectedEquipmentReports} compactNameMode="gc" showLinkedFileNames stackedCompact />
             </div>
           </section> : null}
           <DailyTestHistory events={selected.daily_report_history} />

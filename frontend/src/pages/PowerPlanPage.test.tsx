@@ -25,6 +25,22 @@ beforeEach(() => {
 
 describe("PowerPlanPage", () => {
 
+  it.each([false, true])("opens local NETA reports independently of completion (%s)", async (complete) => {
+    const user = userEvent.setup();
+    const id = "IAD06-PDU6-01A-1";
+    const pdm = "IAD06-PDM-E6-110-01-PRIMARY-CDS";
+    const equipment = { equipment_id: id, neta_complete: complete, neta_test_report: "Report.pdf" };
+    const data = makeDashboardData({ pdms: [{ pdm_name: pdm, equipment: [equipment] }], equipment: [equipment] });
+    render(<NetaReportManifestProvider manifest={{ records: [
+      { equipment_id: id, source_key: "downloaded", report_name: "Report.pdf", report_stage: complete ? "formal" : "temporary", url: complete ? "/formal.pdf" : "/temporary.pdf" },
+    ] }}><PowerPlanPage data={data} /></NetaReportManifestProvider>);
+    await user.click(screen.getByRole("button", { name: `${pdm}: 1 equipment` }));
+    await user.click(screen.getByRole("button", { name: new RegExp(`^${id}:`) }));
+    await user.click(screen.getByRole("button", { name: "Report.pdf" }));
+    expect(document.querySelector("iframe")).toHaveAttribute("src", complete ? "/formal.pdf" : "/temporary.pdf");
+    expect(equipment.neta_complete).toBe(complete);
+  });
+
   it("matches a standard notch with 34 small wheel events across frames", async () => {
     render(<PowerPlanPage data={makeDashboardData({ pdms: [{
       pdm_name: "IAD06-PDM-E6-110-01-PRIMARY-CDS",

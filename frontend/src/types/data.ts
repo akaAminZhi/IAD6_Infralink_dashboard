@@ -179,6 +179,7 @@ export interface EtlRunMetadata {
 }
 
 export interface NetaReportFileRecord {
+  report_stage?: "temporary" | "formal";
   source_key?: string | null;
   source_label?: string | null;
   equipment_id?: string | null;

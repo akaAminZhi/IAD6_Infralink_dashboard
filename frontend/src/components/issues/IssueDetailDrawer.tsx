@@ -54,7 +54,7 @@ export function IssueDetailDrawer({ issue, onClose }: IssueDetailDrawerProps) {
   const netaTracked = getIssueNetaStatus(issue) !== "Not Tracked";
 
   const netaReportNames = getNetaReportReferences(issue.neta_test_report);
-  const canShowGcNames = hasGcNetaReportLinks(netaReportNames, manifest);
+  const canShowGcNames = hasGcNetaReportLinks(netaReportNames, manifest, issue.equipment_id);
   const hasAssetInformation =
     !isBlank(issue.equipment_type) ||
     !isBlank(issue.manufacturer) ||

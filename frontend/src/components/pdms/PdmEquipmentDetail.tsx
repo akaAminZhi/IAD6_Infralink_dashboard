@@ -41,7 +41,7 @@ export function PdmEquipmentDetail({ equipment, epsTestItems }: PdmEquipmentDeta
   const [netaReportNameMode, setNetaReportNameMode] =
     useState<NetaReportNameMode>("original");
   const reportNames = getNetaReportNames(equipment.neta_test_report);
-  const canShowGcNames = hasGcNetaReportLinks(reportNames, manifest);
+  const canShowGcNames = hasGcNetaReportLinks(reportNames, manifest, equipment.equipment_id);
   const trackingRequired = requiresEquipmentTestTracking(equipment);
 
   return (
@@ -110,6 +110,7 @@ export function PdmEquipmentDetail({ equipment, epsTestItems }: PdmEquipmentDeta
           ) : null}
         </div>
         <NetaReportChips
+          equipmentId={equipment.equipment_id}
           className="mt-2"
           compactNameMode={netaReportNameMode}
           reports={reportNames}

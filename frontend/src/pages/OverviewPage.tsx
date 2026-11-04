@@ -25,6 +25,7 @@ import { Button } from "../components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
 import type { CaseIssue, DashboardData, PdmRecord } from "../types/data";
 import { formatDateTime } from "../utils/formatters";
+import { flattenEquipmentFromPdms, getPendingCxalloyEquipmentCount } from "../utils/equipmentUtils";
 import {
   getPdmTableRows,
   isOpenCase,
@@ -798,7 +799,9 @@ function ManagementExceptions({
     cases,
     (caseItem) => isOpenCase(caseItem) && !String(caseItem.issue_image ?? "").trim(),
   );
-  const pendingCxalloy = data.cxalloyReportStatus?.summary?.pending_equipment ?? 0;
+  const pendingCxalloy = useMemo(() => getPendingCxalloyEquipmentCount(
+    flattenEquipmentFromPdms(data.pdms, data.equipment, [], [], data.cxalloyReportStatus),
+  ), [data.pdms, data.equipment, data.cxalloyReportStatus]);
 
   const exceptions = [
     {
@@ -848,7 +851,7 @@ function ManagementExceptions({
     },
     {
       label: "Pending CxAlloy report upload",
-      detail: "Equipment reports organized locally but not confirmed in CxAlloy.",
+      detail: "NETA complete equipment with local PDFs pending upload to CxAlloy.",
       count: pendingCxalloy,
       icon: UploadCloud,
       iconClassName: "text-blue-700",

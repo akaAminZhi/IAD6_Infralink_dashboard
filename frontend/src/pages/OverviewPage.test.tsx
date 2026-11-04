@@ -45,6 +45,36 @@ function overviewData() {
 }
 
 describe("OverviewPage", () => {
+  it("counts pending uploads using the same completion/file rules as Equipment and links to that filter", async () => {
+    const user = userEvent.setup();
+    const data = makeDashboardData({
+      pdms: [{ pdm_name: "PDM-A", equipment: [{ equipment_id: "EQ-PDM", neta_complete: true }] }],
+      equipment: [
+        { equipment_id: "EQ-PDM", neta_complete: true },
+        { equipment_id: "EQ-STANDALONE", neta_complete: true },
+        { equipment_id: "EQ-INCOMPLETE", neta_complete: false },
+        { equipment_id: "EQ-REVIEW", neta_complete: true },
+        { equipment_id: "EQ-MISSING", neta_complete: true },
+      ],
+      cxalloyReportStatus: { summary: { pending_equipment: 999 }, records: [
+        ...["EQ-PDM", "EQ-STANDALONE", "EQ-INCOMPLETE"].map((equipment_id) => ({ equipment_id, upload_status: "pending" as const,
+          reports: [{ report_name: "Report.pdf", report_kind: "equipment" as const, upload_status: "pending" as const }],
+        })),
+        { equipment_id: "EQ-REVIEW", upload_status: "pending", reports: [{ report_name: "Review.pdf", report_kind: "equipment", upload_status: "review_required" }] },
+        { equipment_id: "EQ-MISSING", upload_status: "missing_pdf", reports: [{ report_name: "Missing.pdf", report_kind: "equipment", upload_status: "missing_pdf" }] },
+      ] },
+    });
+    render(<MemoryRouter initialEntries={["/overview"]}><Routes>
+      <Route path="/overview" element={<OverviewPage data={data} />} />
+      <Route path="/equipment" element={<LocationProbe />} />
+    </Routes></MemoryRouter>);
+    const button = screen.getByRole("button", { name: /Pending CxAlloy report upload/ });
+    expect(button).toHaveTextContent("2");
+    expect(button).not.toHaveTextContent("999");
+    await user.click(button);
+    expect(screen.getByTestId("location")).toHaveTextContent("/equipment?quickFilter=cxalloyPending");
+  });
+
   it("navigates readiness metrics with the intended PDM filter", async () => {
     const user = userEvent.setup();
     render(

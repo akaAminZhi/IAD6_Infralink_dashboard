@@ -53,6 +53,38 @@ function row(overrides: Partial<FlattenedEquipmentRow> = {}): FlattenedEquipment
 }
 
 describe("equipmentUtils", () => {
+  it.each([true, false, null, "true"])("requires explicit NETA completion for pending uploads (%s)", (complete) => {
+    expect(hasPendingCxalloyReport(row({ neta_complete: complete, cxalloy_upload_status: "pending",
+      cxalloy_reports: [{ report_name: "report.pdf", report_kind: "equipment", upload_status: "pending" }],
+    }))).toBe(complete === true);
+  });
+
+  it.each(["pending", "uploaded", "review_required", "missing_pdf"] as const)("requires a pending file rather than package status (%s)", (status) => {
+    expect(hasPendingCxalloyReport(row({ neta_complete: true, cxalloy_upload_status: "pending",
+      cxalloy_reports: [{ report_name: "report.pdf", report_kind: "equipment", upload_status: status }],
+    }))).toBe(status === "pending");
+  });
+
+  it("requires local evidence for legacy pending packages and honors explicit empty files", () => {
+    const legacy = row({ neta_complete: true, cxalloy_upload_status: "pending", cxalloy_available_report_count: 1 });
+    expect(hasPendingCxalloyReport(legacy)).toBe(true);
+    expect(hasPendingCxalloyReport({ ...legacy, cxalloy_available_report_count: 0 })).toBe(false);
+    expect(hasPendingCxalloyReport({ ...legacy, cxalloy_upload_status: "missing_pdf" })).toBe(false);
+    expect(hasPendingCxalloyReport({ ...legacy, cxalloy_reports: [] })).toBe(false);
+    expect(hasPendingCxalloyReport({ ...legacy, test_tracking_required: false })).toBe(false);
+    const cable = row({ equipment_type: "Feeder Cable - LV", feeder_cable_atp: "ATP.pdf", neta_complete: false,
+      cxalloy_upload_status: "pending", cxalloy_available_report_count: 1 });
+    expect(getNetaDisplayStatus(cable)).toBe("Complete + Report Available");
+    expect(hasPendingCxalloyReport(cable)).toBe(false);
+  });
+
+  it("includes new pending cables even when the equipment PDF was uploaded", () => {
+    expect(hasPendingCxalloyReport(row({ neta_complete: true, cxalloy_upload_status: "missing_pdf", cxalloy_reports: [
+      { report_name: "equipment.pdf", report_kind: "equipment", upload_status: "uploaded" },
+      { report_name: "cable.pdf", report_kind: "cable", upload_status: "pending" },
+      { report_name: "missing.pdf", report_kind: "cable", upload_status: "missing_pdf" },
+    ] }))).toBe(true);
+  });
   it("uses a cable's own attached report as completion evidence without changing raw completion or dates", () => {
     const cable = flattenEquipmentFromPdms(
       [{ pdm_name: "PDM-A", equipment: [{ equipment_id: "FDR-A-B" }] }],
@@ -269,6 +301,7 @@ describe("equipmentUtils", () => {
         neta_test_report: "report.pdf",
         status: "Ready",
         cxalloy_upload_status: "pending",
+        cxalloy_reports: [{ report_name: "report.pdf", report_kind: "equipment", upload_status: "pending" }],
       }),
     ];
 

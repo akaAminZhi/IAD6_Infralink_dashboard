@@ -1,6 +1,7 @@
 import type { Equipment, LayoutCableRecord, LayoutEquipmentRecord, LayoutPlanManifest } from "../types/data";
 import { visibleLayoutEquipment } from "./layoutPlanUtils";
 import { placedLayoutCables } from "./layoutIsometricUtils";
+import { ALL_LAYOUT_FLOORS } from "./layoutSceneUtils";
 import { equipmentSearchPriority, matchesSearchQuery } from "./searchUtils";
 
 interface SearchEntry {
@@ -32,6 +33,8 @@ export function buildLayoutSearchEntries(
     const cableIds = new Set(placedLayoutCables(manifest.cables ?? [], records).map(({ cable }) => cable.cable_id));
     return { floor, records, cableIds };
   });
+  const allRows = placements.flatMap(({ records }, i) => records.filter((record) => !record.fixed || i === 0));
+  const combinedCableIds = new Set(placedLayoutCables(manifest.cables ?? [], allRows).map(({ cable }) => cable.cable_id));
   for (const { floor, records } of placements) {
     for (const record of records) {
       const id = `${record.fixed ? "fixed" : floor.floor_id}:${record.equipment_key}`;
@@ -49,7 +52,9 @@ export function buildLayoutSearchEntries(
     const key = equipmentKey(record.cable_id);
     represented.add(key);
     entries.push({ id: `cable:${record.cable_id}`, kind: "cable", record, label: record.cable_id, key,
-      floorId: placement?.floor.floor_id ?? null, floorLabel: placement ? `Cable · ${placement.floor.label}` : "Cable · Not placed on layout" });
+      floorId: combinedCableIds.has(record.cable_id) && (currentFloorId === ALL_LAYOUT_FLOORS || !placement)
+        ? ALL_LAYOUT_FLOORS : placement?.floor.floor_id ?? null,
+      floorLabel: placement ? `Cable · ${placement.floor.label}` : combinedCableIds.has(record.cable_id) ? "Cable · Cross-floor" : "Cable · Not placed on layout" });
   }
   equipment.forEach((record, index) => {
     const label = record.equipment_id?.trim();
