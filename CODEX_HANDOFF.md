@@ -1,5 +1,79 @@
 ﻿# Codex Handoff
 
+## Current update (2026-11-04): CxAlloy equipment detail links
+
+- All existing Infralink equipment/cable link entries now use shared
+  `EquipmentExternalLinks`: Equipment, nested PDM/Overview/KPR details,
+  Power Plan, MV, and placed/unplaced equipment and cable inspectors in Layout.
+  CxAlloy links open a new tab; missing or ambiguous identities remain unavailable.
+- New project-scoped identity builder/schema and optional frontend provider.
+  Exact full names win, followed by the Tracker's IAD06-prefix and narrowly scoped
+  Utility leading-zero aliases. Cable IDs, phases and all other suffixes remain
+  intact. Frontend loads on first detail use and invalidates on dashboard reload.
+- Normal ETL builds offline; explicit `--refresh --auth-state <operator-state>`
+  reads project equipment only. Configuration follows the Tracker project URL,
+  with environment/CLI overrides. Collector checks stable declared totals,
+  unique/project-scoped IDs, complete pagination, and atomically publishes only
+  after success. Failed collection retains prior files. Published identities and
+  ambiguity diagnostics remain usable when the private snapshot is absent.
+- User logged in through visible Chromium from conda base, with credentials kept
+  only in browser memory. Read all 136 pages / 3,399 project-49402 devices; unique
+  count matches the live equipment header. Dashboard generated 2,350 matched,
+  16,587 missing, zero ambiguous identities. No FDR cable IDs matched the current
+  CxAlloy inventory, so their own detail entries correctly remain unavailable.
+  Ordinary and Utility alias details verified online; a second fresh login from
+  a direct PDU6-01E-2 URL returned to the intended equipment after authentication.
+- Verification: 37 targeted Python tests; 102 targeted frontend tests across
+  the link provider/component, PDM, Equipment, Power Plan, MV, Layout and App;
+  existing Infralink component's five tests also passed. Strict TypeScript and
+  preview-mode production build passed with existing chunk-size/plugin warnings.
+  Rebuilt the generated link dataset offline and checked ignored output paths.
+- Actual compiled-preview smoke verified both vendor links for PDU6-01E-2,
+  unavailable CxAlloy identity for its separate feeder cable, one lazy identity
+  request across both selections, and zero page errors. Screenshots reviewed.
+  Ignored helpers/screenshots/results use `runtime/automation/cxalloy*`.
+- See `docs/CXALLOY_LINKS_HELP.md` for login, explicit snapshot refresh and
+  deployment. New code and generated links are ready locally; refresh the page.
+  Other hosts need updated source/build plus generated link JSON. No uploads,
+  vendor edits, full ETL, credentials saved to disk, existing-service restarts,
+  Tracker source changes or commits. Prior Layout/doc changes preserved.
+
+## Current update (2026-11-04): Pan while retaining Layout selections
+
+- Added an explicit Pan control. Switching between Pan and Box select now keeps
+  equipment selections and highlights. Left drag pans in Pan mode; middle drag
+  pans in either mode and never clears/toggles selections on a stationary click.
+  Shift + left drag still adds another box in Box select mode.
+- All 55 Layout tests passed, including 2D/2.5D mode changes, left/middle panning,
+  retained selections and adding another device after panning. Strict TypeScript
+  and preview-mode production build passed with the existing chunk-size warning.
+- Real Chrome preserved two selections through middle/left drags at 270% zoom,
+  revealed previously offscreen CRAH6-220-03-2 and added it as the third selection.
+  No page errors; screenshot reviewed. Ignored artifacts are
+  `runtime/automation/layout_multiselect_pan_smoke.py` and `layout-multiselect-pan*`.
+  Private Vite server stopped; compiled assets rebuilt. No existing services
+  restarted, ETL, vendor operations or commits.
+
+## Current update (2026-11-04): Layout equipment multi-selection
+
+- Equipment clicks and Enter/Space now toggle an equipment-ID selection shared
+  with box selection. Search adds placed devices within the displayed floor scope.
+  Highlighting uses only selected devices, their direct neighbors and incident
+  cables; it never expands through neighbors. Isolated devices remain highlighted.
+- Selection count and Clear selection are always available. Sidebar chips remove
+  individual devices when overhead cable hit areas cover small models. Details
+  follow the last selected device, with another selected device as fallback.
+  Cable inspection, missing-report highlighting and batch planning retain their
+  existing controls. Ordinary selections survive view switches within floor scope.
+- Verification: all 53 Layout page tests passed; strict TypeScript and preview-mode
+  production build passed with the existing large-chunk warning. Real Chromium
+  checked actual pointer multi-selection, chip deselection, keyboard selection,
+  camera stability and every rendered device/cable opacity across 458 placements
+  and 527 cables, with no page errors. Screenshot was visually reviewed.
+- Ignored smoke artifacts: `runtime/automation/layout_multiselect_smoke.py` and
+  `layout-multiselect-*`. Private preview stopped; existing services were not
+  restarted. Compiled assets rebuilt; no ETL or vendor operations.
+
 ## Current update (2026-11-04): Delegate CxAlloy upload to Tracker
 
 - Data Operations directly executes the configured EPS Tracker's

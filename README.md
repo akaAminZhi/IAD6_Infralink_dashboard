@@ -54,6 +54,25 @@ snapshot, or retains published identities if the local snapshot is absent.
 New unmatched equipment needs another snapshot refresh. Reload the browser after
 refreshing; static deployments must include the generated link dataset.
 
+Equipment details also include **Open in CxAlloy** beside the Infralink link,
+including nested Overview/KPR equipment details and Layout cable inspectors.
+Only unique project-scoped identities produce links; missing or ambiguous
+equipment shows **CxAlloy link unavailable**. The CxAlloy project's equipment
+names may omit `IAD06-`; the Tracker's narrow Utility leading-zero alias is also
+supported. Full cable IDs and all other suffixes are retained. Browser links use
+the viewer's own CxAlloy login, independently of automation sessions.
+
+Refresh identities explicitly (read-only), using your CxAlloy storage-state path:
+
+```powershell
+python scripts/etl/build_cxalloy_equipment_links.py --refresh --auth-state "C:\path\to\your\cxalloy_auth_state.json"
+```
+
+Normal ETL rebuilds links offline. No snapshot is fetched during page loading or
+ordinary ETL. The current Tracker project defaults to `49402`; environment
+`CXALLOY_PROJECT_URL` and CLI `--project-url` support an explicit project override.
+See [CxAlloy link refresh and login help](docs/CXALLOY_LINKS_HELP.md).
+
 CxAlloy uploads from Data Operations directly run the configured sibling
 EPS Tracker's `upload_cxalloy_reports.py`. The Tracker owns report selection,
 upload history, temporary/formal lifecycle checks, replacement and verification.

@@ -7,6 +7,7 @@ import { clearPublishedNetaReviewCache } from "../utils/loadNetaReportReviews";
 
 import { NetaReportManifestProvider } from "../contexts/NetaReportManifestContext";
 import { InfralinkEquipmentLinksProvider } from "../contexts/InfralinkEquipmentLinksContext";
+import { CxalloyEquipmentLinksProvider } from "../contexts/CxalloyEquipmentLinksContext";
 import { makeDashboardData } from "../test/fixtures";
 import type { KprSummary } from "../types/data";
 import { EquipmentPage } from "./EquipmentPage";
@@ -259,7 +260,9 @@ describe("EquipmentPage", () => {
       </MemoryRouter>,
       { wrapper: ({ children }) => <InfralinkEquipmentLinksProvider records={[
         { equipment_id: "IAD06-PDU6-01D-4", infralink_id: "1301515161" },
-      ]}>{children}</InfralinkEquipmentLinksProvider> },
+      ]}><CxalloyEquipmentLinksProvider records={[
+        { equipment_id: "IAD06-PDU6-01D-4", project_id: "49402", cxalloy_id: "77", cxalloy_name: "PDU6-01D-4" },
+      ]}>{children}</CxalloyEquipmentLinksProvider></InfralinkEquipmentLinksProvider> },
     );
 
     expect(screen.getByText("Equipment Lookup Table")).toBeInTheDocument();
@@ -275,6 +278,7 @@ describe("EquipmentPage", () => {
     await user.click(equipmentCell);
     expect(screen.getByText("Asset Information")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open in Infralink" })).toHaveAttribute("href", "https://jc2.mcdean.com/#:DeviceFullPage;viewModelId=1301515161");
+    expect(screen.getByRole("link", { name: "Open in CxAlloy" })).toHaveAttribute("href", "https://tq.cxalloy.com/project/49402/equipment/77");
     expect(screen.getByText("IEM")).toBeInTheDocument();
     expect(screen.getByText("PDU54SHAM")).toBeInTheDocument();
     expect(screen.getByText("J02PDU000-00032")).toBeInTheDocument();

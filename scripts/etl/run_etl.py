@@ -19,6 +19,7 @@ try:
     )
     from . import build_data_quality_report
     from . import build_infralink_equipment_links
+    from . import build_cxalloy_equipment_links
     from . import build_cxalloy_report_status
     from . import build_eps_test_execution
     from . import build_history_comparison
@@ -47,6 +48,7 @@ except ImportError:
 
     import build_data_quality_report
     import build_infralink_equipment_links
+    import build_cxalloy_equipment_links
     import build_cxalloy_report_status
     import build_eps_test_execution
     import build_history_comparison
@@ -70,6 +72,7 @@ DATA_DIR = PROJECT_ROOT / "frontend" / "public" / "data"
 ETL_METADATA_OUTPUT_PATH = DATA_DIR / "etl_run_metadata.json"
 
 OUTPUT_FILES = {
+    "cxalloy_equipment_links": DATA_DIR / "cxalloy_equipment_links.json",
     "infralink_equipment_links": DATA_DIR / "infralink_equipment_links.json",
     "workbook_inspection": DATA_DIR / "workbook_inspection.json",
     "equipment": DATA_DIR / "equipment.json",
@@ -149,6 +152,7 @@ def build_pipeline_steps(input_files: dict[str, str]) -> list[tuple[str, Callabl
         ("build_power_plan.py", build_power_plan.main),
         ("build_layout_plan.py", build_layout_plan.main),
         ("build_infralink_equipment_links.py", build_infralink_equipment_links.run_build),
+        ("build_cxalloy_equipment_links.py", build_cxalloy_equipment_links.run_build),
     ]
 
 

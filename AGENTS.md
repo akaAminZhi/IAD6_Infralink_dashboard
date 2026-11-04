@@ -36,13 +36,32 @@ execution, KPR reporting, and power-plan/MV visualization.
 - `config/equipment_lifecycle.json`: ordered KPR lifecycle mapping
 - `runtime/automation/`: local, gitignored run state and logs
 
+## Default Agent Environment
+
+- Use the existing conda `base` environment by default for Python scripts,
+  pytest, Playwright, browser testing, and debugging. This is a standing user
+  preference; do not ask the user to repeat or confirm it for each task.
+- On this workstation, conda base is `C:\anaconda3` and its Python interpreter
+  is `C:\anaconda3\python.exe`. Invoke that interpreter directly when the shell's
+  `python` is ambiguous. On another machine, locate base with `conda info --base`
+  or use `conda run -n base python ...`.
+- Reuse base's installed packages and Playwright browsers. Do not create a new
+  virtual environment or switch Python environments unless the task requires
+  isolation or the user explicitly requests it. Run Python package/browser tools
+  through the same interpreter (`python -m pip`, `python -m playwright`).
+- An unavailable browser-control connector does not mean local browsers are
+  unavailable. For browser testing/debugging, use Playwright from conda base
+  when the connector is unavailable. When user sign-in is needed, notify the user
+  and open a visible browser window for them to complete login.
+- Frontend Node/npm commands retain the existing project workflow below.
+
 ## Verified Commands
 
-Run from the repository root unless noted:
+Run from the repository root unless noted. Python commands below use conda base:
 
 ```powershell
 python -m pip install -r requirements.txt
-playwright install chromium
+python -m playwright install chromium
 python scripts/etl/run_etl.py
 python scripts/start_dashboard.py
 python -m pytest scripts/tests

@@ -63,6 +63,19 @@ the first search, and fetches report/device links on selection.
 ETL dashboard reload invalidates shared resources and refreshes Layout; ordinary
 navigation reuses resources already loaded in the current dashboard session.
 
+## CxAlloy equipment links
+
+All existing Infralink equipment-detail entries also display **Open in CxAlloy**.
+This includes nested PDM/Overview/KPR details, Power Plan, MV, and Layout equipment
+and cables. Only a unique mapped identity produces a link; unmatched or ambiguous
+records show **CxAlloy link unavailable**. Links open a new tab using the viewer's
+own CxAlloy login. Upload status and report upload behavior are independent.
+
+The optional `cxalloy_equipment_links.json` is fetched on first detail use and
+invalidated by dashboard reload. Generate it offline through normal ETL or refresh
+the project inventory explicitly; see [login/refresh instructions](../docs/CXALLOY_LINKS_HELP.md).
+Static deployments need the generated dataset along with rebuilt application code.
+
 ## Pending CxAlloy uploads
 
 Overview and Equipment use the same deduplicated pending-upload count and filter:
@@ -159,6 +172,23 @@ intentional. Test colors/dashes remain; only active
 cables receive the white selection underlay. Room membership remains floor-specific
 even when display extents overlap. Same-floor routes and First Floor's outdoor
 feeders retain their existing geometry.
+
+Click equipment to add or remove it from the selection in either view; no modifier
+key is needed. Search confirmations add placed equipment to the current selection
+within the displayed floor scope. The selection count and **Clear selection** are
+always available. Selected equipment also appears as removable chips in the sidebar,
+so a device can be deselected even when an overhead route covers it. In 2.5D,
+only selected devices, their directly connected neighbors
+and incident cables stay highlighted; connections do not expand through neighbors.
+Box selection uses the same highlighting and keeps its batch planning controls.
+**Pan** and **Box select** preserve selected equipment when switching modes.
+Use Pan to move the view with the left mouse button and keep adding devices by
+clicking them. Middle-button dragging pans in either mode without changing the
+selection; Shift + left drag in Box select adds another box to the selection.
+The sidebar shows the most recently selected device, falling back to another
+selected device when it is removed. Clicking a cable on the map traces that cable
+alone; inspecting a cable from the sidebar retains the equipment selection and
+restores its connection highlights when the cable inspector closes.
 
 **Global view** clears equipment/cable focus, search and box selection and restores
 the fitted camera. **Escape** does the same outside box

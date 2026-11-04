@@ -1,5 +1,5 @@
 import { DailyTestHistory } from "../components/common/DailyTestHistory";
-import { Box, Cable, CircleAlert, Eye, EyeOff, Maximize, MousePointer2, RotateCcw, Search, X, Zap, ZoomIn, ZoomOut } from "lucide-react";
+import { Box, Cable, CircleAlert, Eye, EyeOff, Hand, Maximize, MousePointer2, RotateCcw, Search, X, Zap, ZoomIn, ZoomOut } from "lucide-react";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 
 import { wheelZoomFactor } from "../utils/wheelZoom";
@@ -7,7 +7,7 @@ import { EmptyState } from "../components/common/EmptyState";
 import { ErrorState } from "../components/common/ErrorState";
 import { LoadingState } from "../components/common/LoadingState";
 import { NetaReportChips } from "../components/common/NetaReportChips";
-import { InfralinkEquipmentLink } from "../components/common/InfralinkEquipmentLink";
+import { EquipmentExternalLinks } from "../components/common/EquipmentExternalLinks";
 import { Button } from "../components/ui/button";
 import { IsometricEquipment, SimpleIsometricSymbols } from "../components/layout/IsometricEquipment";
 import { FeederCableAtpReports } from "../components/layout/FeederCableAtpReports";
@@ -92,6 +92,7 @@ const EquipmentLightning = memo(function EquipmentLightning({ record, status, di
 
 interface PanState {
   pointerId: number;
+  button: number;
   x: number;
   y: number;
   viewport: PowerPlanRect;
@@ -152,6 +153,7 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
       setManifest(result);
       setFloorId(result?.floors[0]?.floor_id ?? "");
       setSelectedId(null); setSelectedCableId(null); setUnplacedEquipment(null);
+      setSelectionKeys(new Set());
       setHighlightMissingReports(false);
       setViewport(null);
       setLoading(false);
@@ -246,7 +248,8 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
     }
   }, [viewport]);
   const zoom = fullBounds.width / bounds.width;
-  const selected = rows.find((row) => row.annotation_id === selectedId);
+  const selected = selectionMode ? undefined : rows.find((row) => row.annotation_id === selectedId && selectionKeys.has(row.equipment_key))
+    ?? rows.find((row) => selectionKeys.has(row.equipment_key));
   const selectedEquipmentReports = useMemo(() => getNetaReportNames(selected?.neta_test_report), [selected]);
   const selectedConnections = useMemo(() => selected ? cableIndex.byEquipment.get(selected.equipment_key) ?? [] : [], [selected, cableIndex]);
   const selectedCableCounts = useMemo(() => selectedConnections.reduce((counts, cable) => {
@@ -256,11 +259,15 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
     else counts.unconfirmed += 1;
     return counts;
   }, { tested: 0, failed: 0, unconfirmed: 0 }), [selectedConnections]);
-  const connectedKeys = useMemo(() => new Set(selectedConnections.flatMap((cable) => [cable.source_equipment_key, cable.target_equipment_key])), [selectedConnections]);
+  const focusConnections = useMemo(() => [...new Map([...selectionKeys].flatMap((key) => cableIndex.byEquipment.get(key) ?? [])
+    .map((cable) => [cable.cable_id, cable])).values()], [selectionKeys, cableIndex]);
+  const focusedCableIds = useMemo(() => new Set(focusConnections.map((cable) => cable.cable_id)), [focusConnections]);
+  const connectedKeys = useMemo(() => new Set([...selectionKeys, ...focusConnections.flatMap((cable) =>
+    [cable.source_equipment_key, cable.target_equipment_key])]), [selectionKeys, focusConnections]);
   const cableEndpointKeys = selectedCable ? [selectedCable.source_equipment_key, selectedCable.target_equipment_key] : [];
   const rowIsDimmed = (row: LayoutEquipmentRecord) => isometric && highlightMissingReports ? !missingReportEndpointKeys.has(row.equipment_key)
     : isometric && selectedCable ? !cableEndpointKeys.includes(row.equipment_key)
-    : isometric && selected ? !connectedKeys.has(row.equipment_key) && row.equipment_key !== selected.equipment_key
+    : selectionKeys.size ? !connectedKeys.has(row.equipment_key)
     : !!query && !row.equipment_key.includes(query);
   const inspected = rows.find((row) => row.annotation_id === inspection?.annotationId);
   const query = search.trim().toUpperCase().replace(/^IAD06-/, "");
@@ -313,11 +320,12 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
     setSelectedId(record.annotation_id);
     setSelectedCableId(null);
     setViewport(layoutBounds([{ rect: isometric ? projectedLayoutBounds(record.rect, layoutDeviceHeight(record) + 25) : record.rect }]));
-    setSelectionKeys(new Set());
+    setSelectionKeys((current) => new Set([...current, record.equipment_key]));
     setSelectionMode(false);
   }
 
   function confirmSuggestion(suggestion: LayoutSearchEntry) {
+    setHighlightMissingReports(false);
     if (suggestion.floorId === ALL_LAYOUT_FLOORS) {
       if (isometric) setCombinedFloors(true);
     } else if (suggestion.floorId && !combined) setFloorId(suggestion.floorId);
@@ -327,7 +335,7 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
     setUnplacedEquipment(null);
     setSelectedId(null);
     setSelectedCableId(null);
-    setSelectionKeys(new Set());
+    if (suggestion.kind !== "placement" || (!combined && suggestion.floorId !== floorId)) setSelectionKeys(new Set());
     setSelectionMode(false);
     if (suggestion.kind === "equipment") { setUnplacedEquipment(suggestion.record); return; }
     if (suggestion.kind === "cable") {
@@ -335,24 +343,26 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
       return;
     }
     if (!isometric) { focusDevice(suggestion.record); return; }
+    setSelectionKeys((current) => new Set([...current, suggestion.record.equipment_key]));
     setSelectedId(suggestion.record.annotation_id);
   }
 
   function handlePointerDown(event: ReactPointerEvent<SVGSVGElement>) {
-    if (event.button !== 0) return;
+    if (event.button !== 0 && event.button !== 1) return;
+    const mode = selectionMode && event.button === 0 ? "select" : "pan";
     event.preventDefault();
     setInspection(null);
     event.currentTarget.focus?.({ preventScroll: true });
     suppressClickRef.current = false;
     event.currentTarget.setPointerCapture?.(event.pointerId);
     panRef.current = {
-      pointerId: event.pointerId, x: event.clientX, y: event.clientY, viewport: bounds, moved: false,
+      pointerId: event.pointerId, button: event.button, x: event.clientX, y: event.clientY, viewport: bounds, moved: false,
       annotationId: (event.target as Element).closest("[data-annotation-id][role=button]")?.getAttribute("data-annotation-id") ?? null,
       cableId: (event.target as Element).closest("[data-cable-id][role=button]")?.getAttribute("data-cable-id") ?? null,
-      mode: selectionMode ? "select" : "pan", additive: event.shiftKey,
+      mode, additive: event.shiftKey,
     };
     panCullOffsetRef.current = { x: 0, y: 0 };
-    if (isometric && !selectionMode && panLayerRef.current) {
+    if (isometric && mode === "pan" && panLayerRef.current) {
       panLayerRef.current.style.willChange = "transform";
     }
   }
@@ -412,10 +422,15 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
         const record = rows.find((row) => row.annotation_id === pan.annotationId);
         if (record) toggleEquipmentSelection(record.equipment_key);
       } else if (!pan.additive) setSelectionKeys(new Set());
-    } else if (!pan.moved) {
-      if (pan.annotationId) { setSelectedId(pan.annotationId); setSelectedCableId(null); }
-      else if (pan.cableId) { setSelectedCableId(pan.cableId); setSelectedId(null); }
-      else if (isometric) clearFocus();
+    } else if (!pan.moved && pan.button === 0) {
+      if (pan.annotationId) {
+        const record = rows.find((row) => row.annotation_id === pan.annotationId);
+        if (record) selectDevice(record);
+        suppressClickRef.current = true;
+      } else if (pan.cableId) {
+        selectCable(pan.cableId);
+        suppressClickRef.current = true;
+      } else clearFocus();
     }
   }
 
@@ -428,10 +443,14 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
   }, []);
 
   const selectDevice = useCallback((record: LayoutEquipmentRecord) => {
-    if (selectionMode) toggleEquipmentSelection(record.equipment_key);
-    else { setSelectedId(record.annotation_id); setSelectedCableId(null); setUnplacedEquipment(null); }
-  }, [selectionMode, toggleEquipmentSelection]);
-  const selectCable = useCallback((cableId: string) => { setSelectedCableId(cableId); setSelectedId(null); setUnplacedEquipment(null); }, []);
+    toggleEquipmentSelection(record.equipment_key);
+    setHighlightMissingReports(false); setSearch(""); setSearchOpen(false);
+    setSelectedId(record.annotation_id); setSelectedCableId(null); setUnplacedEquipment(null);
+  }, [toggleEquipmentSelection]);
+  const selectCable = useCallback((cableId: string) => {
+    setSelectedCableId(cableId); setSelectedId(null); setUnplacedEquipment(null);
+    setSelectionKeys(new Set()); setSearch(""); setSearchOpen(false);
+  }, []);
   const leaveDevice = useCallback((annotationId: string) => {
     setInspection((current) => current?.annotationId === annotationId ? null : current);
   }, []);
@@ -458,7 +477,9 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
 
   function switchView(next: boolean) {
     if (next) setHasIsometric(true);
-    setIsometric(next); setHighlightMissingReports(false); setViewport(null); setInspection(null); setSelectionKeys(new Set()); setSelectionBox(null);
+    const nextKeys = next && combinedFloors ? null : new Set((manifest ? visibleLayoutEquipment(manifest, floorId) : []).map((row) => row.equipment_key));
+    setSelectionKeys((current) => selectionMode ? new Set() : new Set([...current].filter((key) => !nextKeys || nextKeys.has(key))));
+    setIsometric(next); setHighlightMissingReports(false); setViewport(null); setInspection(null); setSelectionBox(null);
     panRef.current = null;
     setPanCullViewport(null);
     if (panLayerRef.current) { panLayerRef.current.style.transform = ""; panLayerRef.current.style.willChange = ""; }
@@ -477,7 +498,7 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
   }
 
   function focusCable(cableId: string) {
-    setSelectedCableId(cableId); setInspection(null); setSelectionMode(false); setSelectionKeys(new Set()); setSearch(""); setSearchOpen(false);
+    setSelectedCableId(cableId); setInspection(null); setSelectionMode(false); setSearch(""); setSearchOpen(false);
     const connection = connections.find((item) => item.cable.cable_id === cableId);
     if (connection) setViewport(isometric ? layoutBounds([{ rect: cableGeometry.find(({ connection: item }) => item.cable.cable_id === cableId)?.extent
       ?? layoutConnectionBounds(connection) }])
@@ -490,8 +511,7 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
 
   const equipmentFloorLabel = (row: LayoutEquipmentRecord) => row.fixed ? "Shared Outdoor Equipment"
     : manifest.floors.find((floor) => floor.floor_id === row.source_floor_id)?.label ?? "Floor equipment";
-  const isCableActive = (cable: LayoutCableRecord) => selectedCableId ? selectedCableId === cable.cable_id : !!selected &&
-    [cable.source_equipment_key, cable.target_equipment_key].includes(selected.equipment_key);
+  const isCableActive = (cable: LayoutCableRecord) => selectedCableId ? selectedCableId === cable.cable_id : focusedCableIds.has(cable.cable_id);
   const isCableHighlighted = (cable: LayoutCableRecord) => highlightMissingReports ? missingReportCableIds.has(cable.cable_id) : isCableActive(cable);
   const backgroundFeeds = drawnCables.filter(({ connection }) => connection.externalKind === "shared-feed" &&
     !isCableHighlighted(connection.cable));
@@ -505,7 +525,7 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
   const renderCable = ({ connection, path, markerPoint, route, zone }: (typeof cableGeometry)[number]) => {
     const cable = connection.cable;
     const active = highlightMissingReports ? missingReportCableIds.has(cable.cable_id) : isCableActive(cable);
-    const dimmed = highlightMissingReports ? !active : ((!!selectedCableId || !!selected) && !active) || (!!query && !active &&
+    const dimmed = highlightMissingReports ? !active : selectedCableId || selectionKeys.size ? !active : (!!query &&
       ![cable.cable_id, cable.source_equipment_key ?? "", cable.target_equipment_key ?? ""].some((key) => key.toUpperCase().includes(query)));
     return <LayoutCable key={cable.cable_id} cable={cable} path={path} route={route} zone={zone} selected={selectedCableId === cable.cable_id}
       markerPoint={markerPoint} markerSize={Number.isFinite(pixelsPerUnit) && pixelsPerUnit > 0 ? 15 / pixelsPerUnit : 7}
@@ -517,7 +537,7 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
     <div className="flex items-start justify-between gap-2"><h3 className="text-sm font-semibold">Cable connection</h3>
       <Button variant="ghost" aria-label="Close cable details" onClick={() => setSelectedCableId(null)}><X className="h-4 w-4" /></Button></div>
     <p className="break-all text-sm font-medium">{selectedCable.cable_id}</p>
-    <InfralinkEquipmentLink equipmentId={selectedCable.cable_id} />
+    <EquipmentExternalLinks equipmentId={selectedCable.cable_id} />
     <div className="space-y-1 rounded-md bg-muted p-3 text-sm">
       <p className="break-all">From: {selectedCable.source_equipment_key ?? "Unresolved"}
         {selectedConnection ? <span className="block text-xs text-muted-foreground">{equipmentFloorLabel(selectedConnection.source)}</span> : null}</p>
@@ -634,24 +654,27 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
       <span className="inline-flex items-center gap-2 text-amber-800" title={LAYOUT_CABLE_MISSING_REPORT_MESSAGE}>
         <CircleAlert className="h-4 w-4 fill-amber-100" aria-hidden="true" />Infralink updated · Report missing
       </span>
-      <Button variant="ghost" className={selected || selectedCable || unplacedEquipment || highlightMissingReports ? undefined : "invisible"}
-        disabled={!selected && !selectedCable && !unplacedEquipment && !highlightMissingReports} onClick={clearFocus}><X className="mr-2 h-4 w-4" />Clear focus</Button>
-      <span className="w-full text-muted-foreground">Illustrative equipment heights and overhead routes. Select a device or cable to trace its connections. Terminations are hidden.</span>
+      <Button variant="ghost" className={selectionKeys.size || selectedCable || unplacedEquipment || highlightMissingReports ? undefined : "invisible"}
+        disabled={!selectionKeys.size && !selectedCable && !unplacedEquipment && !highlightMissingReports} onClick={clearFocus}><X className="mr-2 h-4 w-4" />Clear focus</Button>
+      <span className="w-full text-muted-foreground">Illustrative equipment heights and overhead routes. Selected devices highlight only their direct connections. Terminations are hidden.</span>
       {!manifest.cables ? <span className="text-amber-700">Cable data is unavailable. Rebuild Layout data to load connections.</span> : null}
     </div> : null}
     <div className="flex flex-wrap items-center gap-3">
+      <Button variant={!selectionMode ? "default" : "outline"} aria-pressed={!selectionMode} onClick={() => {
+        setSelectionMode(false); setSelectionBox(null); setInspection(null);
+      }}><Hand className="mr-2 h-4 w-4" />Pan</Button>
       <Button variant={selectionMode ? "default" : "outline"} aria-pressed={selectionMode} onClick={() => {
         setHighlightMissingReports(false);
-        setSelectionMode((current) => !current); setSelectionKeys(new Set()); setSelectedId(null); setSelectedCableId(null); setInspection(null);
+        setSelectionMode((current) => !current); setSelectedCableId(null); setSelectionBox(null); setInspection(null);
       }}><MousePointer2 className="mr-2 h-4 w-4" />Box select</Button>
+      <span role="status" className="text-sm text-muted-foreground">{selectedRows.length} selected{selectionMode ? ` · ${eligibleRows.length} eligible` : ""}</span>
       {selectionMode ? <>
-        <span role="status" className="text-sm text-muted-foreground">{selectedRows.length} selected · {eligibleRows.length} eligible</span>
         <Button disabled={!eligibleRows.length} onClick={() => saveOverrides(planLayoutSelection(rows, selectionKeys, overrides))}>
           <Zap className="mr-2 h-4 w-4 text-orange-500" />Energize today ({eligibleRows.length})
         </Button>
-        <Button variant="ghost" disabled={!selectionKeys.size} onClick={() => setSelectionKeys(new Set())}><X className="mr-2 h-4 w-4" />Clear selection</Button>
-        <span className="text-xs text-muted-foreground">Drag to enclose equipment; Shift + drag adds more. Energized devices are skipped.</span>
+        <span className="text-xs text-muted-foreground">Drag to enclose equipment; Shift + drag adds more. Middle-drag to pan, or switch to Pan to keep your selection. Energized devices are skipped.</span>
       </> : null}
+      <Button variant="ghost" disabled={!selectionKeys.size} onClick={() => { setSelectionKeys(new Set()); setSelectedId(null); setSelectedCableId(null); setSearch(""); }}><X className="mr-2 h-4 w-4" />Clear selection</Button>
     </div>
     <div className="flex flex-wrap gap-4 text-sm">
       {(Object.keys(LAYOUT_STATUS_LABELS) as LayoutStatus[]).map((status) => <span key={status} className="inline-flex items-center gap-2">
@@ -666,8 +689,8 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
       Electrical hazard: breathing lightning marks energized equipment and equipment scheduled to energize today.
     </p> : null}
     <p className="text-xs text-muted-foreground">{isometric
-      ? "Click equipment or a cable to trace it. Click empty space to clear focus. Global view or Esc restores the full layout. Drag to pan; scroll to zoom."
-      : "Hover or focus equipment to read its full ID. Drag to pan; scroll to zoom. Confirm a search suggestion to zoom to the device. Energized equipment cannot be planned again. Reset restores Excel values for all floors."}</p>
+      ? "Click devices to add or remove selections; only selected devices, their direct neighbors and connecting cables are highlighted. Click a cable to trace it alone. Click empty space to clear focus. Global view or Esc restores the full layout. Drag to pan; scroll to zoom."
+      : "Click devices to add or remove selections. Hover or focus equipment to read its full ID. Drag to pan; scroll to zoom. Confirm a search suggestion to zoom to the device. Energized equipment cannot be planned again. Reset restores Excel values for all floors."}</p>
     {storageError ? <p role="alert" className="text-sm text-amber-700">Browser storage is unavailable. Changes apply for this visit only.</p> : null}
     <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
       <div ref={mapRef} className="relative h-[68vh] min-h-[400px] overflow-hidden rounded-lg border bg-white" aria-label="Layout map">
@@ -677,6 +700,7 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
           className={`${isometric ? "absolute -left-[40%] -top-[40%] h-[180%] w-[180%]" : "h-full w-full"} select-none outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600 ${selectionMode ? "cursor-crosshair" : "cursor-grab active:cursor-grabbing"}`} style={{ touchAction: "none" }}
           onPointerDown={handlePointerDown} onPointerMove={handlePointerMove}
           onPointerUp={(event) => endPan(event)} onPointerCancel={(event) => endPan(event, true)}
+          onAuxClick={(event) => { if (event.button === 1) event.preventDefault(); }}
           onKeyDown={(event) => { if (event.key === "Escape") {
             if (isometric && !selectionMode) restoreGlobalView(); else { setInspection(null); cancelSelectionGesture(); }
           } }}
@@ -699,8 +723,7 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
           </g> : null}
           <g data-layout-layer="equipment">
             {drawnRows.map((row) => {
-              const selected = selectionMode ? selectionKeys.has(row.equipment_key)
-                : selectedId === row.annotation_id || (isometric && cableEndpointKeys.includes(row.equipment_key));
+              const selected = selectionKeys.has(row.equipment_key) || (isometric && cableEndpointKeys.includes(row.equipment_key));
               const inspected = inspection?.annotationId === row.annotation_id;
               const projectedWidthPixels = (row.rect.width + row.rect.height) * pixelsPerUnit;
               return <EquipmentRectangle key={row.annotation_id} record={row} status={statusOf(row)} isometric={isometric} hasIsometric={hasIsometric}
@@ -737,10 +760,19 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
       </div>
       <div className="relative h-[68vh] min-h-[400px]">
       <aside className="h-full space-y-4 overflow-y-auto overscroll-contain rounded-lg border bg-card p-4 [scrollbar-gutter:stable]">
+        {!selectionMode && selectedRows.length ? <section className="space-y-2 border-b pb-3" aria-label="Selected equipment">
+          <h3 className="text-sm font-semibold">Selected equipment ({selectedRows.length})</h3>
+          <div className="flex max-h-32 flex-wrap gap-1 overflow-y-auto">
+            {selectedRows.map((row) => <Button key={row.equipment_key} variant="outline" className="h-auto max-w-full gap-2 px-2 py-1 text-xs"
+              aria-label={`Deselect ${row.label}`} onClick={() => selectDevice(row)}>
+              <span className="min-w-0 break-all">{row.label}</span><X className="h-3 w-3 shrink-0" aria-hidden="true" />
+            </Button>)}
+          </div>
+        </section> : null}
         {!selected && cableDetails ? <div className="border-b pb-4">{cableDetails}</div> : null}
         {unplacedEquipment ? <section aria-label="Excel equipment details" className="space-y-3">
           <h3 className="break-all font-semibold">{unplacedEquipment.equipment_id}</h3>
-          <InfralinkEquipmentLink equipmentId={unplacedEquipment.equipment_id} />
+          <EquipmentExternalLinks equipmentId={unplacedEquipment.equipment_id} />
           <p className="text-sm text-amber-700">Not placed on layout. This Equipment ID exists in SystemElements Excel.</p>
           <p className="text-sm">Type: {unplacedEquipment.equipment_type ?? "Unknown"}</p>
           <p className="text-sm">System status: {unplacedEquipment.status ?? "Unknown"}</p>
@@ -752,7 +784,7 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
         </section> : null}
         {selected ? <div className="space-y-3">
           <h3 className="break-all font-semibold">{selected.matched_equipment_id ?? selected.label}</h3>
-          <InfralinkEquipmentLink equipmentId={selected.matched_equipment_id} matchStatus={selected.match_status} />
+          <EquipmentExternalLinks equipmentId={selected.matched_equipment_id} matchStatus={selected.match_status} />
           {isometric && (statusOf(selected) === "energized" || statusOf(selected) === "energizeToday") ?
             <div className="rounded-md border-2 border-amber-700 bg-yellow-100 p-3 text-amber-950" aria-label="Electrical hazard warning">
               <p className="flex items-center gap-2 text-sm font-bold"><Zap className="h-5 w-5 shrink-0" aria-hidden="true" />Electrical hazard</p>

@@ -8,6 +8,7 @@ import { AppLayout } from "./components/layout/AppLayout";
 import { IssueAttachmentManifestProvider } from "./contexts/IssueAttachmentManifestContext";
 import { NetaReportManifestProvider } from "./contexts/NetaReportManifestContext";
 import { InfralinkEquipmentLinksProvider } from "./contexts/InfralinkEquipmentLinksContext";
+import { CxalloyEquipmentLinksProvider } from "./contexts/CxalloyEquipmentLinksContext";
 import { DashboardResourcesProvider } from "./contexts/DashboardResourcesContext";
 import { useDashboardData } from "./hooks/useDashboardData";
 import { OperationsAuthGate } from "./components/dataOperations/OperationsAuth";
@@ -62,6 +63,7 @@ function App() {
     <IssueAttachmentManifestProvider manifest={dashboardData.issueAttachmentManifest}>
       <NetaReportManifestProvider manifest={dashboardData.netaReportManifest}>
         <InfralinkEquipmentLinksProvider refreshKey={String(dashboardData.reloadVersion)}>
+        <CxalloyEquipmentLinksProvider refreshKey={String(dashboardData.reloadVersion)}>
         <AppLayout etlRunMetadata={dashboardData.etlRunMetadata}>
           {!isDataOperations && dashboardData.loading ? (
             <LoadingState />
@@ -119,6 +121,7 @@ function App() {
             </>
           )}
         </AppLayout>
+        </CxalloyEquipmentLinksProvider>
         </InfralinkEquipmentLinksProvider>
       </NetaReportManifestProvider>
     </IssueAttachmentManifestProvider>

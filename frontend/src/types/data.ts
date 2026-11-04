@@ -62,6 +62,13 @@ export interface InfralinkEquipmentLink {
   infralink_id: string;
 }
 
+export interface CxalloyEquipmentLink {
+  equipment_id: string;
+  project_id: string;
+  cxalloy_id: string;
+  cxalloy_name: string;
+}
+
 export interface ModuleEquipmentLink {
   pdm_name?: string | null;
   module_type?: string | null;

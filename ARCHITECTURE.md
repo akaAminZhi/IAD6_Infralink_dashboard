@@ -63,6 +63,19 @@ state is never transferred to browser links. Exact equipment references resolve 
 ambiguous identities stay unavailable. This covers nested PDM details and
 Layout cable inspectors as well as the equipment/map routes.
 
+`CxalloyEquipmentLinksProvider` similarly loads an optional project-scoped link
+dataset only when a detail link mounts and discards old-generation responses on
+dashboard reload. Shared `EquipmentExternalLinks` pairs both vendor links at
+all existing equipment/cable detail entries. Numeric project/equipment IDs build
+fixed-origin CxAlloy detail URLs; missing and ambiguous mappings remain unavailable.
+The CxAlloy builder reads a local inventory snapshot during ordinary ETL. Explicit
+CLI refresh uses an operator-supplied browser state to read the full equipment
+list, checks unique IDs, stable totals and pagination, and atomically replaces
+the snapshot only after success. It reads no report-upload history and performs
+no vendor writes. Exact names win over the Tracker's project-prefix/Utility
+aliases; full cable IDs and other suffixes remain intact. Only identities and
+diagnostics are published, never browser credentials.
+
 `frontend/src/hooks/useDashboardData.ts` loads datasets by route, using the
 explicit dependency map in `frontend/src/utils/dashboardResources.ts`:
 

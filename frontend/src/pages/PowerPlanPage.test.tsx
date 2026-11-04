@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { IssueAttachmentManifestProvider } from "../contexts/IssueAttachmentManifestContext";
 import { NetaReportManifestProvider } from "../contexts/NetaReportManifestContext";
 import { InfralinkEquipmentLinksProvider } from "../contexts/InfralinkEquipmentLinksContext";
+import { CxalloyEquipmentLinksProvider } from "../contexts/CxalloyEquipmentLinksContext";
 import { makeDashboardData } from "../test/fixtures";
 import type { EnrichedPowerPlanEquipment } from "../utils/powerPlanUtils";
 import { PowerPlanPage } from "./PowerPlanPage";
@@ -133,7 +134,9 @@ describe("PowerPlanPage", () => {
       </IssueAttachmentManifestProvider>,
       { wrapper: ({ children }) => <InfralinkEquipmentLinksProvider records={[
         { equipment_id: equipmentId, infralink_id: "12345" },
-      ]}>{children}</InfralinkEquipmentLinksProvider> },
+      ]}><CxalloyEquipmentLinksProvider records={[
+        { equipment_id: equipmentId, project_id: "49402", cxalloy_id: "77", cxalloy_name: equipmentId },
+      ]}>{children}</CxalloyEquipmentLinksProvider></InfralinkEquipmentLinksProvider> },
     );
 
     await user.click(
@@ -150,6 +153,7 @@ describe("PowerPlanPage", () => {
     );
     expect(screen.getByText("Asset Information")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open in Infralink" })).toHaveAttribute("href", "https://jc2.mcdean.com/#:DeviceFullPage;viewModelId=12345");
+    expect(screen.getByRole("link", { name: "Open in CxAlloy" })).toHaveAttribute("href", "https://tq.cxalloy.com/project/49402/equipment/77");
     expect(screen.getByText("IEM")).toBeInTheDocument();
     expect(screen.getByText("MODEL-POWER")).toBeInTheDocument();
     expect(screen.getByText("SERIAL-POWER")).toBeInTheDocument();

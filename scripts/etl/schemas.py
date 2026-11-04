@@ -66,6 +66,14 @@ class InfralinkEquipmentLink(SchemaRecord):
 
 
 @dataclass(slots=True)
+class CxalloyEquipmentLink(SchemaRecord):
+    equipment_id: str
+    project_id: str
+    cxalloy_id: str
+    cxalloy_name: str
+
+
+@dataclass(slots=True)
 class Equipment(SchemaRecord):
     equipment_id: str | None = None
     equipment_type: str | None = None

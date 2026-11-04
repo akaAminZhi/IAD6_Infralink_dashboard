@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { NetaReportManifestProvider } from "../contexts/NetaReportManifestContext";
 import { InfralinkEquipmentLinksProvider } from "../contexts/InfralinkEquipmentLinksContext";
+import { CxalloyEquipmentLinksProvider } from "../contexts/CxalloyEquipmentLinksContext";
 import { DashboardResourcesProvider } from "../contexts/DashboardResourcesContext";
 import type { LayoutCableRecord, LayoutEquipmentRecord, LayoutPlanManifest } from "../types/data";
 import { LAYOUT_VIEW_KEY } from "../utils/layoutIsometricUtils";
@@ -44,6 +45,157 @@ beforeEach(() => {
 });
 
 describe("2.5D Layout connections", () => {
+  it.each(["plan", "isometric"])("keeps multiple selections while switching between box selection and panning in %s", async (view) => {
+    isometricDataset();
+    localStorage.setItem(LAYOUT_VIEW_KEY, view);
+    const user = userEvent.setup();
+    const { container } = render(<LayoutPlanPage />);
+    const first = await screen.findByRole("button", { name: "EQ-1: Energized" });
+    const fixed = screen.getByRole("button", { name: "EQ-FIX: Not Energized" });
+    const map = screen.getByRole("img", { name: /^(First Floor|All floors) equipment layout$/ });
+    vi.spyOn(map, "getBoundingClientRect").mockReturnValue({ left: 0, top: 0, width: 600, height: 400 } as DOMRect);
+    await user.click(first);
+    await user.click(fixed);
+    async function drag(target: Element, button: "MouseLeft" | "MouseMiddle" = "MouseLeft") {
+      const camera = map.getAttribute("viewBox");
+      await user.pointer([
+        { target, keys: `[${button}>]`, coords: { clientX: 200, clientY: 150 } },
+        { target, coords: { clientX: 250, clientY: 180 } },
+        { target, keys: `[/${button}]`, coords: { clientX: 250, clientY: 180 } },
+      ]);
+      expect(map.getAttribute("viewBox")).not.toBe(camera);
+      expect(screen.getByRole("status")).toHaveTextContent("2 selected");
+      expect(first).toHaveAttribute("aria-pressed", "true");
+      expect(fixed).toHaveAttribute("aria-pressed", "true");
+      expect(container.querySelector('[data-layout-layer="selection"] rect')).not.toBeInTheDocument();
+    }
+    await drag(first);
+    await user.click(screen.getByRole("button", { name: "Box select" }));
+    expect(screen.getByRole("status")).toHaveTextContent("2 selected");
+    await drag(map, "MouseMiddle");
+    expect(screen.getByRole("button", { name: "Box select" })).toHaveAttribute("aria-pressed", "true");
+    await user.click(screen.getByRole("button", { name: "Pan" }));
+    expect(screen.getByRole("button", { name: "Pan" })).toHaveAttribute("aria-pressed", "true");
+    await drag(map);
+    await user.click(screen.getByRole("button", { name: "EQ-UNKNOWN: Unknown" }));
+    expect(screen.getByRole("status")).toHaveTextContent("3 selected");
+    await user.click(screen.getByRole("button", { name: "Box select" }));
+    await user.click(screen.getByRole("button", { name: "Box select" }));
+    expect(screen.getByRole("status")).toHaveTextContent("3 selected");
+  });
+
+  it("toggles multiple devices and highlights only their direct neighbors and cables", async () => {
+    const manifest = isometricDataset();
+    manifest.floors[0].equipment.push(device("EQ-3"), device("EQ-4"), device("EQ-ISOLATED"));
+    manifest.cables!.push(
+      cable({ cable_id: "FDR-NEIGHBOR", source_equipment_key: "EQ-FIX", target_equipment_key: "EQ-3" }),
+      cable({ cable_id: "FDR-SEPARATE", source_equipment_key: "EQ-UNKNOWN", target_equipment_key: "EQ-4" }),
+    );
+    const user = userEvent.setup();
+    const { container } = render(<LayoutPlanPage />);
+    const first = await screen.findByRole("button", { name: "EQ-1: Energized" });
+    const row = (key: string) => container.querySelector(`[data-equipment-key="${key}"]`)!;
+    const route = (id: string) => container.querySelector(`[data-cable-id="${id}"]`)!;
+    const map = screen.getByRole("img", { name: "All floors equipment layout" });
+    const camera = map.getAttribute("viewBox");
+    await user.click(first);
+    expect(screen.getByRole("status")).toHaveTextContent("1 selected");
+    for (const key of ["EQ-1", "EQ-FIX", "EQ-2"]) expect(row(key)).toHaveAttribute("opacity", "1");
+    for (const key of ["EQ-UNKNOWN", "EQ-3", "EQ-4", "EQ-ISOLATED"]) expect(row(key)).toHaveAttribute("opacity", "0.2");
+    expect(route("FDR-NEIGHBOR")).toHaveAttribute("opacity", "0.1");
+    await user.click(row("EQ-UNKNOWN"));
+    expect(screen.getByRole("status")).toHaveTextContent("2 selected");
+    expect(first).toHaveAttribute("aria-pressed", "true");
+    expect(row("EQ-UNKNOWN")).toHaveAttribute("aria-pressed", "true");
+    expect(row("EQ-4")).toHaveAttribute("opacity", "1");
+    expect(route("FDR-SEPARATE")).toHaveAttribute("opacity", "1");
+    expect(row("EQ-3")).toHaveAttribute("opacity", "0.2");
+    expect(route("FDR-NEIGHBOR")).toHaveAttribute("opacity", "0.1");
+    await user.click(first);
+    expect(screen.getByRole("status")).toHaveTextContent("1 selected");
+    expect(first).toHaveAttribute("aria-pressed", "false");
+    expect(row("EQ-FIX")).toHaveAttribute("opacity", "0.2");
+    await user.click(row("EQ-ISOLATED"));
+    expect(row("EQ-ISOLATED")).toHaveAttribute("opacity", "1");
+    await user.click(screen.getByRole("button", { name: "Deselect EQ-UNKNOWN" }));
+    expect(screen.getByRole("status")).toHaveTextContent("1 selected");
+    for (const route of container.querySelectorAll("[data-cable-id]")) expect(route).toHaveAttribute("opacity", "0.1");
+    expect(map).toHaveAttribute("viewBox", camera);
+    await user.click(screen.getByRole("button", { name: "Clear selection" }));
+    expect(screen.getByRole("status")).toHaveTextContent("0 selected");
+    expect(row("EQ-3")).toHaveAttribute("opacity", "1");
+    expect(route("FDR-NEIGHBOR")).toHaveAttribute("opacity", "0.85");
+    expect(screen.queryByRole("button", { name: "Zoom to device" })).not.toBeInTheDocument();
+  });
+
+  it("uses the same direct-connection focus for keyboard and box-mode selections", async () => {
+    isometricDataset();
+    const user = userEvent.setup();
+    const { container } = render(<LayoutPlanPage />);
+    const first = await screen.findByRole("button", { name: "EQ-1: Energized" });
+    const unknown = screen.getByRole("button", { name: "EQ-UNKNOWN: Unknown" });
+    fireEvent.keyDown(first, { key: "Enter" });
+    fireEvent.keyDown(unknown, { key: " " });
+    expect(screen.getByRole("status")).toHaveTextContent("2 selected");
+    fireEvent.keyDown(first, { key: "Enter" });
+    expect(first).toHaveAttribute("opacity", "0.2");
+    expect(container.querySelector("[data-cable-id]")).toHaveAttribute("opacity", "0.1");
+    await user.click(screen.getByRole("button", { name: "Box select" }));
+    await user.click(screen.getByRole("button", { name: "EQ-FIX: Not Energized" }));
+    expect(first).toHaveAttribute("opacity", "1");
+    expect(unknown).toHaveAttribute("opacity", "1");
+    expect(unknown).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("status")).toHaveTextContent("2 selected");
+    expect(screen.getByRole("button", { name: "EQ-2: Not Energized" })).toHaveAttribute("opacity", "0.2");
+    expect(container.querySelector('[data-cable-id="FDR-IAD06-EQ-1-IAD06-EQ-2"]')).toHaveAttribute("opacity", "0.1");
+    expect(container.querySelector('[data-cable-id="FDR-IAD06-EQ-1-IAD06-EQ-FIX"]')).toHaveAttribute("opacity", "1");
+    fireEvent.keyDown(first, { key: "Escape" });
+    expect(screen.getByRole("status")).toHaveTextContent("0 selected");
+    expect(unknown).toHaveAttribute("opacity", "1");
+  });
+
+  it("adds searched devices without dimming other selected branches", async () => {
+    isometricDataset();
+    const user = userEvent.setup();
+    const { container } = render(<LayoutPlanPage />);
+    await user.click(await screen.findByRole("button", { name: "EQ-1: Energized" }));
+    await user.type(screen.getByLabelText("Find equipment"), "EQ-UNKNOWN");
+    await user.click(screen.getByRole("option", { name: /^EQ-UNKNOWN/ }));
+    expect(screen.getByRole("status")).toHaveTextContent("2 selected");
+    expect(screen.getByRole("button", { name: "EQ-1: Energized" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "EQ-UNKNOWN: Unknown" })).toHaveAttribute("aria-pressed", "true");
+    for (const route of container.querySelectorAll("[data-cable-id]")) expect(route).toHaveAttribute("opacity", "1");
+    await user.click(screen.getByRole("button", { name: "Clear focus" }));
+    expect(screen.getByLabelText("Find equipment")).toHaveValue("");
+    expect(screen.getByRole("status")).toHaveTextContent("0 selected");
+  });
+
+  it("highlights connections after a box drag and retains normal selections across view switches", async () => {
+    isometricDataset();
+    const user = userEvent.setup();
+    const { container } = render(<LayoutPlanPage />);
+    const map = await screen.findByRole("img", { name: "All floors equipment layout" });
+    vi.spyOn(map, "getBoundingClientRect").mockReturnValue({ left: 0, top: 0, width: 600, height: 400 } as DOMRect);
+    await user.click(screen.getByRole("button", { name: "Box select" }));
+    await user.pointer([
+      { target: map, keys: "[MouseLeft>]", coords: { clientX: 0, clientY: 0 } },
+      { target: map, coords: { clientX: 600, clientY: 400 } },
+      { target: map, keys: "[/MouseLeft]", coords: { clientX: 600, clientY: 400 } },
+    ]);
+    expect(screen.getByRole("status")).toHaveTextContent("4 selected");
+    for (const route of container.querySelectorAll("[data-cable-id]")) expect(route).toHaveAttribute("opacity", "1");
+    await user.click(screen.getByRole("button", { name: "Box select" }));
+    expect(screen.getByRole("status")).toHaveTextContent("4 selected");
+    await user.click(screen.getByRole("button", { name: "Clear selection" }));
+    await user.click(screen.getByRole("button", { name: "EQ-1: Energized" }));
+    await user.click(screen.getByRole("button", { name: "EQ-FIX: Not Energized" }));
+    await user.click(screen.getByRole("button", { name: "2D plan" }));
+    expect(screen.getByRole("status")).toHaveTextContent("2 selected");
+    expect(screen.getByRole("button", { name: "EQ-UNKNOWN: Unknown" })).toHaveAttribute("opacity", "0.2");
+    await user.click(screen.getByRole("button", { name: "2.5D" }));
+    expect(screen.getByRole("status")).toHaveTextContent("2 selected");
+  });
+
   it("keeps an individually selected shared-trunk cable above overlapping sibling routes", async () => {
     const manifest = isometricDataset();
     manifest.floors[1].equipment.push(device("EQ-3", { source_floor_id: "second", rect: { x: 55, y: 20, width: 10, height: 8 } }));
@@ -198,11 +350,16 @@ describe("2.5D Layout connections", () => {
     render(<InfralinkEquipmentLinksProvider records={[
       { equipment_id: "IAD06-EQ-1", infralink_id: "101" },
       { equipment_id: "FDR-IAD06-EQ-1-IAD06-EQ-FIX", infralink_id: "202" },
-    ]}><LayoutPlanPage /></InfralinkEquipmentLinksProvider>);
+    ]}><CxalloyEquipmentLinksProvider records={[
+      { equipment_id: "IAD06-EQ-1", project_id: "49402", cxalloy_id: "77", cxalloy_name: "EQ-1" },
+      { equipment_id: "FDR-IAD06-EQ-1-IAD06-EQ-FIX", project_id: "49402", cxalloy_id: "78", cxalloy_name: "FDR-IAD06-EQ-1-IAD06-EQ-FIX" },
+    ]}><LayoutPlanPage /></CxalloyEquipmentLinksProvider></InfralinkEquipmentLinksProvider>);
     await user.click(await screen.findByRole("button", { name: "EQ-1: Energized" }));
     expect(screen.getByRole("link", { name: "Open in Infralink" })).toHaveAttribute("href", "https://jc2.mcdean.com/#:DeviceFullPage;viewModelId=101");
+    expect(screen.getByRole("link", { name: "Open in CxAlloy" })).toHaveAttribute("href", "https://tq.cxalloy.com/project/49402/equipment/77");
     await user.click(screen.getByRole("button", { name: /FDR-IAD06-EQ-1-IAD06-EQ-FIX:/ }));
     expect(within(screen.getByLabelText("Cable details")).getByRole("link", { name: "Open in Infralink" })).toHaveAttribute("href", "https://jc2.mcdean.com/#:DeviceFullPage;viewModelId=202");
+    expect(within(screen.getByLabelText("Cable details")).getByRole("link", { name: "Open in CxAlloy" })).toHaveAttribute("href", "https://tq.cxalloy.com/project/49402/equipment/78");
   });
   it("shows equal enlarged breathing lightning without warning triangles for planned and energized devices of different sizes", async () => {
     localStorage.removeItem(LAYOUT_VIEW_KEY);
