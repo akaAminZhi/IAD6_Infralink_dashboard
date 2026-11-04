@@ -54,20 +54,20 @@ snapshot, or retains published identities if the local snapshot is absent.
 New unmatched equipment needs another snapshot refresh. Reload the browser after
 refreshing; static deployments must include the generated link dataset.
 
-CxAlloy uploads from Data Operations use the dashboard's guarded incremental
-entry point. It verifies successful upload hashes against current PDF contents,
-reuses historical filenames after local renaming, and sends only new attachments.
-Unverifiable changed reports, missing historical site filenames, or unexpected
-site PDF names stop the affected upload instead of re-uploading old PDFs.
-Force upload is disabled for this job. Pending equipment includes previously
-uploaded equipment that now needs additional cable PDFs; it is not a count of
-equipment never uploaded.
+CxAlloy uploads from Data Operations directly run the configured sibling
+EPS Tracker's `upload_cxalloy_reports.py`. The Tracker owns report selection,
+upload history, temporary/formal lifecycle checks, replacement and verification.
+Dashboard does not add PDF/history/site-filename upload gates or replace Tracker
+functions. Advanced Force is passed through to the Tracker. Operator access,
+personal sessions, task serialization and explicit live-upload confirmation remain.
+Pending equipment includes previously uploaded equipment needing additional cable
+PDFs; it is not a count of equipment never uploaded.
 The Overview and Equipment **Pending CxAlloy Upload** count/filter requires an
 explicit NETA Complete flag and at least one local report with file status
 `pending`. Incomplete/unknown equipment and records with only uploaded,
 review-required or missing-local PDFs are excluded. Legacy status data requires
 a pending package with a positive available-PDF count. Individual report status
-and upload operations retain their existing evidence rules.
+retains its evidence rules; upload decisions belong to the Tracker.
 
 Equipment details separate **Equipment Reports** from **Cable Reports**.
 Equipment reports have their own upload status; each downloaded cable PDF shows
@@ -94,9 +94,11 @@ python scripts/automation/cxalloy_upload.py --dry-run
 python scripts/automation/cxalloy_upload.py --dry-run --only IAD06-PDU6-03F-5
 ```
 
-Use this entry point or Data Operations for the duplicate-report safeguards;
-the sibling EPS Tracker's original upload command is unchanged. Keep the upload
-manifest alongside the report PDFs when deploying to another machine.
+This compatibility entry point forwards arguments to the Tracker script from its
+working directory, including `--force`; Data Operations invokes that script
+directly. Keep the upload manifest alongside the report PDFs when deploying to
+another machine. Dashboard report-status evidence remains read-only and does not
+block uploads.
 
 Install the Python dependencies and Playwright Chromium once:
 

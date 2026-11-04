@@ -158,7 +158,7 @@ JOB_DEFINITIONS: dict[str, JobDefinition] = {
         "Add new reports, reuse verified uploaded PDFs, and optionally update the Testing Matrix.",
         "eps",
         "upload_cxalloy_reports.py",
-        ("headed", "dry_run", "only", "limit", "no_excel_update"),
+        ("headed", "dry_run", "force", "only", "limit", "no_excel_update"),
         dangerous=True,
     ),
 }
@@ -630,10 +630,6 @@ class TaskManager:
         normalized = self._validate_options(definition, options)
         cwd = self.config.eps_root if definition.project == "eps" else self.config.dashboard_root
         command = [sys.executable, "-u", str(cwd / definition.script)]
-        if job_id == "upload_cxalloy_reports":
-            command = [sys.executable, "-u", str(self.config.dashboard_root / "scripts" / "automation" / "cxalloy_upload.py"),
-                       "--tracker-root", str(self.config.eps_root)]
-
         if job_id == "refresh_jc2_exports":
             selected = normalized.get("only") or ["all"]
             command.extend(["--only", selected[0]])

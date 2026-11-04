@@ -161,7 +161,6 @@ def test_login_waits_for_page_confirmation(tmp_path: Path) -> None:
 def test_cxalloy_upload_requires_confirmation_unless_dry_run(tmp_path: Path) -> None:
     config = make_config(tmp_path)
     write_script(config.eps_root / "upload_cxalloy_reports.py")
-    write_script(config.dashboard_root / "scripts" / "automation" / "cxalloy_upload.py")
     manager = TaskManager(config)
 
     with pytest.raises(PermissionError, match="explicit confirmation"):
@@ -171,11 +170,16 @@ def test_cxalloy_upload_requires_confirmation_unless_dry_run(tmp_path: Path) -> 
     wait_for_status(manager, preview["run_id"], {"succeeded"})
 
 
-def test_cxalloy_uses_guarded_entrypoint_and_rejects_force(tmp_path: Path) -> None:
+def test_cxalloy_runs_tracker_directly_with_force_and_personal_session(tmp_path: Path) -> None:
     manager = TaskManager(make_config(tmp_path))
-    command, cwd = manager.build_command("upload_cxalloy_reports", {"dry_run": True})
-    assert command[2] == str(manager.config.dashboard_root / "scripts/automation/cxalloy_upload.py")
-    assert command[3:5] == ["--tracker-root", str(manager.config.eps_root)]
+    command, cwd = manager.build_command(
+        "upload_cxalloy_reports",
+        {"dry_run": True, "force": True, "only": ["PDU6-01A-1"], "no_excel_update": True},
+        owner_user_id="user_operator",
+    )
+    assert command[2] == str(manager.config.eps_root / "upload_cxalloy_reports.py")
+    assert command[3:] == [
+        "--only", "PDU6-01A-1", "--dry-run", "--force", "--no-excel-update",
+        "--auth-state", str(manager.config.session_path("user_operator", "cxalloy")),
+    ]
     assert cwd == manager.config.eps_root
-    with pytest.raises(ValueError, match="does not support option"):
-        manager.build_command("upload_cxalloy_reports", {"force": True})

@@ -1,5 +1,22 @@
 ﻿# Codex Handoff
 
+## Current update (2026-11-04): Delegate CxAlloy upload to Tracker
+
+- Data Operations directly executes the configured EPS Tracker's
+  `upload_cxalloy_reports.py` with its working directory and personal auth state.
+  Removed Dashboard upload planning, history/site-filename gates and function
+  overrides. The old Dashboard CLI now only forwards arguments to that script.
+- Force is supported and passed through; the Tracker owns lifecycle, replacement,
+  duplicate handling and verification. Dashboard operator access, personal sessions,
+  task serialization and explicit live-upload confirmation remain intact.
+- Read-only CxAlloy report-status evidence and Pending filter rules are unchanged.
+- Verification: 55 targeted Python tests passed for runner, API, compatibility CLI
+  and report-status evidence. TypeScript/preview-mode production build passed
+  with existing chunk-size/plugin timing warnings. No live CxAlloy upload,
+  Tracker changes or ETL.
+- Restart the automation backend and refresh Data Operations to load the new job
+  options and direct invocation. Existing user services were not restarted.
+
 ## Current update (2026-11-04): Pending CxAlloy filter eligibility
 
 - Pending CxAlloy Upload now requires tracked equipment with explicit

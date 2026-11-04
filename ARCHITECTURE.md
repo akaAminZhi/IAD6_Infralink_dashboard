@@ -15,15 +15,16 @@ The repository contains two distinct runtime surfaces:
 
 ## System Flow
 
-The registered CxAlloy upload job invokes `scripts/automation/cxalloy_upload.py`
-with the configured EPS Tracker root and the operator's auth state. This adapter
-reuses the sibling uploader's browser and matrix helpers while guarding PDF
-selection with shared `scripts/etl/cxalloy_upload_plan.py` evidence checks.
-Historical package digests prove per-PDF contents and original site filenames;
-new cable attachments do not cause old renamed PDFs to be uploaded again.
-The status builder uses the same content coverage rules. Force is unsupported
-for this job; uncertain history/site state fails closed. No live upload occurs
-without the existing explicit confirmation.
+The registered CxAlloy upload job directly invokes the configured sibling EPS
+Tracker's `upload_cxalloy_reports.py` in the Tracker working directory, passing
+the operator's auth state and supported options (including Force). The Tracker
+owns the complete upload workflow and all report/lifecycle/replacement checks.
+Dashboard adds no PDF history or site-filename gates and does not override Tracker
+functions. `scripts/automation/cxalloy_upload.py` remains a compatibility CLI that
+only forwards to the same script. Dashboard status builders retain their read-only
+content evidence rules; those rules do not govern upload execution. Operator
+access, personal sessions, task serialization and explicit live-upload confirmation
+remain enforced by the automation service.
 
 ```mermaid
 flowchart LR
