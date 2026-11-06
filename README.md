@@ -2,6 +2,37 @@
 
 React + TypeScript dashboard data project for IAD06 engineering equipment, PDM/module mapping, NETA status, test reports, and related case issues.
 
+## NETA duplicate report review
+
+Equipment lists show duplicate **group** counts with All duplicate alerts,
+Possible duplicates and Confirmed duplicates filters. Shared equipment report
+details in Equipment, PDM, Power Plan, MV and Layout show both copies,
+Original/GC previews, confirmation source and time. A manually confirmed
+`possible_duplicate` displays as **Confirmed Duplicate**. Invalid evidence is
+shown separately; unavailable audit data never means zero duplicates.
+
+Refresh with `python scripts/etl/build_neta_report_manifest.py` or normal ETL.
+The builder reads Tracker's duplicate audit, active rename manifest, lifecycle
+batch and candidate PDF hashes. Page loads do not render PDFs or scan for
+duplicates. Update both projects together, including Tracker's
+`neta_duplicate_decisions.py`; `IAD6_EPS_TRACKER_ROOT` still applies.
+
+Authorized operators can **Confirm Duplicate** or **Revoke Confirmation** after
+reviewing the pair and impact. The primary copy stays with Tracker. Confirmation
+can skip a duplicate equipment PDF during subsequent uploads; both local files
+remain. Cable confirmation does not suppress cable uploads. Revoking a manual
+confirmation restores possible-duplicate status; automatic identical-byte/render
+confirmations cannot be manually revoked. Neither action starts an upload or
+changes attachments already on CxAlloy.
+
+Writes require existing `/access` authorization, current evidence and explicit
+confirmation, and use the allowlisted task runner. Success refreshes report
+evidence in place, preserving filters and open details. If a decision saves but
+publication fails, use **Refresh duplicate evidence** rather than submitting it
+again. Refresh republishes existing detection; changed/missing PDFs need another
+Tracker duplicate audit. Static deployments need the refreshed manifest; live
+writes need the automation backend. Restart the backend after updating both projects.
+
 The ETL pipeline is PDM-centric:
 
 - PDM Name is the main grouping field.

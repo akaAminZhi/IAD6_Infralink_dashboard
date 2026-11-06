@@ -10,13 +10,19 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
+import sys
+
+if __package__ in {None, ""}:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+from scripts.automation.neta_duplicates import read_snapshot
 
 try:
     from .json_utils import file_metadata, write_json as write_json_payload
-    from .schemas import NetaReportFileRecord
+    from .schemas import NetaDuplicateAudit, NetaReportFileRecord
 except ImportError:
     from json_utils import file_metadata, write_json as write_json_payload
-    from schemas import NetaReportFileRecord
+    from schemas import NetaDuplicateAudit, NetaReportFileRecord
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -254,16 +260,45 @@ def build_neta_report_manifest(tracker_root: Path | None = None) -> dict[str, An
                 "status": "missing_source",
             }
 
+    tracker = downloaded["directory"].parent.parent
+    duplicate_audit = read_snapshot(tracker)
+    lookup = {(record['source_key'], record['relative_path'].casefold()): record for record in records}
+    projected = []
+    for match in duplicate_audit['matches']:
+        item = {key: match.get(key) for key in (
+            'match_id', 'revision', 'device_name', 'report_stage', 'batch_id', 'category',
+            'recognized_name', 'classification', 'status', 'confirmation_source',
+            'can_confirm', 'can_revoke', 'problems', 'upload_action')}
+        confirmation = match.get('confirmation') or {}
+        item['confirmed_by'] = confirmation.get('confirmed_by')
+        item['confirmed_at'] = confirmation.get('confirmed_at')
+        for side in ('first', 'second'):
+            gc_path = strip_known_prefix(match[side], 'NETA_eport_To_GC') or ''
+            original_path = strip_known_prefix(match.get(f'{side}_source'), 'downloads') or ''
+            original_path = strip_known_prefix(original_path, 'neta_reports') or ''
+            item[side] = {
+                'gc': lookup.get(('gc', gc_path.casefold())),
+                'original': lookup.get(('downloaded', original_path.casefold())),
+                'name': Path(match[side].replace('\\', '/')).name,
+            }
+        if not item['first']['gc'] or not item['second']['gc']:
+            item.update(status='invalid', can_confirm=False, can_revoke=False,
+                        problems=[*item['problems'], 'PDF is not in the current public report index.'])
+        if item['status'] == 'invalid':
+            item['upload_action'] = 'retain_for_review'
+        projected.append(item)
+    duplicate_audit['matches'] = projected
     return {
         "generated_at": datetime.now().astimezone().isoformat(),
         "source_directories": source_directories,
         "public_links": public_links,
         "records": records,
+        "duplicate_audit": NetaDuplicateAudit(**duplicate_audit).to_dict(),
     }
 
 
-def main() -> None:
-    manifest = build_neta_report_manifest()
+def main(tracker_root: Path | None = None) -> None:
+    manifest = build_neta_report_manifest(tracker_root)
     write_json_payload(OUTPUT_PATH, manifest)
     print(f"Wrote NETA report manifest to {OUTPUT_PATH}")
     print(f"Linked NETA report files: {len(manifest['records'])}")
@@ -272,4 +307,7 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    import argparse
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--tracker-root', type=Path)
+    main(parser.parse_args().tracker_root)

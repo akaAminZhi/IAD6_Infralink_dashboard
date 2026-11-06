@@ -33,6 +33,16 @@ export function getAutomationAccess() {
   return request<{ user_id: string }>("/access");
 }
 
+export function decideNetaDuplicate(matchId: string, revision: string, action: "confirm" | "revoke") {
+  return request<AutomationRun>("/neta-report-duplicates/decisions", {
+    method: "POST", body: JSON.stringify({ match_id: matchId, expected_revision: revision, action, confirmed: true }),
+  });
+}
+
+export function getAutomationRun(runId: string) {
+  return request<AutomationRun>(`/runs/${encodeURIComponent(runId)}`);
+}
+
 export class AutomationApiError extends Error {
   status: number;
 

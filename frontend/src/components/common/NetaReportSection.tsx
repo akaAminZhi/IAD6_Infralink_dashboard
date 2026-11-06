@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useNetaReportManifest } from "../../contexts/NetaReportManifestContext";
 import { getNetaReportNames, hasGcNetaReportLinks, type NetaReportNameMode } from "../../utils/netaReports";
 import { NetaReportChips } from "./NetaReportChips";
+import { NetaDuplicatePanel } from "./NetaDuplicatePanel";
 
 export function NetaReportSection({ equipmentId, value }: {
   equipmentId?: string | null;
@@ -24,6 +25,7 @@ export function NetaReportSection({ equipmentId, value }: {
         ) : null}
       </div>
       <NetaReportChips equipmentId={equipmentId} reports={reports} compactNameMode={nameMode} showLinkedFileNames stackedCompact />
+      <NetaDuplicatePanel equipmentId={equipmentId} />
     </section>
   );
 }

@@ -199,11 +199,46 @@ export interface NetaReportFileRecord {
 }
 
 export interface NetaReportManifest {
+  duplicate_audit?: NetaDuplicateAudit;
   generated_at?: string;
   source_directories?: Record<string, Record<string, unknown>>;
   public_links?: Record<string, Record<string, unknown>>;
   records?: NetaReportFileRecord[];
   [key: string]: unknown;
+}
+
+export interface NetaDuplicateFile {
+  name: string;
+  gc: NetaReportFileRecord | null;
+  original: NetaReportFileRecord | null;
+}
+
+export interface NetaDuplicateMatch {
+  match_id: string;
+  revision: string;
+  device_name: string;
+  report_stage: "temporary" | "formal";
+  batch_id: string;
+  category: "equipment" | "cable";
+  recognized_name: string;
+  classification: string;
+  status: "possible" | "confirmed" | "invalid";
+  confirmation_source: "automatic" | "manual" | null;
+  confirmed_by: string | null;
+  confirmed_at: string | null;
+  can_confirm: boolean;
+  can_revoke: boolean;
+  problems: string[];
+  upload_action: string;
+  first: NetaDuplicateFile;
+  second: NetaDuplicateFile;
+}
+
+export interface NetaDuplicateAudit {
+  available: boolean;
+  checked_at?: string | null;
+  errors: unknown[];
+  matches: NetaDuplicateMatch[];
 }
 
 export type CxalloyReportUploadStatus = "uploaded" | "pending" | "missing_pdf";

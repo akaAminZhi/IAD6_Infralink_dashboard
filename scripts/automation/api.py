@@ -103,6 +103,14 @@ class NetaReportReviewRequest(BaseModel):
     status: str = Field(pattern=r"^(PASSED|FAILED)$")
 
 
+class NetaDuplicateDecisionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    match_id: str = Field(pattern=r"^[0-9a-f]{64}$")
+    expected_revision: str = Field(pattern=r"^[0-9a-f]{64}$")
+    action: Literal["confirm", "revoke"]
+    confirmed: bool = False
+
+
 class BrowserActionRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     kind: Literal["screen", "click", "text", "key", "scroll", "save"]
@@ -483,6 +491,18 @@ def create_app(
     @app.get("/api/automation/mv-equipment-comments")
     def mv_equipment_comments() -> dict[str, list[dict[str, str]]]:
         return {"comments": list_mv_equipment_comments(resolved_config.runtime_root)}
+
+    @app.post("/api/automation/neta-report-duplicates/decisions", status_code=202)
+    def decide_neta_duplicate(request: NetaDuplicateDecisionRequest,
+                              user_id: str = Depends(require_operator)) -> dict[str, Any]:
+        try:
+            return task_manager.start_job("update_neta_duplicate_decision",
+                request.model_dump(exclude={"confirmed"}), confirmed=request.confirmed,
+                owner_user_id=user_id)
+        except PermissionError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        except (OSError, ValueError, RuntimeError) as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     @app.get("/api/automation/neta-report-reviews")
     def neta_report_reviews() -> dict[str, Any]:

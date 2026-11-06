@@ -31,9 +31,11 @@ export interface EquipmentFiltersState {
   cxalloyPendingOnly: boolean;
   netaReportFailedOnly: boolean;
   netaReportReviewRequiredOnly: boolean;
+  duplicateReports?: "" | "all" | "possible" | "confirmed";
 }
 
 interface EquipmentFiltersProps {
+  duplicateReportsAvailable?: boolean;
   filters: EquipmentFiltersState;
   equipmentTypes: string[];
   statuses: string[];
@@ -98,6 +100,7 @@ function SelectFilter({
 }
 
 export function EquipmentFilters({
+  duplicateReportsAvailable,
   filters,
   equipmentTypes,
   statuses,
@@ -124,6 +127,7 @@ export function EquipmentFilters({
     filters.cxalloyPendingOnly,
     filters.netaReportFailedOnly,
     filters.netaReportReviewRequiredOnly,
+    filters.duplicateReports,
   ].filter(Boolean).length;
   const filterLabels: Record<keyof EquipmentFiltersState, string> = {
     equipmentSearch: "Equipment",
@@ -139,6 +143,7 @@ export function EquipmentFilters({
     cxalloyPendingOnly: "Pending CxAlloy upload",
     netaReportFailedOnly: "Failed NETA reports",
     netaReportReviewRequiredOnly: "NETA review required",
+    duplicateReports: "Duplicate reports",
   };
 
   return (
@@ -195,7 +200,7 @@ export function EquipmentFilters({
 
         {advancedOpen && (
           <div className="equipment-advanced-filters space-y-4" id={advancedId}>
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
               <SelectFilter
                 allLabel="All equipment types"
                 label="Equipment Type"
@@ -229,6 +234,21 @@ export function EquipmentFilters({
                   <option value="complete">Complete</option>
                   <option value="incomplete">Incomplete</option>
                   <option value="complete_missing_report">Complete Missing Report</option>
+                </select>
+              </label>
+              <label className="flex min-w-0 flex-col gap-1 text-sm font-medium">
+                Duplicate reports
+                <select
+                  aria-label="Duplicate reports"
+                  disabled={duplicateReportsAvailable === false}
+                  className="h-9 rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                  value={filters.duplicateReports ?? ""}
+                  onChange={(event) => update({ duplicateReports: event.target.value as EquipmentFiltersState["duplicateReports"] })}
+                >
+                  <option value="">All reports</option>
+                  <option value="all">All duplicate alerts</option>
+                  <option value="possible">Possible duplicates</option>
+                  <option value="confirmed">Confirmed duplicates</option>
                 </select>
               </label>
             </div>

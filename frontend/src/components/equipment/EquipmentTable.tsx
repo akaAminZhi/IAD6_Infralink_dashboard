@@ -24,6 +24,7 @@ import { hasGcNetaReportLinks } from "../../utils/netaReports";
 import { equipmentSearchPriority } from "../../utils/searchUtils";
 import { EmptyState } from "../common/EmptyState";
 import { NetaReportChips } from "../common/NetaReportChips";
+import { NetaDuplicateSummary } from "../common/NetaDuplicatePanel";
 import { StatusBadge } from "../common/StatusBadge";
 import { Button } from "../ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
@@ -138,7 +139,7 @@ export function EquipmentTable({ rows, selectedRowId, onSelectEquipment, priorit
           const expandedMode = expandedReportModes.get(row.original.row_id);
 
           if (reportCount === 0) {
-            return <span>0 reports</span>;
+            return <div><span>0 reports</span><NetaDuplicateSummary equipmentId={row.original.equipment_id} /></div>;
           }
 
           return (
@@ -177,6 +178,7 @@ export function EquipmentTable({ rows, selectedRowId, onSelectEquipment, priorit
                   </Button>
                 ) : null}
               </div>
+              <NetaDuplicateSummary equipmentId={row.original.equipment_id} />
               {expandedMode ? (
                 <>
                   {reportNames.length ? <NetaReportChips equipmentId={row.original.equipment_id} compactNameMode={expandedMode} reports={reportNames} /> : null}

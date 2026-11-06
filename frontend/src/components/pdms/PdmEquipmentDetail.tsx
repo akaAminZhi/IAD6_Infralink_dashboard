@@ -18,6 +18,7 @@ import {
 import { EpsTestItemsPanel } from "../common/EpsTestItemsPanel";
 import { EquipmentExternalLinks } from "../common/EquipmentExternalLinks";
 import { NetaReportChips } from "../common/NetaReportChips";
+import { NetaDuplicatePanel } from "../common/NetaDuplicatePanel";
 import { NetaStatusBadge } from "./NetaStatusBadge";
 import { PdmCaseList } from "./PdmCaseList";
 
@@ -116,6 +117,7 @@ export function PdmEquipmentDetail({ equipment, epsTestItems }: PdmEquipmentDeta
           reports={reportNames}
           showLinkedFileNames
         />
+        <NetaDuplicatePanel equipmentId={equipment.equipment_id} />
       </div> : null}
 
       {trackingRequired ? <div className="space-y-2">

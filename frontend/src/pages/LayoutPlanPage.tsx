@@ -7,6 +7,7 @@ import { EmptyState } from "../components/common/EmptyState";
 import { ErrorState } from "../components/common/ErrorState";
 import { LoadingState } from "../components/common/LoadingState";
 import { NetaReportChips } from "../components/common/NetaReportChips";
+import { NetaDuplicatePanel } from "../components/common/NetaDuplicatePanel";
 import { EquipmentExternalLinks } from "../components/common/EquipmentExternalLinks";
 import { Button } from "../components/ui/button";
 import { IsometricEquipment, SimpleIsometricSymbols } from "../components/layout/IsometricEquipment";
@@ -571,6 +572,7 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
       <h4 className="text-xs font-medium uppercase text-muted-foreground">Cable NETA reports</h4>
       <div className="max-h-48 overflow-y-auto pr-1 [scrollbar-gutter:stable]" role="region" aria-label="Cable NETA report list" tabIndex={0}>
         <NetaReportChips equipmentId={selectedCable.cable_id} reports={selectedCableReports} showLinkedFileNames stackedCompact />
+        <NetaDuplicatePanel key={selectedCable.cable_id} equipmentId={selectedCable.cable_id} />
       </div>
     </section> : null}
     {selectedCable.neta_complete && !selectedCable.neta_test_report ? <p className="text-xs text-red-700">Data quality: NETA complete but report is missing.</p> : null}
@@ -795,6 +797,7 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
           <p className="text-sm">Excel energized date: {unplacedEquipment.energized_completed_at ?? "No completed date"}</p>
           <p className="text-sm">NETA: {unplacedEquipment.neta_complete === true ? "Complete" : "Not confirmed"}</p>
           {getNetaReportNames(unplacedEquipment.neta_test_report).length ? <NetaReportChips equipmentId={unplacedEquipment.equipment_id} reports={getNetaReportNames(unplacedEquipment.neta_test_report)} showLinkedFileNames stackedCompact /> : null}
+          <NetaDuplicatePanel key={unplacedEquipment.equipment_id} equipmentId={unplacedEquipment.equipment_id} />
           {unplacedEquipment.neta_complete === true && !unplacedEquipment.neta_test_report ? <p className="text-xs text-red-700">Data quality: NETA complete but report is missing.</p> : null}
         </section> : null}
         {selected ? <div className="space-y-3">
@@ -824,6 +827,7 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
             <h4 className="text-xs font-medium uppercase text-muted-foreground">NETA test reports</h4>
             <div className="h-48 overflow-y-auto pr-1 [scrollbar-gutter:stable]" role="region" aria-label="Equipment NETA report list" tabIndex={0}>
               <NetaReportChips equipmentId={selected.matched_equipment_id ?? selected.equipment_key} reports={selectedEquipmentReports} compactNameMode="gc" showLinkedFileNames stackedCompact />
+              <NetaDuplicatePanel key={selected.matched_equipment_id ?? selected.equipment_key} equipmentId={selected.matched_equipment_id ?? selected.equipment_key} />
             </div>
           </section> : null}
           <DailyTestHistory events={selected.daily_report_history} />

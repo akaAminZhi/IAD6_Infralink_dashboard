@@ -9,10 +9,35 @@ import { NetaReportManifestProvider } from "../contexts/NetaReportManifestContex
 import { InfralinkEquipmentLinksProvider } from "../contexts/InfralinkEquipmentLinksContext";
 import { CxalloyEquipmentLinksProvider } from "../contexts/CxalloyEquipmentLinksContext";
 import { makeDashboardData } from "../test/fixtures";
+import { duplicateManifest, makeDuplicate } from "../test/netaDuplicateFixtures";
 import type { KprSummary } from "../types/data";
 import { EquipmentPage } from "./EquipmentPage";
 
 describe("EquipmentPage", () => {
+  it("counts duplicate groups and filters possible, confirmed and invalid evidence", async () => {
+    const user = userEvent.setup();
+    const manifest = duplicateManifest([
+      makeDuplicate(),
+      makeDuplicate({ match_id: "possible", device_name: "EQ-2", status: "possible" }),
+      makeDuplicate({ match_id: "invalid", device_name: "EQ-3", status: "invalid" }),
+    ]);
+    const data = makeDashboardData({ pdms: [], netaReportManifest: manifest,
+      equipment: ["EQ-1", "EQ-2", "EQ-3", "EQ-4"].map((id) => ({ equipment_id: id, neta_test_report: "Original-1.pdf; Original-2.pdf" })) });
+    render(<MemoryRouter><NetaReportManifestProvider manifest={manifest}><EquipmentPage data={data} /></NetaReportManifestProvider></MemoryRouter>);
+    expect(screen.getByText("1 Confirmed Duplicate group(s)")).toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "Duplicate reports" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /More filters/ }));
+    const filter = screen.getByRole("combobox", { name: "Duplicate reports" });
+    await user.selectOptions(filter, "confirmed");
+    expect(screen.getByRole("cell", { name: "EQ-1" })).toBeInTheDocument();
+    expect(screen.queryByRole("cell", { name: "EQ-2" })).not.toBeInTheDocument();
+    await user.selectOptions(filter, "possible");
+    expect(screen.getByRole("cell", { name: "EQ-2" })).toBeInTheDocument();
+    expect(screen.queryByRole("cell", { name: "EQ-1" })).not.toBeInTheDocument();
+    await user.selectOptions(filter, "all");
+    expect(screen.getByRole("cell", { name: "EQ-3" })).toBeInTheDocument();
+    expect(screen.queryByRole("cell", { name: "EQ-4" })).not.toBeInTheDocument();
+  });
   it.each(["/equipment", "/equipment?quickFilter=cxalloyPending"])("limits the pending upload card and filter to complete equipment with pending PDFs (%s)", async (path) => {
     const user = userEvent.setup();
     const entries = [

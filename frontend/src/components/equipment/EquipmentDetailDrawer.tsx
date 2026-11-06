@@ -2,6 +2,8 @@ import { AlertTriangle, CheckCircle2, ChevronRight, CircleHelp, Repeat2, X, XCir
 import { useId, useState } from "react";
 
 import { useNetaReportManifest } from "../../contexts/NetaReportManifestContext";
+import { NetaDuplicatePanel } from "../common/NetaDuplicatePanel";
+import { NetaDuplicateBadge } from "../common/NetaDuplicateBadge";
 import type {
   NetaReportReview,
   NetaReportReviewsResponse,
@@ -23,6 +25,7 @@ import {
   type NetaReportNameMode,
 } from "../../utils/netaReports";
 import { getNetaReviewsForReport } from "../../utils/netaReportReviews";
+import { getReportDuplicates } from "../../utils/netaDuplicates";
 import { EpsTestItemsPanel } from "../common/EpsTestItemsPanel";
 import { EquipmentExternalLinks } from "../common/EquipmentExternalLinks";
 import { NetaReportChips } from "../common/NetaReportChips";
@@ -164,6 +167,7 @@ function NetaReportNames({
       </div>
       <ul className="mt-3 divide-y overflow-hidden rounded-md border bg-muted/10" aria-label="NETA report list">
         {reportNames.map((reportName, reportIndex) => {
+          const duplicates = getReportDuplicates(manifest, equipmentId, reportName);
           const matchedReviews = getNetaReviewsForReport(reportName, reviews, manifest);
           const primaryStatus = matchedReviews.some((review) => review.status === "FAILED")
             ? "FAILED"
@@ -190,14 +194,17 @@ function NetaReportNames({
           const panelId = `${disclosureId}-${reportIndex}`;
           return (
             <li className="min-w-0" data-review-status={primaryStatus ?? "NOT_CHECKED"} key={reportName}>
-              <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 px-3 py-2.5 sm:grid-cols-[minmax(0,1fr)_9rem_6rem]">
+              <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 px-3 py-2.5 sm:grid-cols-[minmax(0,1fr)_auto_6rem]">
                 <div className="col-span-2 min-w-0 sm:col-span-1">
                   <NetaReportChips equipmentId={equipmentId} compactNameMode={nameMode}
-                    reports={[reportName]} showLinkedFileNames listAppearance className="grid-cols-1 lg:grid-cols-1" />
+                    reports={[reportName]} showLinkedFileNames listAppearance showDuplicateBadge={false} className="grid-cols-1 lg:grid-cols-1" />
                 </div>
-                <span className={cn("inline-flex w-fit items-center gap-1.5 rounded border px-2 py-0.5 text-[11px] font-medium sm:justify-self-end", tone.container, tone.label)}>
-                  <StatusIcon className="h-3 w-3 shrink-0" aria-hidden="true" />{tone.text}
-                </span>
+                <div className="flex flex-wrap items-center gap-1.5 sm:max-w-[19rem] sm:justify-self-end sm:justify-end">
+                  <span className={cn("inline-flex w-fit items-center gap-1.5 whitespace-nowrap rounded border px-2 py-0.5 text-[11px] font-medium", tone.container, tone.label)}>
+                    <StatusIcon className="h-3 w-3 shrink-0" aria-hidden="true" />{tone.text}
+                  </span>
+                  <NetaDuplicateBadge matches={duplicates} />
+                </div>
                 {hasDetails ? <button type="button" aria-expanded={expanded} aria-controls={panelId}
                   aria-label={`${evidenceReviews.length ? "Evidence" : "Review"} for ${reportName}`}
                   className="inline-flex items-center justify-self-end gap-1 rounded px-1 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -338,6 +345,7 @@ export function EquipmentDetailDrawer({
                     value={equipment.neta_test_report}
                   />
                   <EquipmentCableAtpEvidence equipment={equipment} />
+                  <NetaDuplicatePanel key={equipment.equipment_id} equipmentId={equipment.equipment_id} />
                 </div> : null}
                 {trackingRequired && equipment.cxalloy_upload_status ? (
                   <CxalloyReportUploadPanel equipment={equipment} />

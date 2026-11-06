@@ -97,6 +97,17 @@ class JobDefinition:
 
 
 JOB_DEFINITIONS: dict[str, JobDefinition] = {
+    "update_neta_duplicate_decision": JobDefinition(
+        "update_neta_duplicate_decision", "Update NETA Duplicate Decision",
+        "Confirm or revoke a reviewed PDF pair; never uploads attachments.",
+        "dashboard", "scripts/automation/neta_duplicates.py",
+        ("match_id", "expected_revision", "action"),
+    ),
+    "refresh_neta_duplicate_evidence": JobDefinition(
+        "refresh_neta_duplicate_evidence", "Refresh NETA Duplicate Evidence",
+        "Rebuild report links and duplicate evidence without changing decisions.",
+        "dashboard", "scripts/etl/build_neta_report_manifest.py",
+    ),
     "refresh_jc2_exports": JobDefinition(
         "refresh_jc2_exports",
         "Refresh JC2 Excel Exports",
@@ -196,6 +207,7 @@ class TaskManager:
                 "dangerous": definition.dangerous,
             }
             for definition in JOB_DEFINITIONS.values()
+            if definition.job_id != "update_neta_duplicate_decision"
         ]
 
     def has_active_run(self) -> bool:
@@ -230,6 +242,14 @@ class TaskManager:
     ) -> dict[str, Any]:
         definition = self._job(job_id)
         normalized_options = self._validate_options(definition, options or {})
+        if job_id == "update_neta_duplicate_decision":
+            from scripts.automation.neta_duplicates import validate_decision
+            if not confirmed or not owner_user_id:
+                raise PermissionError("Duplicate decisions require explicit operator confirmation.")
+            if set(normalized_options) != {"match_id", "expected_revision", "action"}:
+                raise ValueError("Duplicate match, revision and action are required.")
+            validate_decision(self.config.eps_root, normalized_options['match_id'],
+                              normalized_options['expected_revision'], normalized_options['action'])
         if definition.dangerous and not normalized_options.get("dry_run") and not confirmed:
             raise PermissionError("CxAlloy upload requires explicit confirmation.")
         run = self._new_run(
@@ -630,6 +650,13 @@ class TaskManager:
         normalized = self._validate_options(definition, options)
         cwd = self.config.eps_root if definition.project == "eps" else self.config.dashboard_root
         command = [sys.executable, "-u", str(cwd / definition.script)]
+        if job_id == "refresh_neta_duplicate_evidence":
+            command.extend(["--tracker-root", str(self.config.eps_root)])
+        if job_id == "update_neta_duplicate_decision":
+            for key in ("match_id", "expected_revision", "action"):
+                command.extend(["--" + key.replace('_', '-'), normalized[key]])
+            command.extend(["--tracker-root", str(self.config.eps_root), "--actor", owner_user_id or "local_operator"])
+            return command, cwd
         if job_id == "refresh_jc2_exports":
             selected = normalized.get("only") or ["all"]
             command.extend(["--only", selected[0]])
@@ -674,6 +701,15 @@ class TaskManager:
                 raise ValueError(f"{definition.label} does not support option {key}.")
             if key in {"headed", "dry_run", "force", "no_excel_update"}:
                 normalized[key] = bool(value)
+            elif key in {"match_id", "expected_revision"}:
+                import re
+                if not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{64}", value):
+                    raise ValueError("Invalid duplicate identity or revision.")
+                normalized[key] = value
+            elif key == "action":
+                if value not in {"confirm", "revoke"}:
+                    raise ValueError("Invalid duplicate decision action.")
+                normalized[key] = value
             elif key == "limit":
                 limit = int(value)
                 if limit < 1 or limit > 10_000:

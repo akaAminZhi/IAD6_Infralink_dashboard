@@ -54,6 +54,29 @@ afterEach(() => {
 });
 
 describe("useDashboardData route loading", () => {
+  it("refreshes report evidence in place without resetting the route or other resources", async () => {
+    fetchJsonMock.mockImplementation(async (path) => defaultPayload(path));
+    const { result } = renderHook(() => useDashboardData("/equipment"));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    const equipment = result.current.equipment;
+    const reloadVersion = result.current.reloadVersion;
+    let resolveReport!: (value: unknown) => void;
+    const nextReport = { records: [], duplicate_audit: { available: true, matches: [], errors: [] } };
+    fetchJsonMock.mockImplementation((path) => path === "/data/neta_report_manifest.json"
+      ? new Promise((resolve) => { resolveReport = resolve; }) : Promise.resolve(defaultPayload(path)));
+    let pending!: Promise<void>;
+    act(() => { pending = result.current.loadResources(["netaReportManifest"], true); });
+    await waitFor(() => expect(resolveReport).toBeDefined());
+    expect(result.current.loading).toBe(false);
+    expect(result.current.equipment).toBe(equipment);
+    await act(async () => { resolveReport(nextReport); await pending; });
+    expect(result.current.netaReportManifest).toEqual(nextReport);
+    expect(result.current.reloadVersion).toBe(reloadVersion);
+    fetchJsonMock.mockResolvedValue(null);
+    await act(async () => { await expect(result.current.loadResources(["netaReportManifest"], true)).rejects.toThrow("Missing netaReportManifest"); });
+    expect(result.current.netaReportManifest).toEqual(nextReport);
+    expect(result.current.loading).toBe(false);
+  });
   it("loads combined daily-report evidence for EPS execution and preserves both source histories", async () => {
     const audit = { item_count: 1, items: [{ equipment_key: "TX6-01", events: [
       { source: "Daily_test_report", date: "2026-10-01" },

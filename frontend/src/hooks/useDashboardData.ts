@@ -64,21 +64,23 @@ export function useDashboardData(pathname = "/overview", search = "") {
     const requests = resources.map((key) => {
       const pending = cache.pending.get(key);
       if (pending) return pending;
-      if (cache.status[key] === "loaded" || (cache.status[key] === "error" && !retry)) return;
-      cache.status = { ...cache.status, [key]: "loading" };
+      if (!retry && (cache.status[key] === "loaded" || cache.status[key] === "error")) return;
+      // Refresh loaded evidence in place so open drawers and filters stay mounted.
+      if (cache.status[key] !== "loaded") cache.status = { ...cache.status, [key]: "loading" };
       started = true;
       const request = (async () => {
         // Register the pending request before invoking even a synchronous loader.
         await Promise.resolve();
         try {
           const payload = await fetchJson<unknown>(`/data/${dashboardResourceFiles[key]}`);
-          if (payload === null && requiredResources.has(key)) throw new Error(`Missing ${key}`);
+          if (payload === null && (retry || requiredResources.has(key))) throw new Error(`Missing ${key}`);
           cache.data = { ...cache.data, [key]: recordResources.has(key) ? unwrapRecords(payload) : payload };
           cache.status = { ...cache.status, [key]: "loaded" };
         } catch (error) {
           console.warn(`Dashboard data could not be loaded: ${key}`, error);
           // Optional exports retain their existing empty/unavailable behavior.
           cache.status = { ...cache.status, [key]: requiredResources.has(key) ? "error" : "loaded" };
+          if (retry) throw error;
         } finally {
           cache.pending.delete(key);
           if (cacheRef.current === cache) publish();

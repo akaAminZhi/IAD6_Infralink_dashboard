@@ -13,7 +13,8 @@ import {
   type EquipmentQuickFilter,
 } from "../components/equipment/EquipmentSummaryCards";
 import { EquipmentTable } from "../components/equipment/EquipmentTable";
-import type { DashboardData } from "../types/data";
+import type { DashboardData, NetaReportManifest } from "../types/data";
+import { getEquipmentDuplicates } from "../utils/netaDuplicates";
 import type { NetaReportReview, NetaReportReviewsResponse } from "../types/automation";
 import { loadNetaReportReviews } from "../utils/loadNetaReportReviews";
 import {
@@ -51,6 +52,7 @@ const defaultFilters: EquipmentFiltersState = {
   cxalloyPendingOnly: false,
   netaReportFailedOnly: false,
   netaReportReviewRequiredOnly: false,
+  duplicateReports: "",
 };
 
 function normalizeFilterValue(value: unknown): string {
@@ -62,11 +64,16 @@ function filterEquipmentRows(
   filters: EquipmentFiltersState,
   newNetaCompleteIds: Set<string>,
   reviewStates: Map<string, EquipmentNetaReviewState | null>,
+  manifest: NetaReportManifest | null,
 ): FlattenedEquipmentRow[] {
   const equipmentSearch = filters.equipmentSearch.trim();
   const pdmSearch = filters.pdmSearch.trim();
 
   return rows.filter((row) => {
+    if (filters.duplicateReports) {
+      const duplicates = getEquipmentDuplicates(manifest, row.equipment_id);
+      if (!duplicates.some((match) => filters.duplicateReports === "all" || match.status === filters.duplicateReports)) return false;
+    }
     if (/^\d/.test(row.display_equipment_id.trim())) {
       return false;
     }
@@ -374,6 +381,7 @@ export function EquipmentPage({ data }: EquipmentPageProps) {
       deferredFilters,
       newNetaCompleteIds,
       reviewStates,
+      data.netaReportManifest,
     );
     return sortEquipmentRows(
       kprEquipmentFilterIds === null
@@ -386,6 +394,7 @@ export function EquipmentPage({ data }: EquipmentPageProps) {
     kprEquipmentFilterIds,
     reviewStates,
     newNetaCompleteIds,
+    data.netaReportManifest,
   ]);
   const selectedGroup = useMemo(() => {
     if (!selectedEquipment) {
@@ -485,6 +494,7 @@ export function EquipmentPage({ data }: EquipmentPageProps) {
       ) : null}
 
       <EquipmentFilters
+        duplicateReportsAvailable={data.netaReportManifest?.duplicate_audit?.available === true}
         equipmentTypes={filterOptions.equipmentTypes}
         filters={filters}
         onChange={setFilters}
@@ -492,6 +502,11 @@ export function EquipmentPage({ data }: EquipmentPageProps) {
         parents={filterOptions.parents}
         statuses={filterOptions.statuses}
       />
+      {!data.netaReportManifest?.duplicate_audit?.available && <p className="text-xs text-amber-900">Duplicate check unavailable. Duplicate filters are disabled until report evidence is refreshed.</p>}
+      {!!data.netaReportManifest?.duplicate_audit?.errors.length && <details className="text-xs text-amber-900">
+        <summary>Duplicate audit diagnostics ({data.netaReportManifest.duplicate_audit.errors.length})</summary>
+        {data.netaReportManifest.duplicate_audit.errors.map((error, index) => <p key={index}>{typeof error === "string" ? error : JSON.stringify(error)}</p>)}
+      </details>}
 
       <EquipmentTable
         onSelectEquipment={setSelectedEquipment}

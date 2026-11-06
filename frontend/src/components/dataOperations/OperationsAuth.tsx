@@ -1,5 +1,5 @@
 import { ClerkProvider, SignIn, UserButton, useAuth } from "@clerk/react";
-import { useEffect, useLayoutEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useLayoutEffect, useState, type ReactNode } from "react";
 
 import { getAutomationAccess, setAutomationTokenGetter } from "../../utils/automationApi";
 import { isLocalOperationsMode } from "../../utils/localOperations";
@@ -7,6 +7,8 @@ import { LoadingState } from "../common/LoadingState";
 import { Button } from "../ui/button";
 
 const publishableKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string | undefined;
+const OperationsIdentityContext = createContext<string | null>(null);
+export const useOperationsIdentity = () => useContext(OperationsIdentityContext);
 
 function TokenBridge({ children }: { children: ReactNode }) {
   const { getToken, userId } = useAuth();
@@ -14,11 +16,12 @@ function TokenBridge({ children }: { children: ReactNode }) {
     setAutomationTokenGetter(getToken);
     return () => setAutomationTokenGetter(null);
   }, [getToken, userId]);
-  return children;
+  return <OperationsIdentityContext.Provider value={userId ?? null}>{children}</OperationsIdentityContext.Provider>;
 }
 
 export function OperationsAuthProvider({ children }: { children: ReactNode }) {
-  if (isLocalOperationsMode() || !publishableKey) return children;
+  if (isLocalOperationsMode()) return <OperationsIdentityContext.Provider value="local_operator">{children}</OperationsIdentityContext.Provider>;
+  if (!publishableKey) return children;
   return (
     <ClerkProvider publishableKey={publishableKey}>
       <TokenBridge>{children}</TokenBridge>

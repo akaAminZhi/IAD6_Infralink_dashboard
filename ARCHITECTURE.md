@@ -1,5 +1,32 @@
 # Architecture
 
+## NETA duplicate evidence and decisions
+
+The report manifest builder reads the configured Tracker's v2 duplicate audit
+through its `neta_duplicate_decisions` validation API. Candidate GC paths must
+remain within the report root, belong to active rename rows and the current
+stage/batch, retain the recognized-name/category scope, and match both SHA-256
+values. Only candidate files are hashed. Original and GC links resolve through
+the existing public report index; missing public copies invalidate actions.
+The manifest adds `duplicate_audit` with explicit availability, diagnostics and
+typed group records. No equipment readiness or completion contract changes.
+
+The protected duplicate-decision POST accepts a match ID, expected revision,
+confirm/revoke action and explicit confirmation. `update_neta_duplicate_decision`
+is an internal allowlisted runner job with server-derived actor identity; no
+client paths or commands are accepted. Validation runs before scheduling and
+again in the worker. Tracker owns atomic decision history and audit writes,
+report-directory locking and the existing CxAlloy project lock. Manual revocation
+retains history and cannot revoke automatic byte/render evidence. Upload aliases
+also read current decisions, so an interrupted audit rewrite cannot revive a
+revoked confirmation. No network upload is performed by these tasks.
+
+After saving, the worker rebuilds the report manifest. A separate allowlisted
+`refresh_neta_duplicate_evidence` job retries publication without changing a
+decision or rescanning PDFs. React reloads this resource in place; loaded routes,
+filters and drawers remain mounted. Static readers use the published snapshot;
+mutations require the existing operator API and both updated checkouts.
+
 ## Purpose
 
 The IAD6 Infralink Dashboard combines engineering exports and locally managed

@@ -198,6 +198,15 @@ class NetaReportFileRecord(SchemaRecord):
 
 
 @dataclass(slots=True)
+class NetaDuplicateAudit(SchemaRecord):
+    """Validated duplicate evidence; unavailable must not imply zero duplicates."""
+    available: bool
+    matches: list[dict[str, Any]] = field(default_factory=list)
+    errors: list[Any] = field(default_factory=list)
+    checked_at: str | None = None
+
+
+@dataclass(slots=True)
 class NetaValidationRecord(SchemaRecord):
     """NETA validation finding.
 

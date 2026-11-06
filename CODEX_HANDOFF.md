@@ -1,5 +1,20 @@
 ﻿# Codex Handoff
 
+## Current update (2026-11-06): Compact duplicate filters and report badges
+
+- Moved Equipment's Duplicate reports selector into the existing More filters
+  disclosure, alongside type/status/parent/NETA controls. Active filter counts,
+  reset/removal and unavailable-data behavior remain connected to existing state.
+- Equipment report rows now place a compact blue Duplicate badge beside the
+  existing Review required/Passed/Failed badge; removed the standalone brown
+  duplicate heading above the filename. Shared filename modes use the same badge.
+  Possible duplicates retain that distinction and invalid evidence stays amber.
+- Updated existing UI assertions for the intentionally changed placement/label.
+  No tests or browser checks run, per the user's standing instruction.
+  `npm run build` passed (TypeScript and Vite; Vite build 43.53 seconds), and
+  `git diff --check` passed. No ETL/data contract,
+  duplicate decisions, upload behavior, commits or pushes changed by this UI task.
+
 ## Current update (2026-11-06): Organize room and outdoor cross-floor cables
 
 - Installed and read OpenAI's `node-link-and-diagram-layout` skill in the user's

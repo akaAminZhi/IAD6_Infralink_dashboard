@@ -21,7 +21,8 @@ export function useDashboardResources(resources: readonly DashboardResource[], e
   return {
     loading,
     error,
-    retry: () => { void loadResources?.(resources, true); },
+    retry: () => { void loadResources?.(resources, true).catch(() => {}); },
+    refresh: async () => { await loadResources?.(resources, true); },
   };
 }
 

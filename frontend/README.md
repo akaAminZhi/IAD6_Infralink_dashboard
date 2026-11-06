@@ -2,6 +2,27 @@
 
 React + TypeScript + Vite frontend for the IAD06 PDM-centric equipment dashboard.
 
+## Duplicate NETA reports
+
+`neta_report_manifest.json.duplicate_audit` supplies equipment-scoped groups,
+effective Possible/Confirmed/Invalid status, stable pair/revision identifiers,
+and both Original/GC references. Equipment's duplicate filters count groups,
+including invalid evidence in All duplicate alerts. Missing/unsupported audits
+display unavailable and disable the filters.
+
+The duplicate selector lives inside Equipment's **More filters** disclosure.
+Report details place a blue **Duplicate** badge beside the existing review status;
+possible matches retain a distinct **Possible duplicate** label. Filename chips
+use the same compact badge in both filename modes instead of a separate brown heading.
+Shared detail
+panels provide both PDF previews and operator-only confirmation/revocation via
+`POST /api/automation/neta-report-duplicates/decisions`. Authorization comes from
+the existing `/access` endpoint, never from report-review editability. Automatic
+confirmations have no revoke button. Decision tasks refresh only report resources,
+keeping the current route, filters and equipment drawer mounted. If publication
+fails after saving, Refresh duplicate evidence retries publication without
+resubmitting the decision. No action starts a CxAlloy upload.
+
 ## Run Locally
 
 The recommended command starts both Vite and the local automation service from
