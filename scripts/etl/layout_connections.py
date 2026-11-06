@@ -17,6 +17,7 @@ def build_layout_connections(
     mv_test_index: dict[str, list[dict[str, str]]],
     feeder_cable_atp_index: dict[str, list[dict[str, Any]]] | None = None,
     eps_daily_test_index: dict[str, list[dict[str, str]]] | None = None,
+    mv_connection_index: dict[str, list[dict[str, Any]]] | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Keep unresolved cables as records and diagnostics, without invented paths."""
     assets = {
@@ -32,6 +33,8 @@ def build_layout_connections(
             continue
         source = target = None
         reason = None
+        connection_source = "cable_id"
+        annotation_ids: list[str] = []
         # A repeated IAD06 token separates complete IDs, including hyphenated TX IDs.
         parts = re.split(r"-IAD06-", re.sub(r"^FD[^-]*-", "", key), maxsplit=1)
         if len(parts) == 2:
@@ -50,6 +53,20 @@ def build_layout_connections(
                 reason = reason or "endpoint_equipment_not_found"
         else:
             reason = "endpoints_not_encoded"
+            diagram_records = (mv_connection_index or {}).get(key, [])
+            if diagram_records:
+                connection_source = "mv_diagram"
+                annotation_ids = [item["annotation_id"] for item in diagram_records]
+                pairs = {(item["source_equipment_key"], item["target_equipment_key"]) for item in diagram_records}
+                if any(item["reason"] for item in diagram_records) or len(pairs) != 1:
+                    reason = "mv_diagram_endpoint_unresolved" if len(diagram_records) == 1 else "ambiguous_mv_diagram_connection"
+                else:
+                    source, target = next(iter(pairs))
+                    reason = None
+                    if any(endpoint in equipment_index and len(equipment_index[endpoint]) != 1 for endpoint in (source, target)):
+                        reason = "ambiguous_endpoint_equipment"
+                    elif source not in assets or target not in assets:
+                        reason = "endpoint_equipment_not_found"
         if len(rows) != 1:
             reason = "ambiguous_cable_id"
         if reason is None and (source not in layout_keys or target not in layout_keys):
@@ -71,6 +88,8 @@ def build_layout_connections(
             "source_equipment_key": source,
             "target_equipment_key": target,
             "connection_status": reason or "resolved",
+            "connection_source": connection_source,
+            "mv_annotation_ids": annotation_ids,
             "system_element_status": record.get("status"),
             "neta_complete": record.get("neta_complete") is True,
             "neta_test_report": record.get("neta_test_report"),

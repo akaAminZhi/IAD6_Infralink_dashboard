@@ -29,6 +29,46 @@ def uploader_group_hash(paths: list[Path]) -> str:
     return digest.hexdigest()
 
 
+@pytest.mark.parametrize("stage,batch", [("temporary", "batch-1"), ("temporary", ""), ("formal", "batch-2")])
+@pytest.mark.parametrize("change", ["none", "content", "batch", "failed", "added", "shared_pdf"])
+def test_lifecycle_uploads_verify_equipment_and_cables_without_neta_completion(tmp_path, stage, batch, change):
+    equipment, cable = tmp_path / "TX6-01B.pdf", tmp_path / "FD01-TX6-01B.pdf"
+    equipment.write_bytes(b"equipment report")
+    cable.write_bytes(b"cable report")
+    rows = [{"device_name": "IAD06-TX6-01B", "source_path": f"downloads/{path.name}",
+             "output_path": str(path), "parsed_source": kind, "status": "copied"}
+            for path, kind in [(equipment, "OCR_ASSET"), (cable, "MV_CABLE")]]
+    digest = hashlib.sha256(f"{stage}:{batch}:{uploader_group_hash([equipment, cable])}".encode()).hexdigest()
+    upload = {"target_equipment": "TX6-01B", "status": "uploaded", "sha256": digest,
+              "source_path": ";".join(row["source_path"] for row in rows),
+              "pdf_path": f"{equipment};{cable}", "report_stage": stage, "batch_id": batch}
+    if change == "content":
+        cable.write_bytes(b"changed cable")
+    elif change == "batch":
+        upload["batch_id"] = "incorrect-batch"
+    elif change == "failed":
+        upload["status"] = "upload_failed"
+    elif change == "added":
+        extra = tmp_path / "new-cable.pdf"
+        extra.write_bytes(b"new cable")
+        rows.append({**rows[-1], "source_path": "downloads/new-cable.pdf", "output_path": str(extra)})
+    elif change == "shared_pdf":
+        rows.append({**rows[-1], "source_path": "downloads/another-reference.pdf"})
+        upload["source_path"] += ";downloads/another-reference.pdf"
+    rename_manifest, upload_manifest = tmp_path / "rename.csv", tmp_path / "upload.csv"
+    write_csv(rename_manifest, list(rows[0]), rows)
+    write_csv(upload_manifest, list(upload), [upload])
+    result = build_cxalloy_report_status(rename_manifest, upload_manifest, tmp_path)["records"][0]
+    statuses = {report["report_name"]: report["upload_status"] for report in result["reports"]}
+    if change in {"none", "added", "shared_pdf"}:
+        assert statuses[equipment.name] == statuses[cable.name] == "uploaded"
+        if change == "added":
+            assert statuses["new-cable.pdf"] == "pending"
+    else:
+        assert all(status != "uploaded" for status in statuses.values())
+    assert result["upload_status"] == ("uploaded" if change in {"none", "shared_pdf"} else "pending")
+
+
 def test_current_hash_controls_uploaded_status(tmp_path: Path) -> None:
     gc_dir = tmp_path / "NETA_eport_To_GC" / "IAD06-PDU6-01A-1"
     first = gc_dir / "first.pdf"

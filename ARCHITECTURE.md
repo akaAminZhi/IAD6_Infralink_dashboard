@@ -206,11 +206,21 @@ heights and overhead cable routing, while keeping source footprints unchanged.
 `layout_connections.py` adds optional `cables`, `cable_diagnostics`, and EPS/MV
 daily report source metadata to the Layout manifest. Classification uses normalized equipment
 Type; termination records are excluded. Complete FDR endpoint IDs are matched
-against unique equipment IDs; unresolved/single-ended FD records remain in the
-dataset. The frontend draws only unique endpoint placements visible in the chosen
+against unique equipment IDs. Single-ended FD records additionally resolve from
+the MV page's `Electrical-IAD6-MV.pdf` line/polyline endpoints using
+`mv_layout_connections.py`: each port must be within 24 PDF points of exactly one
+equipment rectangle on the same page. Termination labels never determine endpoints.
+Conflicting diagram associations and missing equipment remain diagnostic records.
+Mapped records retain `connection_source` and `mv_annotation_ids`; the source PDF
+is included in Layout input metadata. Missing Layout placements retain both resolved
+equipment keys without inventing positions. The frontend draws only unique endpoint placements visible in the chosen
 scene; unresolved and duplicate-placement associations remain undrawn.
 `layoutIsometricUtils.ts` owns projection, device kinds, connection placement, and
 overhead paths. `layoutSceneUtils.ts` derives the default All floors 2.5D scene:
+MV-type cables and MV-diagram mappings instead use illustrative underground
+ducts with base entries, downward drops and square plan bends. Their separate
+SVG layer sits below equipment; status colors, hit targets, markers and bounds
+use the buried route. Other cable routes retain overhead geometry.
 Second Floor translates vertically above First Floor with a compact lift based
 on room depth and device height (currently 180 units), allowing empty extents to
 overlap. Captions follow the room rows instead of enclosing the whole floor.

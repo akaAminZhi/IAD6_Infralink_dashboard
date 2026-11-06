@@ -35,6 +35,8 @@ export function CxalloyReportUploadPanel({ equipment }: { equipment: FlattenedEq
   const equipmentReports = reports?.filter((report) => report.report_kind === "equipment") ?? [];
   const cableReports = reports?.filter((report) => report.report_kind === "cable") ?? [];
   const status = equipmentStatus(equipmentReports);
+  const lastAttemptSucceeded = ["uploaded", "skipped_existing_on_site", "skipped_manifest_uploaded"]
+    .includes(equipment.cxalloy_last_attempt_status?.trim().toLowerCase() ?? "");
 
   return (
     <section aria-label="CxAlloy Report Upload" className="space-y-3 border-t pt-4">
@@ -72,7 +74,7 @@ export function CxalloyReportUploadPanel({ equipment }: { equipment: FlattenedEq
       {reports?.some((report) => report.upload_status === "review_required") ? (
         <p className="text-xs text-amber-800">Review required: a report's current contents could not be verified against successful upload records.</p>
       ) : null}
-      {equipment.cxalloy_last_attempt_error ? (
+      {equipment.cxalloy_last_attempt_error && !lastAttemptSucceeded ? (
         <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
           <span className="font-medium">Last upload attempt: </span>{equipment.cxalloy_last_attempt_error}
         </div>

@@ -1,5 +1,115 @@
 ﻿# Codex Handoff
 
+## Current update (2026-11-06): Generator clearance for buried MV cables
+
+- Shifted the main fixed GEN6 numbered row down 60 projected units in 2.5D,
+  preserving horizontal alignment. Shared scene, single floors, cables, zoom
+  and culling use the adjusted footprints. GEN6-H1, 2D plans and source PDF/data
+  coordinates retain their positions.
+- 65 existing Layout page/scene tests and preview-mode build passed. Chromium
+  verified 21 straight buried routes with no page errors; reviewed the exposed
+  TX6-01B/01C connection screenshot. Ignored artifacts use
+  `runtime/automation/gen_clearance_smoke.py` and `gen-clearance-*.png`.
+  Refresh Layout. No ETL, service restart, vendor actions or commits.
+
+## Current update (2026-11-06): Recognize lifecycle CxAlloy uploads
+
+- Fixed Dashboard upload-evidence validation to reconstruct Tracker's
+  SHA256(stage:batch:package_digest), retaining legacy digest compatibility.
+  Applies to whole packages, shared PDFs with multiple source references and
+  historical renamed files. Current PDF bytes, target and valid successful
+  history must still match; changed content/failures remain unconfirmed.
+- Per-file upload status never requires NETA Complete. TX6-01B has unknown NETA
+  completion, but its equipment PDF and three cables were verified uploaded on
+  Nov 3. All four now show Uploaded. Suppressed success/informational notes in
+  the upload manifest's error column from appearing as red upload errors.
+- Rebuilt only CxAlloy report status: 612 groups, 573 uploaded (formerly 442),
+  39 pending; 3,683 uploaded PDFs and 51 pending, zero review-required/missing.
+  Remaining groups: 33 skipped_no_equipment_report, six without upload attempts.
+  These lack successful coverage and were not marked uploaded by assumption.
+- Verification: 58 targeted Python evidence/guard tests; nine upload-panel tests
+  cover true/false/unknown NETA and successful notes vs real errors. Preview-mode
+  build passed with existing warnings. Real Chromium verified all four TX6-01B
+  file statuses and the corrected panel; ignored smoke/screenshot paths use
+  `runtime/automation/cxalloy_lifecycle_status_smoke.py` and
+  `cxalloy-lifecycle-status-fixed.png`. Refresh Equipment to load current data.
+- No vendor access, uploads, Tracker modifications, full ETL, service restarts
+  or commits. Existing changes preserved. README documents lifecycle evidence.
+
+## Current update (2026-11-06): Compact NETA report list
+
+- Replaced Equipment detail's two-column NETA cards with a single divided list.
+  Filename/preview, status badge and disclosure align in fixed columns. Green
+  check, red cross and amber warning icons pair with explicit status text.
+- Evidence expands beneath its row and starts collapsed. Passed report evidence
+  remains accessible when provided. Manual result editing lives in the row's
+  disclosure (Review when there is no evidence); read-only label is shown once.
+  Original/GC naming, temporary labels, missing links and PDF previews remain.
+- `NetaReportChips` has an opt-in plain list appearance; other consumers retain
+  their existing styling. Mobile rows wrap filename above status/actions.
+- All 15 targeted tests passed (12 EquipmentPage, three report-preview appearance
+  cases); preview-mode build passed with existing chunk warning. Real Chromium
+  verified collapsed published evidence, keyboard toggle and mobile bounds with
+  zero page errors. Desktop/mobile screenshots reviewed; ignored artifacts use
+  `runtime/automation/equipment_report_list_smoke.py` and `equipment-report-list-*`.
+  Refresh the local Equipment page. No data writes, ETL or service restart.
+
+## Current update (2026-11-06): Equipment NETA report presentation
+
+- Equipment detail report cards now use consistent status/action headers,
+  separate file areas and one collapsed native Evidence disclosure per report.
+  Failed/review-required status stays visible. Keyboard expansion, original/GC
+  names, preview and review editing retain their existing behavior.
+- Added report count and a named Original/GC toggle; improved spacing and
+  constrained the drawer's main grid to prevent mobile content widening.
+- All 12 EquipmentPage tests passed, including collapsed/open evidence in both
+  editable and published read-only modes. Preview-mode build passed with the
+  existing chunk-size warning. Conda-base Chromium checked three real published
+  evidence groups on MDS6-01D, keyboard toggling and 390px mobile bounds without
+  page errors. Desktop/mobile screenshots reviewed. Ignored smoke artifacts:
+  `runtime/automation/equipment_evidence_smoke.py` and `equipment-evidence-*.png`.
+- Refresh local Equipment to use the rebuilt UI. No data/vendor edits, ETL,
+  service restarts or commits; previous user changes retained.
+
+## Current update (2026-11-06): Underground MV cable visual trial
+
+- MV-type cables and MV-diagram mappings now use straight underground duct
+  paths: equipment-base entries, downward drops and square bends in plan.
+  Pale duct casing retains the existing colored test-status line. A dedicated
+  layer below equipment keeps routes from passing over cabinet roofs.
+- Other cable routes retain their existing behavior. Hit targets, selection,
+  report markers, visibility and zoom bounds include the underground geometry.
+  Routes/depth remain illustrative; published endpoint data is unchanged.
+- All 94 targeted page/geometry/scene tests passed across runs (new page test's
+  SVG attribute spelling corrected, then all 56 page tests passed). Preview-mode
+  build passed. Real Chromium verified 21 straight MV routes, cable inspection
+  and zoom without page errors. Reviewed `runtime/automation/mv-underground-detail.png`;
+  overview and smoke script share the `mv-underground` / `mv_underground` prefix.
+  Refresh local Layout to review this version; no ETL or service restart.
+
+## Current update (2026-11-06): MV cable topology in Layout
+
+- Layout now reads the same `Electrical-IAD6-MV.pdf` annotations as MV Equipment
+  to resolve single-ended cable IDs. Ports must be within 24 PDF points of
+  exactly one equipment rectangle on their page; copied termination labels are
+  ignored. Complete-ID parsing and report/test evidence retain existing behavior.
+- New `mv_layout_connections.py` retains annotation provenance; Layout cable
+  details identify MV diagram mappings. Missing PDF sources retain the previous
+  unresolved behavior. Conflicting/ambiguous associations remain undrawn.
+- Rebuilt only Layout data: 59 MV relationships mapped, 21 newly drawable, 38
+  with endpoints absent from current Layout PDFs. Missing positions are retained
+  as diagnostics. Eight external FDR connections retain complete-ID resolution.
+- Verification: 24 targeted Python tests passed across reader/connections/Layout
+  builder (23 initially, then four reader tests after adding integration coverage).
+  All 91 targeted frontend page/geometry/scene tests passed. Preview-mode build
+  and diff check passed; existing chunk-size warning remains. Conda-base
+  Playwright verified all 21 new cable elements, UTILITY6-01/02 endpoint details
+  and provenance, with no page errors; screenshot reviewed. Ignored artifacts:
+  `runtime/automation/mv_layout_smoke.py` and `mv-layout-smoke.png`.
+- Refresh `/layout` on the existing local preview. Existing user changes
+  preserved. No services restarted, vendor operations, full ETL or commits.
+  Static deployments need rebuilt assets and Layout data.
+
 ## Current update (2026-11-04): CxAlloy equipment detail links
 
 - All existing Infralink equipment/cable link entries now use shared

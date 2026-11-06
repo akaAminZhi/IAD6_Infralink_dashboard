@@ -45,6 +45,23 @@ beforeEach(() => {
 });
 
 describe("2.5D Layout connections", () => {
+  it("draws MV ducts below equipment and keeps their inspector and visibility controls", async () => {
+    const manifest = isometricDataset();
+    manifest.cables![0].equipment_type = "Feeder Cable - MV";
+    const user = userEvent.setup();
+    const { container } = render(<LayoutPlanPage />);
+    await screen.findByRole("button", { name: "EQ-1: Energized" });
+    const duct = container.querySelector('[data-cable-route="underground"]')!;
+    expect(duct.closest('[data-layout-layer="underground-cables"]')).toBeInTheDocument();
+    const equipment = container.querySelector('[data-layout-layer="equipment"]')!;
+    expect(duct.compareDocumentPosition(equipment) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(duct.querySelector('[data-cable-state]')).toHaveAttribute("stroke-linejoin", "miter");
+    await user.click(duct);
+    expect(screen.getByLabelText("Cable details")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Hide all cables" }));
+    expect(container.querySelector('[data-cable-route="underground"]')).not.toBeInTheDocument();
+  });
+
   it.each(["plan", "isometric"])("keeps multiple selections while switching between box selection and panning in %s", async (view) => {
     isometricDataset();
     localStorage.setItem(LAYOUT_VIEW_KEY, view);

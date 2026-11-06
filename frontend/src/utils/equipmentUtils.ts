@@ -392,6 +392,9 @@ export function hasMissingNetaReport(equipment: FlattenedEquipmentRow): boolean 
 
 export function hasPendingCxalloyReport(equipment: FlattenedEquipmentRow): boolean {
   if (!requiresEquipmentTestTracking(equipment) || equipment.neta_complete !== true) return false;
+  // UPP6 assets remain test-tracked but do not require CxAlloy uploads.
+  if ([equipment.equipment_id, equipment.display_equipment_id, equipment.source_equipment_label]
+    .some((reference) => /^IAD06-(?:TX-)?UPP6/.test(normalizeLookup(reference)))) return false;
   if (equipment.cxalloy_reports != null) {
     return equipment.cxalloy_reports.some((report) => report.upload_status === "pending");
   }

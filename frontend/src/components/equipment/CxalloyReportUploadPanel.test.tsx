@@ -12,12 +12,22 @@ function equipment(reports?: CxalloyReportFileStatus[]) {
 }
 
 describe("CxalloyReportUploadPanel", () => {
-  it("keeps equipment uploaded while displaying each downloaded cable's own status without totals", () => {
-    const row = equipment([
+  it.each(["uploaded", "skipped_existing_on_site", "skipped_manifest_uploaded"])("does not show a successful %s note as an upload error", (status) => {
+    render(<CxalloyReportUploadPanel equipment={{ ...equipment([
+      { report_name: "report.pdf", report_kind: "equipment", upload_status: "uploaded" },
+    ]), neta_complete: false, cxalloy_last_attempt_status: status,
+      cxalloy_last_attempt_error: "Same target equipment and PDF hash already completed." }} />);
+    expect(screen.queryByText(/Last upload attempt/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Same target equipment/)).not.toBeInTheDocument();
+    expect(screen.getAllByText("Uploaded")).toHaveLength(2);
+  });
+
+  it.each([true, false, null])("keeps equipment uploaded independently of NETA completion (%s) and each cable's own status", (netaComplete) => {
+    const row = { ...equipment([
       { report_name: "switchboard.pdf", report_kind: "equipment", upload_status: "uploaded" },
       { report_name: "uploaded-cable.pdf", report_kind: "cable", upload_status: "uploaded" },
       { report_name: "new-cable.pdf", report_kind: "cable", upload_status: "pending" },
-    ]);
+    ]), neta_complete: netaComplete };
     const { container, rerender } = render(<CxalloyReportUploadPanel equipment={row} />);
     const deviceSection = screen.getByRole("region", { name: "Equipment Reports" });
     expect(within(deviceSection).getAllByText("Uploaded")).toHaveLength(2);

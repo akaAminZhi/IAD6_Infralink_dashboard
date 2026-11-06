@@ -1,10 +1,16 @@
 import type { LayoutEquipmentRecord, LayoutPlanManifest, LayoutRegionRecord, PowerPlanPoint, PowerPlanRect } from "../types/data";
-import { isNearbyCable, layoutCableLanes, layoutCableMarkerPoint, layoutCablePath, layoutConnectionBounds,
+import { isNearbyCable, isUndergroundCable, layoutCableLanes, layoutCableMarkerPoint, layoutCablePath, layoutConnectionBounds,
   layoutDeviceHeight, layoutExternalCableKind, placedLayoutCables, projectedLayoutBounds, projectedLayoutRoomLabel,
   routeLayoutCrossFloorCables, type PlacedLayoutCable } from "./layoutIsometricUtils";
 import { layoutBounds, visibleLayoutEquipment, visibleLayoutRegions } from "./layoutPlanUtils";
 
 export const ALL_LAYOUT_FLOORS = "all-floors";
+
+/** Give the main outdoor generator row clearance below the buried MV ducts. */
+export function isometricLayoutEquipment(rows: LayoutEquipmentRecord[]): LayoutEquipmentRecord[] {
+  return rows.map((row) => row.fixed && /^GEN6-\d/i.test(row.equipment_key.replace(/^IAD06-/i, ""))
+    ? { ...row, rect: { ...row.rect, x: row.rect.x + 60, y: row.rect.y + 60 } } : row);
+}
 
 export interface LayoutSceneGroup {
   id: string;
@@ -27,7 +33,7 @@ export function layoutCableGeometry(connections: PlacedLayoutCable[]) {
   const lanes = layoutCableLanes(connections);
   return connections.map((connection, index) => ({ connection,
     path: layoutCablePath(connection, lanes[index]),
-    route: connection.externalKind === "shared-feed" || !connection.externalKind && !connection.roomToOverhead && isNearbyCable(connection) ? "arc" as const : "long" as const,
+    route: isUndergroundCable(connection.cable) ? "underground" as const : connection.externalKind === "shared-feed" || !connection.externalKind && !connection.roomToOverhead && isNearbyCable(connection) ? "arc" as const : "long" as const,
     markerPoint: layoutCableMarkerPoint(connection, lanes[index]),
     zone: connection.source.fixed && connection.target.fixed ? "fixed" as const
       : connection.source.fixed || connection.target.fixed ? "mixed" as const : "room" as const,
@@ -43,7 +49,7 @@ function translateRect(rect: PowerPlanRect, offsetY: number): PowerPlanRect {
 /** A display-only exploded scene. Source records and published coordinates are never modified. */
 export function buildCombinedLayoutScene(manifest: LayoutPlanManifest) {
   const baseId = manifest.floors[0]?.floor_id ?? "";
-  const shared = visibleLayoutEquipment(manifest, baseId).filter((row) => row.fixed);
+  const shared = isometricLayoutEquipment(visibleLayoutEquipment(manifest, baseId).filter((row) => row.fixed));
   const sharedRegions = visibleLayoutRegions(manifest, baseId).filter((region) => region.fixed);
   const rows: LayoutEquipmentRecord[] = [...shared];
   const regions: LayoutRegionRecord[] = [...sharedRegions];

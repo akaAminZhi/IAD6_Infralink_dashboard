@@ -23,7 +23,7 @@ import { fetchJson } from "../utils/dataLoaders";
 import { LAYOUT_CABLE_MISSING_REPORT_MESSAGE, LAYOUT_CABLE_TEST_STATES, layoutCableMissingReport, layoutCableTestState } from "../utils/cableTestUtils";
 import { getLayoutCableReportNames } from "../utils/layoutReportUtils";
 import { getNetaReportNames } from "../utils/netaReports";
-import { ALL_LAYOUT_FLOORS, buildCombinedLayoutScene, layoutCableGeometry, layoutFloorFootprint } from "../utils/layoutSceneUtils";
+import { ALL_LAYOUT_FLOORS, buildCombinedLayoutScene, isometricLayoutEquipment, layoutCableGeometry, layoutFloorFootprint } from "../utils/layoutSceneUtils";
 import {
   DEVICE_KIND_LABELS, LAYOUT_VIEW_KEY, layoutCableLanes, layoutConnectionBounds, layoutDeviceHeight, layoutDeviceKind,
   placedLayoutCables, projectLayoutPoint, projectedLayoutBounds, projectedLayoutRoomLabel,
@@ -176,7 +176,11 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
   }, [loading]);
 
   const combinedScene = useMemo(() => manifest && hasIsometric ? buildCombinedLayoutScene(manifest) : null, [manifest, hasIsometric]);
-  const rows = useMemo(() => combined && combinedScene ? combinedScene.rows : manifest ? visibleLayoutEquipment(manifest, floorId) : [], [manifest, floorId, combined, combinedScene]);
+  const rows = useMemo(() => {
+    if (combined && combinedScene) return combinedScene.rows;
+    const records = manifest ? visibleLayoutEquipment(manifest, floorId) : [];
+    return isometric ? isometricLayoutEquipment(records) : records;
+  }, [manifest, floorId, combined, combinedScene, isometric]);
   const regions = useMemo(() => combined && combinedScene ? combinedScene.regions : manifest ? visibleLayoutRegions(manifest, floorId) : [], [manifest, floorId, combined, combinedScene]);
   const connections = useMemo(() => combined && combinedScene ? combinedScene.connections
     : placedLayoutCables(manifest?.cables ?? [], rows, regions), [manifest, rows, regions, combined, combinedScene]);
@@ -218,13 +222,14 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
     const labels = layoutRoomLabels(allRegions);
     const records = [...allRecords, ...allRegions, ...labels];
     const cableBounds = manifest.floors.flatMap((floor) => {
-      const floorConnections = placedLayoutCables(manifest.cables ?? [], visibleLayoutEquipment(manifest, floor.floor_id), visibleLayoutRegions(manifest, floor.floor_id));
+      const floorConnections = placedLayoutCables(manifest.cables ?? [], isometricLayoutEquipment(visibleLayoutEquipment(manifest, floor.floor_id)), visibleLayoutRegions(manifest, floor.floor_id));
       const lanes = layoutCableLanes(floorConnections);
       return floorConnections.map((connection, index) => ({ rect: layoutConnectionBounds(connection, lanes[index]) }));
     });
     const roomCallouts = allRegions.filter((region) => region.kind === "room").map(projectedLayoutRoomLabel);
     const ground = { rect: projectedLayoutBounds(layoutFloorFootprint(manifest), -3) };
-    return { plan: layoutBounds(records), isometric: layoutBounds([...records.map((record) => ({ rect: projectedLayoutBounds(record.rect, 32) })), ground, ...roomCallouts, ...cableBounds]) };
+    const isometricRecords = [...isometricLayoutEquipment(allRecords), ...allRegions, ...labels];
+    return { plan: layoutBounds(records), isometric: layoutBounds([...isometricRecords.map((record) => ({ rect: projectedLayoutBounds(record.rect, 32) })), ground, ...roomCallouts, ...cableBounds]) };
   }, [manifest]);
   const fullBounds = combined && combinedScene ? combinedScene.bounds : isometric ? allBounds.isometric : allBounds.plan;
   const bounds = viewport ?? fullBounds;
@@ -513,10 +518,12 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
     : manifest.floors.find((floor) => floor.floor_id === row.source_floor_id)?.label ?? "Floor equipment";
   const isCableActive = (cable: LayoutCableRecord) => selectedCableId ? selectedCableId === cable.cable_id : focusedCableIds.has(cable.cable_id);
   const isCableHighlighted = (cable: LayoutCableRecord) => highlightMissingReports ? missingReportCableIds.has(cable.cable_id) : isCableActive(cable);
-  const backgroundFeeds = drawnCables.filter(({ connection }) => connection.externalKind === "shared-feed" &&
+  const undergroundCables = drawnCables.filter(({ route }) => route === "underground");
+  const aboveGroundCables = drawnCables.filter(({ route }) => route !== "underground");
+  const backgroundFeeds = aboveGroundCables.filter(({ connection }) => connection.externalKind === "shared-feed" &&
     !isCableHighlighted(connection.cable));
   const backgroundFeedIds = new Set(backgroundFeeds.map(({ connection }) => connection.cable.cable_id));
-  const foregroundCables = drawnCables.filter(({ connection }) => !backgroundFeedIds.has(connection.cable.cable_id));
+  const foregroundCables = aboveGroundCables.filter(({ connection }) => !backgroundFeedIds.has(connection.cable.cable_id));
   const ordinaryCables = foregroundCables.filter(({ connection }) => !isCableHighlighted(connection.cable));
   const highlightedCables = foregroundCables.filter(({ connection }) => isCableHighlighted(connection.cable));
   const groundPlates = combined && combinedScene ? combinedScene.groups.flatMap((group, index) => group.groundRect
@@ -544,6 +551,7 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
       <p className="break-all">To: {selectedCable.target_equipment_key ?? "Unresolved"}
         {selectedConnection ? <span className="block text-xs text-muted-foreground">{equipmentFloorLabel(selectedConnection.target)}</span> : null}</p>
     </div>
+    {selectedCable.connection_source === "mv_diagram" ? <p className="text-xs text-muted-foreground">Connection mapped from MV Equipment diagram.</p> : null}
     <p className="text-sm font-medium" style={{ color: LAYOUT_CABLE_TEST_STATES[layoutCableTestState(selectedCable)].color }}>{LAYOUT_CABLE_TEST_STATES[layoutCableTestState(selectedCable)].label}</p>
     {layoutCableMissingReport(selectedCable) ? <p className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">
       <CircleAlert className="h-4 w-4 shrink-0" aria-hidden="true" />{LAYOUT_CABLE_MISSING_REPORT_MESSAGE}
@@ -630,15 +638,15 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
       <Button variant="outline" onClick={restoreGlobalView}><Maximize className="mr-2 h-4 w-4" />{isometric ? "Global view" : "Fit layout"}</Button>
     </div>
     {isometric ? <div className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-lg border bg-card px-4 py-3 text-xs">
-      <span className="inline-flex items-center font-medium"><Cable className="mr-2 h-4 w-4" />Overhead cables ({connections.length})</span>
-      <Button variant="outline" aria-pressed={!showCables} aria-controls="layout-cables layout-shared-feed-cables" onClick={() => {
+      <span className="inline-flex items-center font-medium"><Cable className="mr-2 h-4 w-4" />Cable connections ({connections.length})</span>
+      <Button variant="outline" aria-pressed={!showCables} aria-controls="layout-cables layout-shared-feed-cables layout-underground-cables" onClick={() => {
         setShowCables((value) => !value); setSelectedCableId(null); setHighlightMissingReports(false);
       }}>
         {showCables ? <EyeOff className="mr-2 h-4 w-4" /> : <Eye className="mr-2 h-4 w-4" />}
         {showCables ? "Hide all cables" : "Show all cables"}
       </Button>
       <Button variant={highlightMissingReports ? "secondary" : "outline"} aria-pressed={highlightMissingReports}
-        aria-controls="layout-cables layout-shared-feed-cables" disabled={!missingReportConnections.length && !highlightMissingReports}
+        aria-controls="layout-cables layout-shared-feed-cables layout-underground-cables" disabled={!missingReportConnections.length && !highlightMissingReports}
         className={highlightMissingReports ? "border border-amber-400 bg-amber-100 text-amber-900 hover:bg-amber-200" : undefined}
         title="Highlight Infralink-updated cables with no listed ATP/NETA report on this floor."
         onClick={() => {
@@ -656,7 +664,7 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
       </span>
       <Button variant="ghost" className={selectionKeys.size || selectedCable || unplacedEquipment || highlightMissingReports ? undefined : "invisible"}
         disabled={!selectionKeys.size && !selectedCable && !unplacedEquipment && !highlightMissingReports} onClick={clearFocus}><X className="mr-2 h-4 w-4" />Clear focus</Button>
-      <span className="w-full text-muted-foreground">Illustrative equipment heights and overhead routes. Selected devices highlight only their direct connections. Terminations are hidden.</span>
+      <span className="w-full text-muted-foreground">MV cables use underground ducts with straight bends; other cables use overhead routes. Routes and burial depth are illustrative. Selected devices highlight their direct connections.</span>
       {!manifest.cables ? <span className="text-amber-700">Cable data is unavailable. Rebuild Layout data to load connections.</span> : null}
     </div> : null}
     <div className="flex flex-wrap items-center gap-3">
@@ -718,6 +726,10 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
             </g>)}
           </g> : null}
           <LayoutBackground regions={regions} roomLabels={roomLabels} isometric={isometric} />
+          {isometric && showCables ? <g id="layout-underground-cables" data-layout-layer="underground-cables">
+            {undergroundCables.filter(({ connection }) => !isCableHighlighted(connection.cable)).map(renderCable)}
+            {undergroundCables.filter(({ connection }) => isCableHighlighted(connection.cable)).map(renderCable)}
+          </g> : null}
           {isometric && showCables ? <g id="layout-shared-feed-cables" data-layout-layer="shared-feed-cables">
             {backgroundFeeds.map(renderCable)}
           </g> : null}

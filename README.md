@@ -105,6 +105,11 @@ Historical site checks naming another PDF are ignored. A later
 or site check verifies it again; cached dashboard hashes and manifest skips do
 not override this. Login failures or failed cable uploads alone do not revoke
 previously confirmed equipment uploads.
+Per-file upload status is independent of NETA Complete. Verified temporary
+attachments can be Uploaded while equipment NETA remains incomplete/unknown.
+Upload evidence supports both legacy package hashes and Tracker lifecycle
+hashes containing the report stage and batch; current PDF bytes must still
+match the successful historical upload.
 
 Preview without contacting CxAlloy or changing upload records:
 

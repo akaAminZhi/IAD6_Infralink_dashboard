@@ -17,6 +17,7 @@ interface NetaReportChipsProps {
   compactNameMode?: NetaReportNameMode;
   showLinkedFileNames?: boolean;
   stackedCompact?: boolean;
+  listAppearance?: boolean;
 }
 
 interface ReportPreview {
@@ -104,6 +105,7 @@ export function NetaReportChips({
   compactNameMode = "original",
   showLinkedFileNames = false,
   stackedCompact = false,
+  listAppearance = false,
 }: NetaReportChipsProps) {
   const manifest = useNetaReportManifest(reports.length > 0);
   const { loading } = useDashboardResources(["netaReportManifest"], reports.length > 0);
@@ -135,6 +137,16 @@ export function NetaReportChips({
               compactNameMode === "gc" ? gcLink ?? originalLink : originalLink ?? gcLink;
             const displayName =
               compactNameMode === "gc" ? gcLink?.fileName ?? reportName : reportName;
+
+            if (listAppearance) return <div className="min-w-0 text-xs leading-5" key={`${reportName}-${index}`}>
+              {displayLink ? <button type="button" title={displayLink.fileName}
+                className="block w-full break-all text-left text-foreground underline-offset-4 hover:text-primary hover:underline focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                onClick={(event) => { event.stopPropagation(); setPreview(makePreview(reportName, displayLink)); }}>
+                {displayName}
+              </button> : <span className="block break-all">{displayName}</span>}
+              {displayLink?.reportStage === "temporary" ? <span className="text-[10px] text-amber-800">Temporary</span> : null}
+              {!displayLink ? <span className="text-[11px] text-muted-foreground">No local PDF link found.</span> : null}
+            </div>;
 
             return (
               <div

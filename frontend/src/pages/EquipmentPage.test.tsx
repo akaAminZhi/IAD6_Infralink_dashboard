@@ -17,6 +17,8 @@ describe("EquipmentPage", () => {
     const user = userEvent.setup();
     const entries = [
       { id: "EQ-PENDING", complete: true, status: "pending" as const },
+      { id: "IAD06-TX-UPP6-01A", complete: true, status: "pending" as const },
+      { id: "IAD06-UPP6-01A", complete: true, status: "pending" as const },
       { id: "EQ-INCOMPLETE", complete: false, status: "pending" as const },
       { id: "EQ-UNKNOWN", complete: null, status: "pending" as const },
       { id: "EQ-REVIEW", complete: true, status: "review_required" as const },
@@ -449,7 +451,14 @@ describe("EquipmentPage", () => {
     await user.click(failedCard!);
     await user.click(screen.getByRole("cell", { name: "IAD06-EQ-REVIEW" }));
     expect(document.querySelector('[data-review-status="REVIEW_REQUIRED"]')).not.toBeNull();
-    expect(screen.getByText("Page 2: Verify breaker settings.")).toBeInTheDocument();
+    const evidence = screen.getByRole("button", { name: "Evidence for IAD06-EQ-REVIEW - NETA Test Report-01.pdf" });
+    expect(evidence).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByText("Page 2: Verify breaker settings.")).not.toBeVisible();
+    await user.click(evidence);
+    expect(evidence).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText("Page 2: Verify breaker settings.")).toBeVisible();
+    await user.click(evidence);
+    expect(screen.getByText("Page 2: Verify breaker settings.")).not.toBeVisible();
     if (readOnly) {
       expect(screen.getByText("Read only")).toBeInTheDocument();
       expect(screen.queryByLabelText(
@@ -462,6 +471,7 @@ describe("EquipmentPage", () => {
       expect(fetchMock.mock.calls.some(([, init]) => init?.method === "PUT")).toBe(false);
       return;
     }
+    await user.click(evidence);
     await user.selectOptions(
       screen.getByLabelText(
         "Review result for IAD06-EQ-REVIEW - NETA Test Report-01.pdf",

@@ -14,11 +14,13 @@ try:
     from .build_power_plan import FEEDER_CABLE_ATP_DIR, MV_REPORT_DIR, build_feeder_cable_atp_index, build_mv_test_index, normalize_equipment_key
     from .eps_daily_test import EPS_DAILY_REPORT_DIR, build_eps_daily_test_index
     from .layout_connections import build_layout_connections
+    from .mv_layout_connections import read_mv_connections
     from .json_utils import file_metadata, load_records_json, write_json
 except ImportError:
     from build_power_plan import FEEDER_CABLE_ATP_DIR, MV_REPORT_DIR, build_feeder_cable_atp_index, build_mv_test_index, normalize_equipment_key
     from eps_daily_test import EPS_DAILY_REPORT_DIR, build_eps_daily_test_index
     from layout_connections import build_layout_connections
+    from mv_layout_connections import read_mv_connections
     from json_utils import file_metadata, load_records_json, write_json
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -188,8 +190,12 @@ def build_layout_plan(
         }.values())
     feeder_cable_atp_index = build_feeder_cable_atp_index(feeder_cable_atp_dir)
     layout_keys = {record["equipment_key"] for record in fixed_equipment + [record for floor in floors for record in floor["equipment"]]}
+    mv_path = source_dir / "Electrical-IAD6-MV.pdf"
+    mv_connections = read_mv_connections(mv_path)
+    if mv_path.exists():
+        sources[mv_path.name] = file_metadata(mv_path)
     cables, cable_diagnostics = build_layout_connections(
-        equipment_index, layout_keys, mv_test_index, feeder_cable_atp_index, eps_daily_test_index,
+        equipment_index, layout_keys, mv_test_index, feeder_cable_atp_index, eps_daily_test_index, mv_connections,
     )
     # Preserve all placements; the UI chooses the first fixed source floor per ID.
     payload = {

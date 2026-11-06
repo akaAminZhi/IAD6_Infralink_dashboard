@@ -294,6 +294,8 @@ export interface LayoutCableRecord {
   source_equipment_key: string | null;
   target_equipment_key: string | null;
   connection_status: string;
+  connection_source?: "cable_id" | "mv_diagram";
+  mv_annotation_ids?: string[];
   system_element_status: string | null;
   neta_complete: boolean;
   neta_test_report: string | null;

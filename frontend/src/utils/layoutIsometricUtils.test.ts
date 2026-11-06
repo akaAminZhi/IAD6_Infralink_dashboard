@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { LayoutCableRecord, LayoutEquipmentRecord, LayoutRegionRecord, PowerPlanPoint } from "../types/data";
-import { isNearbyCable, layoutCableLanes, layoutCableMarkerPoint, layoutCablePath, layoutConnectionBounds, layoutDeviceHeight, layoutDeviceKind, overheadCablePoints, placedLayoutCables, projectLayoutPoint, projectedLayoutBounds } from "./layoutIsometricUtils";
+import { isNearbyCable, layoutCableLanes, layoutCableMarkerPoint, layoutCablePath, layoutConnectionBounds, layoutDeviceHeight, layoutDeviceKind, overheadCablePoints, undergroundCablePoints, placedLayoutCables, projectLayoutPoint, projectedLayoutBounds } from "./layoutIsometricUtils";
 
 const device = (key: string, x = 0): LayoutEquipmentRecord => ({ equipment_key: key, label: key, annotation_id: key,
   rect: { x, y: 20, width: 10, height: 8 }, fixed: false, source_floor_id: "first", match_status: "matched",
@@ -44,6 +44,24 @@ function pathsCross(a: PowerPlanPoint[], b: PowerPlanPoint[]): boolean {
 }
 
 describe("2.5D geometry", () => {
+  it.each(["Feeder Cable - MV", "Feeder Cable - MV (Off-Site)"])("routes %s below device bases with straight duct bends", (equipment_type) => {
+    const connection = { cable: { ...cable, equipment_type }, source: device("A"), target: device("B", 60) };
+    const points = undergroundCablePoints(connection);
+    expect(points[0]).toEqual(projectLayoutPoint(5, 24));
+    expect(points[1].x).toBe(points[0].x);
+    expect(points[1].y).toBeGreaterThan(points[0].y);
+    expect(points[4].y).toBeGreaterThan(points[5].y);
+    expect(layoutCablePath(connection)).not.toMatch(/[CQ]/);
+    expect(layoutCablePath(connection)).toContain(" L ");
+    const bounds = layoutConnectionBounds(connection);
+    for (const point of points) {
+      expect(point.x).toBeGreaterThanOrEqual(bounds.x);
+      expect(point.y).toBeLessThanOrEqual(bounds.y + bounds.height);
+    }
+    expect(layoutCableMarkerPoint(connection)).toEqual({ x: (points[2].x + points[3].x) / 2, y: (points[2].y + points[3].y) / 2 });
+    expect(layoutCablePath({ ...connection, source: connection.target, target: connection.source })).toBe(layoutCablePath(connection));
+  });
+
   it("uses equal 2:1 axes with vertical equipment heights", () => {
     expect(projectLayoutPoint(10, 0)).toEqual({ x: 10, y: 5 });
     expect(projectLayoutPoint(0, 10)).toEqual({ x: -10, y: 5 });

@@ -8,7 +8,7 @@ export const LayoutCable = memo(function LayoutCable({ cable, path, markerPoint,
   path: string;
   markerPoint: PowerPlanPoint;
   markerSize: number;
-  route: "arc" | "long";
+  route: "arc" | "long" | "underground";
   zone: "fixed" | "mixed" | "room";
   externalKind?: "cross-floor" | "shared-feed";
   hubEquipmentKey?: string;
@@ -30,11 +30,13 @@ export const LayoutCable = memo(function LayoutCable({ cable, path, markerPoint,
     onClick={() => onSelect(cable.cable_id)}
     onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onSelect(cable.cable_id); } }}>
     <title>{`${cable.source_equipment_key} → ${cable.target_equipment_key}\n${cable.cable_id}\n${description}`}</title>
+    {route === "underground" ? <path d={path} fill="none" stroke={active ? "#cbd5e1" : "#e2e8f0"} strokeWidth={active ? 10 : 7}
+      vectorEffect="non-scaling-stroke" strokeLinejoin="miter" pointerEvents="none" /> : null}
     {active ? <path d={path} fill="none" stroke="white" strokeWidth={8.5}
       vectorEffect="non-scaling-stroke" pointerEvents="none" /> : null}
     <path d={path} fill="none" stroke="transparent" strokeWidth={14} vectorEffect="non-scaling-stroke" />
     <path d={path} fill="none" stroke={state.color} strokeWidth={lineWidth} strokeDasharray={state.dash}
-      opacity={lineOpacity} vectorEffect="non-scaling-stroke" strokeLinecap="round" strokeLinejoin="round"
+      opacity={lineOpacity} vectorEffect="non-scaling-stroke" strokeLinecap={route === "underground" ? "butt" : "round"} strokeLinejoin={route === "underground" ? "miter" : "round"}
       pointerEvents="none" data-cable-state={stateKey} />
     {missingReport ? <CircleAlert x={markerPoint.x - markerSize / 2} y={markerPoint.y - markerSize / 2}
       width={markerSize} height={markerSize} color="#92400e" fill="#fef3c7" strokeWidth={2.5}

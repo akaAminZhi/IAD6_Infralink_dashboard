@@ -59,6 +59,15 @@ def combined_sha256(files: Iterable[tuple[Path, str]]) -> str:
     return digest.hexdigest()
 
 
+def matches_upload_digest(digest: str, upload: dict[str, str]) -> bool:
+    """Match Tracker's legacy or lifecycle-qualified package digest."""
+    stage = clean(upload.get("report_stage")) or "formal"
+    batch = clean(upload.get("batch_id"))
+    if batch or stage == "temporary":
+        digest = hashlib.sha256(f"{stage}:{batch}:{digest}".encode()).hexdigest()
+    return digest == clean(upload.get("sha256"))
+
+
 def canonical_equipment_id(value: object) -> str:
     equipment_id = clean(value)
     if equipment_id and not equipment_id.upper().startswith("IAD06-"):
@@ -226,7 +235,10 @@ def matches_renamed_upload(
             (Path(path.replace("\\", "/").rsplit("/", 1)[-1]), hashes[source])
             for source, path in zip(uploaded_sources, uploaded_paths)
         ]
-        if combined_sha256(original_files) == clean(upload.get("sha256")):
+        # Tracker lifecycle packages include their stage and batch in the
+        # recorded hash. Reconstruct that historical package using today's
+        # bytes; success alone still does not prove unchanged PDF contents.
+        if matches_upload_digest(combined_sha256(original_files), upload):
             return True
     return False
 
@@ -342,6 +354,8 @@ def build_cxalloy_report_status(
             and not missing_report_names
             and (
                 (target.casefold(), current_hash) in completed_keys
+                or any(matches_upload_digest(current_hash, upload)
+                       for upload in valid_upload_history(uploads_by_target[target.casefold()]))
                 or matches_renamed_upload(
                     grouped_rows[device_name], existing_files,
                     uploads_by_target[target.casefold()],

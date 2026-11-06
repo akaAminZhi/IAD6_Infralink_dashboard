@@ -7,7 +7,7 @@ import type { NetaReportManifest } from "../../types/data";
 import { NetaReportChips } from "./NetaReportChips";
 
 describe("NetaReportChips lifecycle", () => {
-  it.each([false, true])("previews temporary Original/GC then refreshed formal PDFs (stacked=%s)", async (stacked) => {
+  it.each(["compact", "stacked", "list"])("previews temporary Original/GC then refreshed formal PDFs (%s)", async (appearance) => {
     const user = userEvent.setup();
     const manifest = (stage: "temporary" | "formal"): NetaReportManifest => ({ records: [
       { equipment_id: "EQ-1", source_key: "downloaded", source_label: "Original", report_name: "Report.pdf", report_stage: stage, url: `/${stage}/original.pdf` },
@@ -16,7 +16,8 @@ describe("NetaReportChips lifecycle", () => {
     ] });
     const view = (stage: "temporary" | "formal", mode: "original" | "gc") => (
       <NetaReportManifestProvider manifest={manifest(stage)}>
-        <NetaReportChips reports={["Report.pdf"]} equipmentId="EQ-1" compactNameMode={mode} showLinkedFileNames={stacked} />
+        <NetaReportChips reports={["Report.pdf"]} equipmentId="EQ-1" compactNameMode={mode}
+          showLinkedFileNames={appearance !== "compact"} listAppearance={appearance === "list"} />
       </NetaReportManifestProvider>
     );
     const { rerender } = render(view("temporary", "original"));

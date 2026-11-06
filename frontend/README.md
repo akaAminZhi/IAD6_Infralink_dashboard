@@ -78,6 +78,10 @@ Static deployments need the generated dataset along with rebuilt application cod
 
 ## Pending CxAlloy uploads
 
+Equipment IDs starting with `IAD06-TX-UPP6` or `IAD06-UPP6` are excluded from
+pending-upload counts and filters because they do not require CxAlloy uploads.
+Their EPS/NETA tracking remains unchanged.
+
 Overview and Equipment use the same deduplicated pending-upload count and filter:
 the equipment must be tracked, have `neta_complete === true`, and contain at
 least one local PDF whose file status is `pending`. A new pending cable still

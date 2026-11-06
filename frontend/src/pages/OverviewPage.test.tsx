@@ -52,12 +52,14 @@ describe("OverviewPage", () => {
       equipment: [
         { equipment_id: "EQ-PDM", neta_complete: true },
         { equipment_id: "EQ-STANDALONE", neta_complete: true },
+        { equipment_id: "IAD06-TX-UPP6-01A", neta_complete: true },
+        { equipment_id: "IAD06-UPP6-01A", neta_complete: true },
         { equipment_id: "EQ-INCOMPLETE", neta_complete: false },
         { equipment_id: "EQ-REVIEW", neta_complete: true },
         { equipment_id: "EQ-MISSING", neta_complete: true },
       ],
       cxalloyReportStatus: { summary: { pending_equipment: 999 }, records: [
-        ...["EQ-PDM", "EQ-STANDALONE", "EQ-INCOMPLETE"].map((equipment_id) => ({ equipment_id, upload_status: "pending" as const,
+        ...["EQ-PDM", "EQ-STANDALONE", "EQ-INCOMPLETE", "IAD06-TX-UPP6-01A", "IAD06-UPP6-01A"].map((equipment_id) => ({ equipment_id, upload_status: "pending" as const,
           reports: [{ report_name: "Report.pdf", report_kind: "equipment" as const, upload_status: "pending" as const }],
         })),
         { equipment_id: "EQ-REVIEW", upload_status: "pending", reports: [{ report_name: "Review.pdf", report_kind: "equipment", upload_status: "review_required" }] },
