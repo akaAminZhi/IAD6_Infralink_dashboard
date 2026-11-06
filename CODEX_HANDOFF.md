@@ -1,5 +1,44 @@
 ﻿# Codex Handoff
 
+## Current update (2026-11-06): Organize room and outdoor cross-floor cables
+
+- Installed and read OpenAI's `node-link-and-diagram-layout` skill in the user's
+  Codex skill directory. Applied its fixed-node/port routing workflow to existing
+  SVG geometry; no new frontend dependency or ETL/data contract was needed.
+- New `layoutCableRouting.ts` groups room fans by hub, destination room and
+  equipment column, assigns parallel aisle tracks, and considers bounded side,
+  perimeter and height choices. Outdoor upper-floor feeds use straight risers
+  with rounded grid-aligned approaches. A deterministic, spatially indexed
+  crossing-reduction pass selects routes and rejects self-crossing candidates.
+  Ports, source coordinates, cable IDs/test evidence and GEN6 details stay intact.
+  Nearby one-to-one arcs, base-floor outdoor routes and buried MV ducts remain.
+- Scene construction caches single-floor connections for camera bounds and view
+  changes, including organized outdoor approaches in the single Second Floor
+  view. All rendering, hit targets, warning markers and culling use the same
+  selected paths. The perf fixture now duplicates room/fixed regions as well as
+  equipment/cables, and counts underground/background cable layers correctly.
+- Real manifest: 460 equipment, 545 drawable cables, including 22 organized
+  outdoor upper-floor feeds. Sampled projected crossing route pairs fell from
+  2,823 to 2,496 (~12%); room-room pairs from 2,025 to 1,594 (~21%). This is a
+  projected readability metric, not physical cable conflicts or cable lengths.
+  Some crossings remain; summed projected path length rose about 15% with the
+  perimeter routes. No claim of a globally optimal or crossing-free layout.
+- All 97 targeted tests passed across routing, isometric geometry, scene and
+  Layout page files. Strict TypeScript/preview-mode production build passed with
+  the existing chunk-size warning. Compiled Chromium smoke verified all 545
+  cables, 22 straight outdoor feeds, original GEN6 detail, keyboard inspection,
+  connection zoom, cable visibility, floor/view switches and missing-report
+  highlighting with zero page errors. Reviewed compiled overview/detail images.
+- Final compiled preview, DPR 2: current data ready in 1.94 s; 8x data (3,680
+  equipment, 4,360 cables, 96 rooms) in 11.30 s. Both drag medians 16.7 ms, p95 <=16.8 ms,
+  no drag long tasks. Zoomed 8x check (five zoom clicks, drag step 8) also had
+  16.7 ms median/p95 and no drag long tasks; offscreen culling remained active.
+  Timings are local measurements. Ignored evidence uses
+  `runtime/automation/cable_routing_*.py`, `cable-routing-*.json/png/jsonl`.
+  Refresh Layout on the existing preview. Temporary dev server stopped; existing
+  preview/automation services retained. No vendor writes or ETL. User requested
+  a local commit and will push it themselves.
+
 ## Current update (2026-11-06): Preserve GEN6 model detail
 
 - GEN6 generators retain their original detailed 2.5D models at every zoom

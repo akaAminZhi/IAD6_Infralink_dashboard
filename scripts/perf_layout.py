@@ -44,8 +44,12 @@ def synthetic_manifest(factor: int) -> dict[str, Any]:
 
     for index in range(1, factor):
         result["fixed_equipment"].extend(clone_record(row, index) for row in source["fixed_equipment"])
+        if "fixed_regions" in source:
+            result["fixed_regions"].extend(clone_record(row, index) for row in source["fixed_regions"])
         for floor, original in zip(result["floors"], source["floors"]):
             floor["equipment"].extend(clone_record(row, index) for row in original["equipment"])
+            if "regions" in original:
+                floor["regions"].extend(clone_record(row, index) for row in original["regions"])
         for cable in source["cables"]:
             clone = copy.deepcopy(cable)
             clone["cable_id"] += f"-SIM{index}"
@@ -86,7 +90,7 @@ def run_case(browser: Browser, factor: int, mode: str, dpr: int = 1, zoom_clicks
       }).length;
     }""")
     full_detail_count = page.locator('[data-device-detail="full"]').count()
-    cable_count = page.locator('[data-layout-layer="cables"] [data-cable-id]').count()
+    cable_count = page.locator('[data-cable-id]').count()
     svg_nodes = page.locator('svg[aria-label$="equipment layout"]').evaluate("el => el.querySelectorAll('*').length")
     widths = page.locator('[data-device-model]').evaluate_all("nodes => nodes.map(node => node.getBoundingClientRect().width).sort((a,b) => a-b)")
     page.evaluate("""() => {

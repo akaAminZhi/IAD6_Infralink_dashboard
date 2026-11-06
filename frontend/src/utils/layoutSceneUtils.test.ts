@@ -88,7 +88,7 @@ describe("combined Layout scene", () => {
     expect(scene.connections).toHaveLength(6);
     expect(scene.connections.filter((item) => item.externalKind === "cross-floor")).toHaveLength(2);
     expect(scene.connections.filter((item) => item.externalKind === "shared-feed")).toHaveLength(1);
-    for (const connection of scene.connections.filter((item) => item.externalRoute)) {
+    for (const connection of scene.connections.filter((item) => item.externalKind === "cross-floor" && item.externalRoute)) {
       const points = overheadCablePoints(connection), trunk = connection.externalRoute!.trunk, riser = trunk[2];
       expect(riser.x).toBe(trunk[3].x);
       expect(Math.abs(riser.y - trunk[3].y)).toBeCloseTo(scene.floorLift);
@@ -143,17 +143,20 @@ describe("combined Layout scene", () => {
     expect(buildCombinedLayoutScene(data).geometry.map(({ path }) => path).reverse()).toEqual(scene.geometry.map(({ path }) => path));
   });
 
-  it("retains direct cubic arcs for shared outdoor feeds to the second floor", () => {
+  it("routes shared outdoor feeds to the second floor through a straight riser and room-edge approach", () => {
     const scene = buildCombinedLayoutScene(manifest());
     const feeder = scene.connections.find(({ cable: record }) => record.cable_id === "F-B")!;
     expect(feeder.externalKind).toBe("shared-feed");
-    expect(feeder.externalRoute).toBeUndefined();
+    expect(feeder.externalRoute?.hubEquipmentKey).toBe("F");
     const geometry = scene.geometry.find(({ connection }) => connection === feeder)!;
-    expect(geometry.route).toBe("arc");
-    expect(geometry.path).toContain(" C ");
-    expect(geometry.path).not.toContain(" L ");
-    const native = placedLayoutCables([feeder.cable], [feeder.source, feeder.target], scene.regions)[0];
-    expect(geometry.path).toBe(layoutCablePath(native));
+    expect(geometry.route).toBe("long");
+    expect(geometry.path).not.toContain(" C ");
+    expect(geometry.path).toContain(" L ");
+    expect(geometry.path).toBe(layoutCablePath(feeder));
+    const singleFloor = scene.singleFloorConnections.get("second")!.find((c) => c.cable.cable_id === "F-B")!;
+    expect(singleFloor.externalKind).toBe("shared-feed");
+    expect(singleFloor.externalRoute?.hubEquipmentKey).toBe("F");
+    expect(layoutCablePath(singleFloor)).not.toContain(" C ");
   });
 
   it("keeps room-edge routes stable and compact independent of input order and feeder direction", () => {
@@ -168,8 +171,8 @@ describe("combined Layout scene", () => {
     }
     for (const connection of first.connections.filter((item) => item.externalRoute)) {
       for (const point of connection.externalRoute!.points) {
-        expect(point.x).toBeGreaterThanOrEqual(first.contentBounds.x);
-        expect(point.x).toBeLessThanOrEqual(first.contentBounds.x + first.contentBounds.width);
+        expect(point.x).toBeGreaterThanOrEqual(first.bounds.x);
+        expect(point.x).toBeLessThanOrEqual(first.bounds.x + first.bounds.width);
       }
     }
   });

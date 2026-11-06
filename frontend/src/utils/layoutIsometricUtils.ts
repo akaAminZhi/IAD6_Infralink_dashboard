@@ -65,6 +65,7 @@ export interface PlacedLayoutCable {
   overheadRoom?: LayoutRegionRecord;
   externalKind?: "cross-floor" | "shared-feed";
   externalRoute?: { points: PowerPlanPoint[]; hubEquipmentKey: string; trunk: PowerPlanPoint[]; bundleLane: number };
+  corridorRoute?: PowerPlanPoint[];
 }
 
 export function isUndergroundCable(cable: LayoutCableRecord): boolean {
@@ -98,7 +99,7 @@ function cableRoof(row: LayoutEquipmentRecord): PowerPlanPoint {
   return projectLayoutPoint(row.rect.x + row.rect.width / 2, row.rect.y + row.rect.height / 2, layoutDeviceHeight(row));
 }
 
-/** Fan a hub's cross-floor cables out from one room-edge trunk; outdoor feeds retain direct arcs. */
+/** Fan device-to-device cross-floor cables out from a room-edge trunk; outdoor feeds are planned separately. */
 export function routeLayoutCrossFloorCables(
   connections: PlacedLayoutCable[], regions: LayoutRegionRecord[], floorOffsets: ReadonlyMap<string, number>,
 ): PlacedLayoutCable[] {
@@ -186,6 +187,7 @@ export function placedLayoutCables(cables: LayoutCableRecord[], rows: LayoutEqui
 
 export function overheadCablePoints(connection: PlacedLayoutCable, lane = 0): PowerPlanPoint[] {
   if (connection.externalRoute) return connection.externalRoute.points;
+  if (connection.corridorRoute) return connection.corridorRoute;
   // Reversed feeder pairs share one base route before their lane offsets are applied.
   const { source, target } = connection.source.equipment_key <= connection.target.equipment_key
     ? connection : { source: connection.target, target: connection.source };
@@ -321,7 +323,7 @@ export function isNearbyCable({ source, target }: PlacedLayoutCable): boolean {
 }
 
 function isRoomTrayCable(connection: PlacedLayoutCable): boolean {
-  return !isUndergroundCable(connection.cable) && !connection.externalKind && !connection.source.fixed && !connection.target.fixed && !connection.roomToOverhead && !isNearbyCable(connection);
+  return !connection.corridorRoute && !isUndergroundCable(connection.cable) && !connection.externalKind && !connection.source.fixed && !connection.target.fixed && !connection.roomToOverhead && !isNearbyCable(connection);
 }
 
 function roomCableCorners([start, trayStart, trayEnd, end]: PowerPlanPoint[]): PowerPlanPoint[] {
@@ -365,7 +367,7 @@ export function layoutConnectionBounds(connection: PlacedLayoutCable, lane = 0):
 export function layoutCablePath(connection: PlacedLayoutCable, lane = 0): string {
   const points = layoutCablePoints(connection, lane);
   if (isUndergroundCable(connection.cable)) return points.map((point, index) => `${index ? "L" : "M"} ${point.x} ${point.y}`).join(" ");
-  if (connection.externalRoute || connection.roomToOverhead && connection.overheadRoom) return roundedCablePath(points);
+  if (connection.externalRoute || connection.corridorRoute || connection.roomToOverhead && connection.overheadRoom) return roundedCablePath(points);
   const [a, b, c, d] = points;
   if (isRoomTrayCable(connection)) {
     const [{ y: startCornerY }, { y: endCornerY }] = roomCableCorners([a, b, c, d]);
@@ -379,7 +381,7 @@ export function layoutCablePath(connection: PlacedLayoutCable, lane = 0): string
 export function layoutCableMarkerPoint(connection: PlacedLayoutCable, lane = 0): PowerPlanPoint {
   const points = layoutCablePoints(connection, lane);
   if (isUndergroundCable(connection.cable)) return { x: (points[2].x + points[3].x) / 2, y: (points[2].y + points[3].y) / 2 };
-  if (connection.externalRoute || connection.roomToOverhead && connection.overheadRoom) {
+  if (connection.externalRoute || connection.corridorRoute || connection.roomToOverhead && connection.overheadRoom) {
     // The longest straight tray section stays clear of rounded elbows in either direction.
     let start = points[1], end = points[2];
     for (let i = 2; i < points.length - 2; i++) {

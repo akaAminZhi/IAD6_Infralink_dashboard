@@ -165,17 +165,20 @@ to 2.5D restores the previous combined/single-floor choice for this visit.
 Combined searches retain both floors. Searching a drawable cross-floor cable from
 a single 2.5D floor opens All floors; **Zoom to connection** fits both endpoints
 and its complete route. Details identify the endpoints' floors or shared group.
-Shared outdoor feeders to Second Floor, including MDS6 connections, use their
-original direct cubic arcs. Unselected elevated feeds sit behind equipment;
-selection/report highlighting raises the relevant routes for tracing. Device-to-device
+Shared outdoor feeders to Second Floor, including MDS6 connections, use ordered
+straight risers and room-edge approaches with small rounded elbows. The planner
+compares both room sides, front/back approaches and a bounded set of height bands
+against other routes to reduce projected crossings. Unselected elevated feeds sit
+behind equipment; selection/report highlighting raises the relevant routes for tracing. Device-to-device
 cross-floor cables sharing a hub follow a common room-edge trunk corridor in
 closely spaced parallel lanes, then fan out to individual device entries on the
 destination floor. They do not remain completely coincident. Selected cables
 draw last so they remain traceable through the bundle. Limited overlap is
 intentional. Test colors/dashes remain; only active
 cables receive the white selection underlay. Room membership remains floor-specific
-even when display extents overlap. Same-floor routes and First Floor's outdoor
-feeders retain their existing geometry.
+even when display extents overlap. First Floor's outdoor feeders retain their
+existing geometry. Each floor's planned connections are cached for fit bounds
+and single-floor views.
 
 Click equipment to add or remove it from the selection in either view; no modifier
 key is needed. Search confirmations add placed equipment to the current selection
@@ -197,9 +200,13 @@ restores its connection highlights when the cable inspector closes.
 **Global view** clears equipment/cable focus, search and box selection and restores
 the fitted camera. **Escape** does the same outside box
 selection. Clicking empty map space or **Clear focus** removes focus/search
-without moving the camera. Planning overrides are unaffected. Nearby cables
-use low cubic arcs. FIX-to-FIX routes keep taller arcs. Longer connections
-between rooms retain vertical risers and a rounded overhead band. Feeders
+without moving the camera. Planning overrides are unaffected. Short one-to-one
+connections keep low cubic arcs. Room feeder fans use ordered, parallel aisle
+tracks beside their destination columns; inter-room feeders use room-edge
+corridors. A deterministic crossing-reduction pass chooses between grid-aligned
+approaches while keeping equipment positions and roof ports fixed. Self-crossing
+candidates are rejected; bounded height bands clear the connected room equipment.
+FIX-to-FIX routes keep taller arcs. Feeders
 from a device inside a room to a device outside and above that room rise vertically,
 exit through the room's back edge and follow that boundary toward the target's
 equipment column. Long runs align above that column and drop directly onto the target roof.
@@ -231,8 +238,9 @@ full detail. The 2D view continues to use its existing camera updates.
 
 For a repeatable dense-floor check, start the dashboard preview and run
 `python scripts/perf_layout.py --factor 8 --dpr 2`. The script duplicates the
-local Layout manifest in the browser request only, then compares 2D and 2.5D
-SVG node counts, drag frames and camera updates. `--zoom-clicks 5 --drag-step 8`
+local Layout manifest, including its room/fixed regions, in the browser request
+only, then compares 2D and 2.5D SVG node counts, drag frames and camera updates.
+Cable totals include underground and background outdoor layers. `--zoom-clicks 5 --drag-step 8`
 exercises a zoomed view and a longer drag across the culling margin.
 
 The Layout builder reads normalized SystemElements `equipment_type` to include

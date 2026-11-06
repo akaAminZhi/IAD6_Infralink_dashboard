@@ -143,6 +143,15 @@ arrays and record envelopes.
 
 ### UI organization
 
+Layout's fixed equipment geometry and cable semantics remain separate from
+display-only routing. `layoutCableRouting.ts` plans room aisle tracks and outdoor
+upper-floor riser approaches, then performs bounded deterministic crossing
+reduction with a spatial segment index. It preserves cable identities, roof ports,
+floor membership and test evidence. `layoutSceneUtils.ts` caches single-floor
+connections alongside the combined scene; SVG drawing, warning markers, culling
+and camera fitting consume the same selected route geometry. No ETL contract or
+published coordinates change when display routes change.
+
 - `pages/` contains route-level screens.
 - Domain components live under `components/{pdms,equipment,issues,overview}`.
 - Shared visual primitives are under `components/common` and `components/ui`.

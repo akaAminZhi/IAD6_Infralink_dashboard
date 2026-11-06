@@ -183,7 +183,8 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
   }, [manifest, floorId, combined, combinedScene, isometric]);
   const regions = useMemo(() => combined && combinedScene ? combinedScene.regions : manifest ? visibleLayoutRegions(manifest, floorId) : [], [manifest, floorId, combined, combinedScene]);
   const connections = useMemo(() => combined && combinedScene ? combinedScene.connections
-    : placedLayoutCables(manifest?.cables ?? [], rows, regions), [manifest, rows, regions, combined, combinedScene]);
+    : isometric && combinedScene ? combinedScene.singleFloorConnections.get(floorId) ?? []
+      : placedLayoutCables(manifest?.cables ?? [], rows, regions), [manifest, rows, regions, combined, combinedScene, isometric, floorId]);
   const selectedConnection = selectedCableId ? connections.find(({ cable }) => cable.cable_id === selectedCableId) : undefined;
   const missingReportConnections = useMemo(() => connections.filter(({ cable }) => layoutCableMissingReport(cable)), [connections]);
   const missingReportCableIds = useMemo(() => new Set(missingReportConnections.map(({ cable }) => cable.cable_id)), [missingReportConnections]);
@@ -222,7 +223,9 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
     const labels = layoutRoomLabels(allRegions);
     const records = [...allRecords, ...allRegions, ...labels];
     const cableBounds = manifest.floors.flatMap((floor) => {
-      const floorConnections = placedLayoutCables(manifest.cables ?? [], isometricLayoutEquipment(visibleLayoutEquipment(manifest, floor.floor_id)), visibleLayoutRegions(manifest, floor.floor_id));
+      const floorRegions = visibleLayoutRegions(manifest, floor.floor_id);
+      const floorConnections = combinedScene?.singleFloorConnections.get(floor.floor_id)
+        ?? placedLayoutCables(manifest.cables ?? [], isometricLayoutEquipment(visibleLayoutEquipment(manifest, floor.floor_id)), floorRegions);
       const lanes = layoutCableLanes(floorConnections);
       return floorConnections.map((connection, index) => ({ rect: layoutConnectionBounds(connection, lanes[index]) }));
     });
@@ -230,7 +233,7 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
     const ground = { rect: projectedLayoutBounds(layoutFloorFootprint(manifest), -3) };
     const isometricRecords = [...isometricLayoutEquipment(allRecords), ...allRegions, ...labels];
     return { plan: layoutBounds(records), isometric: layoutBounds([...isometricRecords.map((record) => ({ rect: projectedLayoutBounds(record.rect, 32) })), ground, ...roomCallouts, ...cableBounds]) };
-  }, [manifest]);
+  }, [manifest, combinedScene]);
   const fullBounds = combined && combinedScene ? combinedScene.bounds : isometric ? allBounds.isometric : allBounds.plan;
   const bounds = viewport ?? fullBounds;
   const overscan = 0.4;
