@@ -225,8 +225,9 @@ both fit frames are cached. During a 2.5D drag, a bounded SVG canvas moves with 
 temporary compositor transform and the camera commits on release. Only models
 and cables near the visible camera are drawn. Small models use simpler 2.5D
 enclosures; dense floors reuse shared 2.5D silhouettes instead of repeated
-shapes. Selected and inspected equipment keeps its full detail. The 2D view
-continues to use its existing camera updates.
+shapes. GEN6 generators always retain their original detailed models, including
+when zoomed out or on dense floors. Selected and inspected equipment keeps its
+full detail. The 2D view continues to use its existing camera updates.
 
 For a repeatable dense-floor check, start the dashboard preview and run
 `python scripts/perf_layout.py --factor 8 --dpr 2`. The script duplicates the

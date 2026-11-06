@@ -1,5 +1,25 @@
 ﻿# Codex Handoff
 
+## Current update (2026-11-06): Preserve GEN6 model detail
+
+- GEN6 generators retain their original detailed 2.5D models at every zoom
+  and on dense floors. Other equipment detail thresholds, labels, culling,
+  cable rendering and the generator clearance adjustment remain unchanged.
+- Read-only Chromium A/B used eight tiled copies: 3,680 equipment, 4,360
+  drawable cables and 120 generators, DPR 2, three alternating runs per variant.
+  Both variants had 16.7 ms median drag frames and no long tasks. Full GEN6
+  detail increased SVG nodes from 41,473 to 48,553; p95 frame times overlapped
+  (simple 16.7/16.7/33.3 ms, full 16.7/16.8/16.8 ms). These are local global-view
+  measurements, not a guarantee for other machines or future route density.
+- All 72 existing Layout page/model tests and the preview-mode production build
+  passed (existing chunk-size/plugin timing warnings). Real Chromium verified all
+  120 generators keep enclosure/fan detail after zoom out/in and Global view,
+  with no page errors. Ignored benchmark/smoke artifacts:
+  `runtime/automation/gen_detail_benchmark.py`, `gen-detail-benchmark.json`,
+  and `gen_detail_smoke.py`. Refresh Layout to load the rebuilt UI. Temporary
+  development server stopped; existing services retained. No data changes, ETL,
+  vendor operations. User requested a local commit and will push it themselves.
+
 ## Current update (2026-11-06): Generator clearance for buried MV cables
 
 - Shifted the main fixed GEN6 numbered row down 60 projected units in 2.5D,

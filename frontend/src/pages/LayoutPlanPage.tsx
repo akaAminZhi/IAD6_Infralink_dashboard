@@ -740,7 +740,7 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
               const projectedWidthPixels = (row.rect.width + row.rect.height) * pixelsPerUnit;
               return <EquipmentRectangle key={row.annotation_id} record={row} status={statusOf(row)} isometric={isometric} hasIsometric={hasIsometric}
                 selected={selected} dimmed={rowIsDimmed(row)} tooltipVisible={inspected}
-                detailed={(!selectionMode && selected) || inspected || projectedWidthPixels >= detailThreshold}
+                detailed={layoutDeviceKind(row) === "generator" || (!selectionMode && selected) || inspected || projectedWidthPixels >= detailThreshold}
                 showLabel={(!selectionMode && selected) || inspected || projectedWidthPixels >= 12}
                 compact={compact}
                 onInspect={inspectDevice} onLeave={leaveDevice} onSelect={selectDevice} />;
