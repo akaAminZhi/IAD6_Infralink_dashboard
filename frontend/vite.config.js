@@ -77,14 +77,15 @@ export default defineConfig({
     plugins: [react(), liveDataPlugin(), liveReportsPlugin(), feederCableAtpPlugin()],
     preview: {
         proxy: { '/api/automation': { target: 'http://127.0.0.1:8765', changeOrigin: true, headers: { 'X-IAD6-Proxied': '1' } } },
-        allowedHosts: ['.ngrok-free.app', '.trycloudflare.com'],
+        allowedHosts: ['.ngrok-free.app', '.trycloudflare.com', 'iad06.qinapps.dpdns.org'],
     },
     server: {
         proxy: { '/api/automation': { target: 'http://127.0.0.1:8765', changeOrigin: true, headers: { 'X-IAD6-Proxied': '1' } } },
         host: '0.0.0.0',
         allowedHosts: [
             '.ngrok-free.app',
-            '.trycloudflare.com'
+            '.trycloudflare.com',
+            'iad06.qinapps.dpdns.org'
         ]
     }
 });
