@@ -45,7 +45,8 @@ def inputs(tmp_path, **pdf_options):
     ]}))
     equipment = tmp_path / "equipment.json"
     equipment.write_text(json.dumps({"records": [
-        {"equipment_id": "IAD06-EQ-1", "energized_completed_at": "2026-10-14T08:00:00"},
+        {"equipment_id": "IAD06-EQ-1", "energized_completed_at": "2026-10-14T08:00:00",
+         "updated_by": "Equipment Editor", "updated_at": "2026-11-06T10:30:00"},
         {"equipment_id": "IAD06-EQ-FIX", "energized_completed_at": None},
         {"equipment_id": "IAD06-EQ-DUP"}, {"equipment_id": "EQ-DUP"},
     ]}))
@@ -61,6 +62,10 @@ def test_extracts_coordinates_fixed_devices_and_preserves_uncertain_matches(tmp_
     assert [item["label"] for item in records] == ["EQ-1", "EQ-DUP", "EQ-MISSING"]
     assert records[0]["rect"] == {"x": 90.0, "y": 90.0, "width": 22.0, "height": 27.0}
     assert records[0]["energized_completed_at"] == "2026-10-14T08:00:00"
+    assert records[0]["updated_by"] == "Equipment Editor"
+    assert records[0]["updated_at"] == "2026-11-06T10:30:00"
+    assert records[1]["updated_by"] is None
+    assert records[2]["updated_by"] is None
     assert records[1]["match_status"] == "ambiguous"
     assert len(records[1]["candidate_equipment_ids"]) == 2
     assert records[1]["energized_completed_at"] is None
@@ -87,7 +92,8 @@ def test_publishes_cable_endpoints_types_and_latest_daily_evidence(tmp_path):
     cable_id = "FDR-IAD06-EQ-1-IAD06-EQ-FIX"
     records["records"].extend([
         {"equipment_id": cable_id, "equipment_type": "Feeder Cable - LV", "status": "Installation Complete",
-         "feeder_cable_atp": "EQ-1 Cable ATP.pdf"},
+         "feeder_cable_atp": "EQ-1 Cable ATP.pdf", "updated_by": "Cable Editor",
+         "updated_at": "2026-11-05T09:00:00"},
         {"equipment_id": cable_id + "-A", "equipment_type": "Termination", "parent": cable_id},
     ])
     equipment.write_text(json.dumps(records))
@@ -107,6 +113,8 @@ def test_publishes_cable_endpoints_types_and_latest_daily_evidence(tmp_path):
     assert payload["floors"][0]["equipment"][0]["neta_test_report"] == "EQ-1 - NETA Test Report-01.pdf"
     assert len(payload["cables"]) == 1
     cable = payload["cables"][0]
+    assert cable["updated_by"] == "Cable Editor"
+    assert cable["updated_at"] == "2026-11-05T09:00:00"
     assert cable["connection_status"] == "resolved"
     assert cable["source_equipment_key"] == "EQ-1"
     assert cable["target_equipment_key"] == "EQ-FIX"

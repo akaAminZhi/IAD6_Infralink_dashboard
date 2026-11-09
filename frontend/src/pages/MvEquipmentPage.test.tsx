@@ -65,6 +65,7 @@ describe("MvEquipmentPage", () => {
         annotations: [{ annotation_id: "mv-1", kind: "equipment", label,
           matched_equipment_id: `IAD06-${label}`, system_element_status: "NETA Complete",
           mv_daily_test_status: "failed",
+          updated_by: "Equipment Editor",
           rect: { x: 100, y: 100, width: 180, height: 90 }, center: { x: 190, y: 145 },
         }],
       }] },
@@ -81,6 +82,7 @@ describe("MvEquipmentPage", () => {
     expect(screen.getByText("NETA Complete 1")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: `${label}, MV ${label.startsWith("TX") ? "transformer" : "equipment"}` }));
     expect(screen.getByText(formatDateTime(completedAt))).toBeInTheDocument();
+    expect(screen.getByLabelText("System Elements update")).toHaveTextContent("Equipment Editor");
     expect(screen.getByRole("link", { name: "Open in Infralink" })).toHaveAttribute("href", "https://jc2.mcdean.com/#:DeviceFullPage;viewModelId=67890");
     expect(screen.getByRole("link", { name: "Open in CxAlloy" })).toHaveAttribute("href", "https://tq.cxalloy.com/project/49402/equipment/77");
 

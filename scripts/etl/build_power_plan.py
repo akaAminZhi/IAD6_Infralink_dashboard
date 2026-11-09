@@ -272,6 +272,8 @@ def annotation_record(
             else None
         ),
         "status_match_source": "annotation_id" if system_element else None,
+        "updated_by": system_element.get("updated_by") if system_element else None,
+        "updated_at": system_element.get("updated_at") if system_element else None,
         "mv_daily_test_status": latest_mv_test["status"] if latest_mv_test else None,
         "mv_daily_test_date": latest_mv_test["date"] if latest_mv_test else None,
         "mv_daily_tested_dates": list(dict.fromkeys(mv_tested_dates)),

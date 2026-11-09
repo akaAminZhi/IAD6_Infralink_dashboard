@@ -46,6 +46,8 @@ def test_build_power_plan_extracts_and_matches_equipment_annotations(tmp_path: P
                 "equipment_id": "IAD06-PDU6-01A-2",
                 "equipment_type": "Power Distribution Unit",
                 "status": "Ship to Site",
+                "updated_by": "Equipment Editor",
+                "updated_at": "2026-11-06T10:30:00",
             },
             {
                 "equipment_id": "FD01-IAD06-PDU6-01A-2-A",
@@ -57,6 +59,7 @@ def test_build_power_plan_extracts_and_matches_equipment_annotations(tmp_path: P
                 "equipment_type": "Feeder Cable - MV",
                 "status": "L3: Pre Func Testing & Startup",
                 "feeder_cable_atp": "FD01 Cable ATP.pdf",
+                "updated_by": "Cable Editor",
             },
             {
                 "equipment_id": "FD02-IAD06-PDU6-01A-2",
@@ -105,6 +108,9 @@ def test_build_power_plan_extracts_and_matches_equipment_annotations(tmp_path: P
     assert record["matched_equipment_id"] == "IAD06-PDU6-01A-2"
     assert record["match_status"] == "matched"
     assert record["system_element_status"] == "Ship to Site"
+    assert record["updated_by"] == "Equipment Editor"
+    assert record["updated_at"] == "2026-11-06T10:30:00"
+    assert record["author"] == "Test User"
     assert record["system_element_type"] == "Power Distribution Unit"
     assert record["status_match_source"] == "annotation_id"
     assert record["mv_daily_test_status"] == "tested_and_passed"
@@ -123,6 +129,8 @@ def test_build_power_plan_extracts_and_matches_equipment_annotations(tmp_path: P
         item for item in result["pages"][0]["annotations"] if item["kind"] == "connection"
     )
     assert connection_record["label"] == "FD01-IAD06-PDU6-01A-2"
+    assert connection_record["updated_by"] == "Cable Editor"
+    assert termination_record["updated_by"] is None
     assert len(connection_record["vertices"]) == 3
     assert connection_record["match_status"] == "matched"
     assert connection_record["system_element_status"] == "L3: Pre Func Testing & Startup"
@@ -146,6 +154,7 @@ def test_build_power_plan_extracts_and_matches_equipment_annotations(tmp_path: P
     )
     assert boundary["label"] == ""
     assert boundary["match_status"] == "not_applicable"
+    assert boundary["updated_by"] is None
     assert result["mv_daily_tested_annotation_count"] == 2
     assert result["feeder_cable_atp_linked_annotation_count"] == 1
     assert result["feeder_cable_atp_public_link"]["status"] == "served_by_vite"

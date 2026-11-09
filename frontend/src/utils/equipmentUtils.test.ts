@@ -164,6 +164,8 @@ describe("equipmentUtils", () => {
           manufacturer: "IEM",
           model: "MODEL-1",
           serial_number: "SERIAL-1",
+          updated_by: "Equipment Editor",
+          updated_at: "2026-11-06T10:30:00",
           neta_complete: true,
           neta_test_report: "Report-01.pdf",
         },
@@ -190,6 +192,8 @@ describe("equipmentUtils", () => {
       manufacturer: "IEM",
       model: "MODEL-1",
       serial_number: "SERIAL-1",
+      updated_by: "Equipment Editor",
+      updated_at: "2026-11-06T10:30:00",
       neta_complete: true,
       cxalloy_upload_status: "pending",
     });
@@ -202,12 +206,13 @@ describe("equipmentUtils", () => {
   it("falls back to standalone equipment when there are no PDM records", () => {
     const result = flattenEquipmentFromPdms(
       [],
-      [{ equipment_id: "IAD06-EQ-2", neta_complete: false }],
+      [{ equipment_id: "IAD06-EQ-2", neta_complete: false, updated_by: "Standalone Editor" }],
       [{ case_id: "CASE-2", equipment_id: "IAD06-EQ-2", status: "Closed" }],
     );
 
     expect(result).toHaveLength(1);
     expect(result[0].source).toBe("equipment");
+    expect(result[0].updated_by).toBe("Standalone Editor");
     expect(result[0].pdm_name).toBeNull();
     expect(getOpenCaseCount(result[0])).toBe(0);
   });

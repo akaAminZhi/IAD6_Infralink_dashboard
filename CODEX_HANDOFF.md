@@ -1,5 +1,30 @@
 ﻿# Codex Handoff
 
+## Current update (2026-11-09): System Elements update information
+
+- Added shared Updated By / Updated At metadata to Equipment and PDM equipment
+  details (including Overview/KPR), Power Plan, MV equipment/termination/cable
+  details, and Layout equipment/cable/unplaced Excel inspectors. Values describe
+  the latest System Elements update, independent of report or test completion.
+  Blank values show `--`; timestamps use the existing date formatter.
+- Base Equipment already normalized these Excel columns. Extended PDM schemas,
+  JSON/CSV builders, flattened Equipment rows and Power Plan/Layout manifests
+  with the same nullable fields. No new data requests or matching rules.
+- Regenerated PDM, Power Plan and Layout outputs from the existing normalized
+  data, first verifying it equals the latest Nov 9 Excel export (19,001 records).
+  Every new field was checked against its own equipment/cable source. Existing
+  PDM contents and map geometry/status/case data are unchanged excluding the two
+  added fields. Generated outputs and local verification scripts remain ignored.
+- Targeted validation: 39 Python tests and 120 frontend tests passed. Covers
+  matched/missing/ambiguous metadata, distinct cable editors, blank values,
+  formatted dates and the affected detail views. Preview-mode production build
+  passed with the existing chunk-size/plugin timing warnings.
+- Real Chromium checks verified the Excel editor in Equipment, Power Plan, PDM,
+  MV and Layout details, with no page errors; Equipment screenshot reviewed.
+  Power Plan/MV first-use deferred data can reset selection, so smoke checks
+  reselect after network idle. This existing selection behavior was not changed.
+  CSV/schema assertions were rerun successfully; `git diff --check` passed.
+
 ## Current update (2026-11-06): Compact duplicate filters and report badges
 
 - Moved Equipment's Duplicate reports selector into the existing More filters

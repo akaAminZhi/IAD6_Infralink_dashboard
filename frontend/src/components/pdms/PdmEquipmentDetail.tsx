@@ -17,6 +17,7 @@ import {
 } from "../../utils/pdmUtils";
 import { EpsTestItemsPanel } from "../common/EpsTestItemsPanel";
 import { EquipmentExternalLinks } from "../common/EquipmentExternalLinks";
+import { EquipmentUpdateInfo } from "../common/EquipmentUpdateInfo";
 import { NetaReportChips } from "../common/NetaReportChips";
 import { NetaDuplicatePanel } from "../common/NetaDuplicatePanel";
 import { NetaStatusBadge } from "./NetaStatusBadge";
@@ -89,6 +90,8 @@ export function PdmEquipmentDetail({ equipment, epsTestItems }: PdmEquipmentDeta
           value={trackingRequired ? equipment.neta_report_status : "Not Tracked"}
         />
       </div>
+
+      <EquipmentUpdateInfo updated_by={equipment.updated_by} updated_at={equipment.updated_at} />
 
       {trackingRequired ? <div>
         <div className="flex items-center gap-2">

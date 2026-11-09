@@ -35,6 +35,7 @@ import { ENERGISATION_COLORS, getEnergisationLabel, getEnergisationStage } from 
 import { StatusBadge } from "../components/common/StatusBadge";
 import { IssueDetailDrawer } from "../components/issues/IssueDetailDrawer";
 import { EquipmentExternalLinks } from "../components/common/EquipmentExternalLinks";
+import { EquipmentUpdateInfo } from "../components/common/EquipmentUpdateInfo";
 import { Button } from "../components/ui/button";
 import type {
   CaseIssue,
@@ -911,6 +912,7 @@ function EquipmentDetail({
           </dl>
         </section>
 
+        <EquipmentUpdateInfo updated_by={row.equipment?.updated_by} updated_at={row.equipment?.updated_at} />
         {trackingRequired ? <NetaReportSection key={row.equipmentId}
           equipmentId={row.equipment?.equipment_id ?? row.equipmentId} value={row.equipment?.neta_test_report} /> : null}
         <section>

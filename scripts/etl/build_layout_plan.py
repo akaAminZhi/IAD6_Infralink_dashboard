@@ -142,6 +142,8 @@ def build_layout_plan(
                     "candidate_equipment_ids": [item.get("equipment_id") for item in candidates],
                     "energized_completed_at": matched.get("energized_completed_at") if matched else None,
                     "system_element_status": matched.get("status") if matched else None,
+                    "updated_by": matched.get("updated_by") if matched else None,
+                    "updated_at": matched.get("updated_at") if matched else None,
                     "equipment_type": matched.get("equipment_type") if matched else None,
                     "neta_test_report": matched.get("neta_test_report") if matched else None,
                 }

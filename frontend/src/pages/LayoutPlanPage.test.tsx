@@ -45,6 +45,18 @@ beforeEach(() => {
 });
 
 describe("2.5D Layout connections", () => {
+  it("shows each equipment and cable's own System Elements editor", async () => {
+    const manifest = isometricDataset();
+    manifest.floors[0].equipment[0].updated_by = "Equipment Editor";
+    manifest.cables![0].updated_by = "Cable Editor";
+    const user = userEvent.setup();
+    const { container } = render(<LayoutPlanPage />);
+    await user.click(await screen.findByRole("button", { name: "EQ-1: Energized" }));
+    expect(screen.getByLabelText("System Elements update")).toHaveTextContent("Equipment Editor");
+    await user.click(container.querySelector("[data-cable-route]")!);
+    expect(screen.getByLabelText("Cable details")).toHaveTextContent("Cable Editor");
+  });
+
   it("draws MV ducts below equipment and keeps their inspector and visibility controls", async () => {
     const manifest = isometricDataset();
     manifest.cables![0].equipment_type = "Feeder Cable - MV";

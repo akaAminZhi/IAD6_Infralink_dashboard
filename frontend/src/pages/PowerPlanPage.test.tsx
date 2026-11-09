@@ -114,6 +114,7 @@ describe("PowerPlanPage", () => {
           manufacturer: "IEM",
           model: "MODEL-POWER",
           serial_number: "SERIAL-POWER",
+          updated_by: "Equipment Editor",
           neta_complete: true,
         },
       ],
@@ -157,6 +158,7 @@ describe("PowerPlanPage", () => {
     expect(screen.getByText("IEM")).toBeInTheDocument();
     expect(screen.getByText("MODEL-POWER")).toBeInTheDocument();
     expect(screen.getByText("SERIAL-POWER")).toBeInTheDocument();
+    expect(screen.getByLabelText("System Elements update")).toHaveTextContent("Equipment Editor");
   });
 
   it("keeps export selections across area families", async () => {

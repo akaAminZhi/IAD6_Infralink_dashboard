@@ -14,6 +14,8 @@ def test_schema_records_serialize_nested_pdm_data() -> None:
     equipment = PdmEquipmentRecord(
         equipment_id="EQ-1",
         match_status="matched",
+        updated_by="Equipment Editor",
+        updated_at="2026-11-06T10:30:00",
         cases=[case],
     )
     pdm = PdmRecord(pdm_name="PDM-1", equipment=[equipment], equipment_count=1)
@@ -22,6 +24,8 @@ def test_schema_records_serialize_nested_pdm_data() -> None:
 
     assert payload["pdm_name"] == "PDM-1"
     assert payload["equipment"][0]["equipment_id"] == "EQ-1"
+    assert payload["equipment"][0]["updated_by"] == "Equipment Editor"
+    assert payload["equipment"][0]["updated_at"] == "2026-11-06T10:30:00"
     assert payload["equipment"][0]["cases"][0]["issue_image"] == "issue.jpg"
 
 

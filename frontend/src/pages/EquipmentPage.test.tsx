@@ -262,6 +262,7 @@ describe("EquipmentPage", () => {
           manufacturer: "IEM",
           model: "PDU54SHAM",
           serial_number: "J02PDU000-00032",
+          updated_by: "Equipment Editor",
           neta_complete: true,
           neta_test_report: "Report-01.pdf",
         },
@@ -309,6 +310,7 @@ describe("EquipmentPage", () => {
     expect(screen.getByText("IEM")).toBeInTheDocument();
     expect(screen.getByText("PDU54SHAM")).toBeInTheDocument();
     expect(screen.getByText("J02PDU000-00032")).toBeInTheDocument();
+    expect(screen.getByLabelText("System Elements update")).toHaveTextContent("Equipment Editor");
     expect(within(screen.getByRole("region", { name: "Equipment Reports" })).queryByText("Pending")).not.toBeInTheDocument();
     expect(within(screen.getByRole("region", { name: "Equipment Reports" })).getAllByText("Uploaded")).toHaveLength(2);
     expect(screen.getByText("FDR-new.pdf").closest("li")).toHaveTextContent("Pending");

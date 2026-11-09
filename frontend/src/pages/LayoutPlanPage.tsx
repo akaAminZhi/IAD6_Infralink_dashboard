@@ -9,6 +9,7 @@ import { LoadingState } from "../components/common/LoadingState";
 import { NetaReportChips } from "../components/common/NetaReportChips";
 import { NetaDuplicatePanel } from "../components/common/NetaDuplicatePanel";
 import { EquipmentExternalLinks } from "../components/common/EquipmentExternalLinks";
+import { EquipmentUpdateInfo } from "../components/common/EquipmentUpdateInfo";
 import { Button } from "../components/ui/button";
 import { IsometricEquipment, SimpleIsometricSymbols } from "../components/layout/IsometricEquipment";
 import { FeederCableAtpReports } from "../components/layout/FeederCableAtpReports";
@@ -562,6 +563,7 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
     </p> : null}
     <p className="text-xs">Type: {selectedCable.equipment_type}</p>
     <p className="text-xs">Infralink: {selectedCable.system_element_status ?? "Unknown"}</p>
+    <EquipmentUpdateInfo updated_by={selectedCable.updated_by} updated_at={selectedCable.updated_at} />
     <p className="text-xs">EPS daily: {selectedCable.eps_daily_test_status?.replace(/_/g, " ") ?? "No test evidence"}{selectedCable.eps_daily_test_date ? ` · ${selectedCable.eps_daily_test_date}` : ""}{selectedCable.eps_daily_report_name ? ` · ${selectedCable.eps_daily_report_name}` : ""}</p>
     <p className="text-xs">MV daily: {selectedCable.mv_daily_test_status?.replace(/_/g, " ") ?? "No test evidence"}{selectedCable.mv_daily_test_date ? ` · ${selectedCable.mv_daily_test_date}` : ""}</p>
     <DailyTestHistory events={selectedCable.daily_report_history} conflict={selectedCable.daily_report_conflict} />
@@ -793,6 +795,7 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
           <p className="text-sm text-amber-700">Not placed on layout. This Equipment ID exists in SystemElements Excel.</p>
           <p className="text-sm">Type: {unplacedEquipment.equipment_type ?? "Unknown"}</p>
           <p className="text-sm">System status: {unplacedEquipment.status ?? "Unknown"}</p>
+          <EquipmentUpdateInfo updated_by={unplacedEquipment.updated_by} updated_at={unplacedEquipment.updated_at} />
           <p className="break-all text-sm">Parent: {unplacedEquipment.parent ?? "Unknown"}</p>
           <p className="text-sm">Excel energized date: {unplacedEquipment.energized_completed_at ?? "No completed date"}</p>
           <p className="text-sm">NETA: {unplacedEquipment.neta_complete === true ? "Complete" : "Not confirmed"}</p>
@@ -822,6 +825,7 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
           {isometric ? <p className="text-xs text-muted-foreground">{DEVICE_KIND_LABELS[layoutDeviceKind(selected)]}</p> : null}
           <p className="text-sm">Excel energized date: {selected.energized_completed_at ?? "No completed date"}</p>
           <p className="text-sm">System status: {selected.system_element_status ?? "Unknown"}</p>
+          <EquipmentUpdateInfo updated_by={selected.updated_by} updated_at={selected.updated_at} />
           <p className="text-sm font-medium">{LAYOUT_STATUS_LABELS[statusOf(selected)]}</p>
           {selectedEquipmentReports.length ? <section className="space-y-2" aria-label="Equipment test reports">
             <h4 className="text-xs font-medium uppercase text-muted-foreground">NETA test reports</h4>

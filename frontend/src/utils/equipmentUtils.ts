@@ -39,6 +39,8 @@ export interface FlattenedEquipmentRow {
   manufacturer: string | null;
   model: string | null;
   serial_number: string | null;
+  updated_by?: string | null;
+  updated_at?: string | null;
   open_issues_count_from_system_elements: number | null;
   test_tracking_required: boolean;
   calculated_open_case_count: number | null;
@@ -252,6 +254,8 @@ export function flattenEquipmentFromPdms(
         manufacturer: firstText(equipment.manufacturer, enrichment?.manufacturer),
         model: firstText(equipment.model, enrichment?.model),
         serial_number: firstText(equipment.serial_number, enrichment?.serial_number),
+        updated_by: firstText(equipment.updated_by, enrichment?.updated_by),
+        updated_at: firstText(equipment.updated_at, enrichment?.updated_at),
         open_issues_count_from_system_elements: firstNumber(
           equipment.open_issues_count_from_system_elements,
           enrichment?.open_issues_count_from_system_elements,
@@ -310,6 +314,8 @@ export function flattenEquipmentFromPdms(
         manufacturer: firstText(equipment.manufacturer),
         model: firstText(equipment.model),
         serial_number: firstText(equipment.serial_number),
+        updated_by: firstText(equipment.updated_by),
+        updated_at: firstText(equipment.updated_at),
         open_issues_count_from_system_elements: firstNumber(
           equipment.open_issues_count_from_system_elements,
         ),

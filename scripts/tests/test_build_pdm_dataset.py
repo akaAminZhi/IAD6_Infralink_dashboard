@@ -1,9 +1,11 @@
 from __future__ import annotations
 
-from scripts.etl.build_pdm_dataset import build_pdm_dataset
+import csv
+
+from scripts.etl.build_pdm_dataset import build_pdm_dataset, write_pdm_csv
 
 
-def test_pdm_dataset_groups_by_pdm_keeps_unmatched_and_case_issue_image() -> None:
+def test_pdm_dataset_groups_by_pdm_keeps_unmatched_and_case_issue_image(tmp_path) -> None:
     equipment = [
         {
             "equipment_id": "IAD06-EQ-1",
@@ -18,6 +20,8 @@ def test_pdm_dataset_groups_by_pdm_keeps_unmatched_and_case_issue_image() -> Non
             "manufacturer": "Maker",
             "model": "Model",
             "serial_number": "Serial",
+            "updated_by": "Equipment Editor",
+            "updated_at": "2026-11-06T10:30:00",
         }
     ]
     module_links = [
@@ -68,8 +72,20 @@ def test_pdm_dataset_groups_by_pdm_keeps_unmatched_and_case_issue_image() -> Non
     assert pdms[0]["pdm_name"] == "PDM-1"
     assert pdms[0]["equipment_count"] == 2
     assert pdms[0]["unmatched_equipment_count"] == 1
+    assert pdms[0]["equipment"][0]["updated_by"] == "Equipment Editor"
+    assert pdms[0]["equipment"][0]["updated_at"] == "2026-11-06T10:30:00"
+    assert pdms[0]["equipment"][1]["updated_by"] is None
+    assert pdms[0]["equipment"][1]["updated_at"] is None
     assert pdms[0]["equipment"][0]["cases"][0]["issue_image"] == "Issue Image-01.jpg"
     assert pdms[0]["equipment"][0]["cases"][0]["corrective_images"] == "Corrective-01.pdf"
+
+    csv_path = tmp_path / "pdms.csv"
+    write_pdm_csv(pdms, csv_path)
+    with csv_path.open(encoding="utf-8", newline="") as csv_file:
+        rows = list(csv.DictReader(csv_file))
+    assert rows[0]["updated_by"] == "Equipment Editor"
+    assert rows[0]["updated_at"] == "2026-11-06T10:30:00"
+    assert rows[1]["updated_by"] == ""
 
 
 def test_pdm_dataset_uses_system_elements_parent_for_matched_equipment() -> None:

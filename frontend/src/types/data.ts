@@ -85,6 +85,8 @@ export interface ModuleEquipmentLink {
 }
 
 export interface PdmEquipmentRecord {
+  updated_by?: string | null;
+  updated_at?: string | null;
   equipment_id?: string | null;
   source_equipment_label?: string | null;
   match_status?: string | null;
@@ -305,6 +307,8 @@ export interface PowerPlanRect {
 }
 
 export interface LayoutEquipmentRecord {
+  updated_by?: string | null;
+  updated_at?: string | null;
   daily_report_history?: EpsDailyReportEvent[];
   annotation_id: string;
   equipment_key: string;
@@ -322,6 +326,8 @@ export interface LayoutEquipmentRecord {
 }
 
 export interface LayoutCableRecord {
+  updated_by?: string | null;
+  updated_at?: string | null;
   daily_report_history?: EpsDailyReportEvent[];
   daily_report_conflict?: boolean;
   cable_id: string;
@@ -392,6 +398,8 @@ export interface FeederCableAtpFile {
 }
 
 export interface PowerPlanAnnotation {
+  updated_by?: string | null;
+  updated_at?: string | null;
   daily_report_history?: EpsDailyReportEvent[];
   daily_report_conflict?: boolean;
   annotation_id: string;

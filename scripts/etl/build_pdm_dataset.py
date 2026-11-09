@@ -103,6 +103,8 @@ CSV_FIELDS = [
     "manufacturer",
     "model",
     "serial_number",
+    "updated_by",
+    "updated_at",
 ]
 
 
@@ -248,6 +250,8 @@ def make_pdm_equipment_record(
         "manufacturer": equipment.get("manufacturer"),
         "model": equipment.get("model"),
         "serial_number": equipment.get("serial_number"),
+        "updated_by": equipment.get("updated_by"),
+        "updated_at": equipment.get("updated_at"),
         "cases": related_cases,
     }
 
@@ -406,6 +410,8 @@ def write_pdm_csv(pdms: list[dict[str, Any]], path: Path) -> None:
                         "manufacturer": equipment.get("manufacturer"),
                         "model": equipment.get("model"),
                         "serial_number": equipment.get("serial_number"),
+                        "updated_by": equipment.get("updated_by"),
+                        "updated_at": equipment.get("updated_at"),
                     }
                 )
 

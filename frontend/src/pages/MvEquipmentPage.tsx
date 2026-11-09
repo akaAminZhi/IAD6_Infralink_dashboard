@@ -24,6 +24,7 @@ import { useFrameState } from "../hooks/useFrameState";
 import { EmptyState } from "../components/common/EmptyState";
 import { IssueDetailDrawer } from "../components/issues/IssueDetailDrawer";
 import { EquipmentExternalLinks } from "../components/common/EquipmentExternalLinks";
+import { EquipmentUpdateInfo } from "../components/common/EquipmentUpdateInfo";
 import { IssueStatusBadge } from "../components/issues/IssueStatusBadge";
 import type {
   DashboardData,
@@ -1758,6 +1759,7 @@ export function MvEquipmentPage({ data }: MvEquipmentPageProps) {
                         ) : null}
                       </dl>
                     </section>
+                    <EquipmentUpdateInfo updated_by={selected.updated_by} updated_at={selected.updated_at} />
                     <FeederCableAtpPanel annotation={selected} onPreview={setAtpPreview} />
                     <RelatedIssuesPanel
                       issues={relatedIssues}

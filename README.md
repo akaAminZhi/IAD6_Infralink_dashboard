@@ -56,6 +56,13 @@ frontend/src/         Future React + TypeScript application source.
 
 ## Local Dashboard And Data Operations
 
+Equipment details display **Updated By** and **Updated At** from the System
+Elements Excel export in Equipment, PDMs (including Overview/KPR drill-downs),
+Power Plan, MV, and Layout equipment/cable inspectors. These identify the latest
+system-element update; blank export values display `--`. Normal ETL carries both
+fields into the PDM JSON/CSV and map datasets. Refresh data and the browser after
+new exports; compiled preview needs rebuilt frontend code for the initial change.
+
 Equipment details include **Open in Infralink** at the top in Equipment, PDMs
 (including Overview/KPR drill-downs), Power Plan, MV Equipment and Layout.
 Layout cables also link to their own system element. Links open JC2's main

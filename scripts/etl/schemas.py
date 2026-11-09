@@ -180,6 +180,8 @@ class PdmEquipmentRecord(SchemaRecord):
     manufacturer: str | None = None
     model: str | None = None
     serial_number: str | None = None
+    updated_by: str | None = None
+    updated_at: DateValue | None = None
     cases: list[CaseIssue] = field(default_factory=list)
 
 

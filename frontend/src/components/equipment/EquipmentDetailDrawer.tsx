@@ -28,6 +28,7 @@ import { getNetaReviewsForReport } from "../../utils/netaReportReviews";
 import { getReportDuplicates } from "../../utils/netaDuplicates";
 import { EpsTestItemsPanel } from "../common/EpsTestItemsPanel";
 import { EquipmentExternalLinks } from "../common/EquipmentExternalLinks";
+import { EquipmentUpdateInfo } from "../common/EquipmentUpdateInfo";
 import { NetaReportChips } from "../common/NetaReportChips";
 import { Button } from "../ui/button";
 import { Card, CardContent } from "../ui/card";
@@ -336,6 +337,7 @@ export function EquipmentDetailDrawer({
                   <Field label="Open Case Count" value={formatNumber(openCaseCount)} />
                   <Field label="Cases Missing Issue Image" value={formatNumber(missingImageCount)} />
                 </div>
+                <EquipmentUpdateInfo updated_by={equipment.updated_by} updated_at={equipment.updated_at} />
                 {trackingRequired ? <div>
                   <NetaReportNames
                     equipmentId={equipment.equipment_id}

@@ -91,6 +91,8 @@ def build_layout_connections(
             "connection_source": connection_source,
             "mv_annotation_ids": annotation_ids,
             "system_element_status": record.get("status"),
+            "updated_by": record.get("updated_by"),
+            "updated_at": record.get("updated_at"),
             "neta_complete": record.get("neta_complete") is True,
             "neta_test_report": record.get("neta_test_report"),
             "feeder_cable_atp_names": atp_names,
