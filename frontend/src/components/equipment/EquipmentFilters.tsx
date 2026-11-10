@@ -10,6 +10,21 @@ export type EquipmentNetaFilter =
   | "incomplete"
   | "complete_missing_report";
 
+export type EquipmentFeederTestedFilter = "" | "complete" | "not_complete";
+export type EquipmentCableFilter = "" | "cable" | "non_cable";
+
+const feederTestedFilterLabels: Record<EquipmentFeederTestedFilter, string> = {
+  "": "All",
+  complete: "Complete",
+  not_complete: "Not complete",
+};
+
+const cableFilterLabels: Record<EquipmentCableFilter, string> = {
+  "": "All",
+  cable: "Cable (FDR)",
+  non_cable: "Not cable",
+};
+
 const netaFilterLabels: Record<EquipmentNetaFilter, string> = {
   "": "All",
   complete: "Complete with report",
@@ -24,6 +39,8 @@ export interface EquipmentFiltersState {
   status: string;
   parent: string;
   neta: EquipmentNetaFilter;
+  feederTested?: EquipmentFeederTestedFilter;
+  cable?: EquipmentCableFilter;
   openCasesOnly: boolean;
   missingIssueImagesOnly: boolean;
   missingNetaReportOnly: boolean;
@@ -120,6 +137,8 @@ export function EquipmentFilters({
     filters.status,
     filters.parent,
     filters.neta,
+    filters.feederTested,
+    filters.cable,
     filters.openCasesOnly,
     filters.missingIssueImagesOnly,
     filters.missingNetaReportOnly,
@@ -136,6 +155,8 @@ export function EquipmentFilters({
     status: "Status",
     parent: "Parent",
     neta: "NETA",
+    feederTested: "Feeder tested",
+    cable: "Cable",
     openCasesOnly: "Open cases",
     missingIssueImagesOnly: "Missing issue images",
     missingNetaReportOnly: "Missing NETA report",
@@ -200,7 +221,7 @@ export function EquipmentFilters({
 
         {advancedOpen && (
           <div className="equipment-advanced-filters space-y-4" id={advancedId}>
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-7">
               <SelectFilter
                 allLabel="All equipment types"
                 label="Equipment Type"
@@ -234,6 +255,32 @@ export function EquipmentFilters({
                   <option value="complete">Complete</option>
                   <option value="incomplete">Incomplete</option>
                   <option value="complete_missing_report">Complete Missing Report</option>
+                </select>
+              </label>
+              <label className="flex min-w-0 flex-col gap-1 text-sm font-medium">
+                Feeder Tested
+                <select
+                  aria-label="Feeder Tested"
+                  className="h-9 rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                  onChange={(event) => update({ feederTested: event.target.value as EquipmentFeederTestedFilter })}
+                  value={filters.feederTested ?? ""}
+                >
+                  <option value="">All</option>
+                  <option value="complete">Complete</option>
+                  <option value="not_complete">Not Complete</option>
+                </select>
+              </label>
+              <label className="flex min-w-0 flex-col gap-1 text-sm font-medium">
+                Cable
+                <select
+                  aria-label="Cable"
+                  className="h-9 rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                  onChange={(event) => update({ cable: event.target.value as EquipmentCableFilter })}
+                  value={filters.cable ?? ""}
+                >
+                  <option value="">All</option>
+                  <option value="cable">Cable (FDR)</option>
+                  <option value="non_cable">Not cable</option>
                 </select>
               </label>
               <label className="flex min-w-0 flex-col gap-1 text-sm font-medium">
@@ -310,6 +357,10 @@ export function EquipmentFilters({
                   {filterLabels[key]}
                   {key === "neta"
                     ? `: ${netaFilterLabels[filters.neta]}`
+                    : key === "feederTested"
+                    ? `: ${feederTestedFilterLabels[filters.feederTested ?? ""]}`
+                    : key === "cable"
+                    ? `: ${cableFilterLabels[filters.cable ?? ""]}`
                     : typeof filters[key] === "string" ? `: ${filters[key]}` : ""}
                 </span>
                 <X className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />

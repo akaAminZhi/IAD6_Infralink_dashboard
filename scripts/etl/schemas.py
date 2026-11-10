@@ -87,6 +87,7 @@ class Equipment(SchemaRecord):
     energized_completed_at: DateValue | None = None
     neta_test_report: str | None = None
     feeder_cable_atp: str | None = None
+    feeder_tested_at: DateValue | None = None
     manufacturer: str | None = None
     model: str | None = None
     serial_number: str | None = None

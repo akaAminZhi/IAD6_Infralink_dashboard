@@ -95,6 +95,7 @@ def test_normalize_equipment_reads_and_trims_workbook_values(tmp_path) -> None:
             "energized_completed_at": None,
             "neta_test_report": "report.pdf",
             "feeder_cable_atp": None,
+            "feeder_tested_at": None,
             "manufacturer": "IEM",
             "model": "MODEL-1",
             "serial_number": "SERIAL-1",
@@ -135,3 +136,26 @@ def test_normalize_equipment_rejects_missing_columns(tmp_path) -> None:
 
     with pytest.raises(ValueError, match="Missing expected SystemElements columns"):
         normalize_equipment(str(workbook_path))
+
+
+def test_normalize_equipment_reads_optional_feeder_tested(tmp_path) -> None:
+    workbook_path = tmp_path / "SystemElements_feeder_tested.xlsx"
+    headers = [*SOURCE_COLUMNS, "Feeder Tested: Completed"]
+    tested = [None] * len(headers)
+    tested[headers.index("Unique ID")] = "FDR-A-B"
+    tested[headers.index("Open Issues")] = 0
+    tested[headers.index("Feeder Tested: Completed")] = "10/5/2026 2:15:03 PM"
+    untested = [None] * len(headers)
+    untested[headers.index("Unique ID")] = "FDR-C-D"
+    untested[headers.index("Open Issues")] = 0
+    na = [None] * len(headers)
+    na[headers.index("Unique ID")] = "FDR-E-F"
+    na[headers.index("Open Issues")] = 0
+    na[headers.index("Feeder Tested: Completed")] = "N/A"
+    make_workbook(workbook_path, headers=headers, rows=[tested, untested, na])
+
+    records = normalize_equipment(str(workbook_path))
+
+    assert records[0]["feeder_tested_at"] is not None
+    assert records[1]["feeder_tested_at"] is None
+    assert records[2]["feeder_tested_at"] is None

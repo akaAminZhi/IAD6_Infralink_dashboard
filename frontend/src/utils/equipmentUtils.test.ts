@@ -12,6 +12,8 @@ import {
   groupEquipmentById,
   hasPendingCxalloyReport,
   hasMissingNetaReport,
+  isCableEquipment,
+  isFeederTested,
   type FlattenedEquipmentRow,
 } from "./equipmentUtils";
 
@@ -369,5 +371,18 @@ describe("equipmentUtils", () => {
       casesMissingIssueImage: 1,
       cxalloyPendingEquipment: 1,
     });
+  });
+});
+
+describe("feeder tested and cable helpers", () => {
+  it("treats any Feeder Tested value as complete", () => {
+    expect(isFeederTested(row({ feeder_tested_at: "2026-10-05T14:15:03" }))).toBe(true);
+    expect(isFeederTested(row({ feeder_tested_at: null }))).toBe(false);
+    expect(isFeederTested(row({ feeder_tested_at: "  " }))).toBe(false);
+  });
+
+  it("identifies cables by FDR prefix", () => {
+    expect(isCableEquipment(row({ display_equipment_id: "FDR-IAD06-A-B", equipment_id: "FDR-IAD06-A-B" }))).toBe(true);
+    expect(isCableEquipment(row({ display_equipment_id: "IAD06-FDR-1", equipment_id: "IAD06-FDR-1" }))).toBe(false);
   });
 });

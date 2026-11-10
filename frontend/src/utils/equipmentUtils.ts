@@ -48,6 +48,7 @@ export interface FlattenedEquipmentRow {
   neta_completed_at: string | null;
   neta_test_report: string | null;
   feeder_cable_atp?: string | null;
+  feeder_tested_at?: string | null;
   neta_report_status: string | null;
   cxalloy_upload_status: "uploaded" | "pending" | "missing_pdf" | null;
   cxalloy_expected_report_count: number;
@@ -269,6 +270,7 @@ export function flattenEquipmentFromPdms(
         neta_completed_at: firstText(equipment.neta_completed_at, enrichment?.neta_completed_at),
         neta_test_report: firstText(equipment.neta_test_report, enrichment?.neta_test_report),
         feeder_cable_atp: firstText(enrichment?.feeder_cable_atp, equipment.feeder_cable_atp),
+        feeder_tested_at: firstText(enrichment?.feeder_tested_at, equipment.feeder_tested_at),
         neta_report_status: firstText(equipment.neta_report_status),
         ...cxalloyFields(cxalloyStatus),
         cases,
@@ -325,6 +327,7 @@ export function flattenEquipmentFromPdms(
         neta_completed_at: firstText(equipment.neta_completed_at),
         neta_test_report: firstText(equipment.neta_test_report),
         feeder_cable_atp: firstText(equipment.feeder_cable_atp),
+        feeder_tested_at: firstText(equipment.feeder_tested_at),
         neta_report_status: null,
         ...cxalloyFields(cxalloyStatus),
         cases,
@@ -363,6 +366,16 @@ export function hasMissingIssueImage(caseItem: CaseIssue): boolean {
 
 export function getCasesMissingIssueImageCount(equipment: FlattenedEquipmentRow): number {
   return equipment.cases.filter(hasMissingIssueImage).length;
+}
+
+export function isCableEquipment(equipment: Pick<FlattenedEquipmentRow, "display_equipment_id" | "equipment_id">): boolean {
+  return [equipment.display_equipment_id, equipment.equipment_id].some((value) =>
+    /^FDR/i.test(String(value ?? "").trim()),
+  );
+}
+
+export function isFeederTested(equipment: Pick<FlattenedEquipmentRow, "feeder_tested_at">): boolean {
+  return !isBlank(equipment.feeder_tested_at);
 }
 
 export function getEquipmentCableAtpNames(equipment: FlattenedEquipmentRow): string[] {

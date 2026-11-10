@@ -27,6 +27,8 @@ import {
   hasMissingNetaReport,
   hasPendingCxalloyReport,
   isBlank,
+  isCableEquipment,
+  isFeederTested,
   type FlattenedEquipmentRow,
 } from "../utils/equipmentUtils";
 import { matchesSearchQuery } from "../utils/searchUtils";
@@ -45,6 +47,8 @@ const defaultFilters: EquipmentFiltersState = {
   status: "",
   parent: "",
   neta: "",
+  feederTested: "",
+  cable: "",
   openCasesOnly: false,
   missingIssueImagesOnly: false,
   missingNetaReportOnly: false,
@@ -106,6 +110,18 @@ function filterEquipmentRows(
       return false;
     }
     if (filters.neta === "complete_missing_report" && netaStatus !== "Complete - Missing Report") {
+      return false;
+    }
+    if (filters.feederTested === "complete" && !isFeederTested(row)) {
+      return false;
+    }
+    if (filters.feederTested === "not_complete" && isFeederTested(row)) {
+      return false;
+    }
+    if (filters.cable === "cable" && !isCableEquipment(row)) {
+      return false;
+    }
+    if (filters.cable === "non_cable" && isCableEquipment(row)) {
       return false;
     }
     if (filters.openCasesOnly && getOpenCaseCount(row) === 0) {

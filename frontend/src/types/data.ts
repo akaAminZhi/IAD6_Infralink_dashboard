@@ -49,6 +49,7 @@ export interface Equipment {
   energized_completed_at?: string | null;
   neta_test_report?: string | null;
   feeder_cable_atp?: string | null;
+  feeder_tested_at?: string | null;
   manufacturer?: string | null;
   model?: string | null;
   serial_number?: string | null;
