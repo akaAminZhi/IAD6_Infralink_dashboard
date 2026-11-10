@@ -1,6 +1,6 @@
 import { DailyTestHistory } from "../components/common/DailyTestHistory";
-import { Box, Cable, CircleAlert, Eye, EyeOff, Hand, Maximize, MousePointer2, RotateCcw, Search, X, Zap, ZoomIn, ZoomOut } from "lucide-react";
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { Box, Cable, CircleAlert, EyeOff, Hand, Maximize, MousePointer2, RotateCcw, Search, X, Zap, ZoomIn, ZoomOut } from "lucide-react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 
 import { wheelZoomFactor } from "../utils/wheelZoom";
 import { EmptyState } from "../components/common/EmptyState";
@@ -22,7 +22,7 @@ import { useDashboardResources } from "../contexts/DashboardResourcesContext";
 import type { Equipment, LayoutCableRecord, LayoutEquipmentRecord, LayoutPlanManifest, PowerPlanRect } from "../types/data";
 import { buildLayoutSearchEntries, searchLayoutEntries, type LayoutSearchEntry } from "../utils/layoutSearchUtils";
 import { fetchJson } from "../utils/dataLoaders";
-import { LAYOUT_CABLE_MISSING_REPORT_MESSAGE, LAYOUT_CABLE_TEST_STATES, layoutCableMissingReport, layoutCableTestState } from "../utils/cableTestUtils";
+import { LAYOUT_CABLE_MISSING_REPORT_MESSAGE, LAYOUT_CABLE_TEST_STATES, layoutCableMissingReport, layoutCableTestState, type LayoutCableTestState } from "../utils/cableTestUtils";
 import { getLayoutCableReportNames } from "../utils/layoutReportUtils";
 import { getNetaReportNames } from "../utils/netaReports";
 import { ALL_LAYOUT_FLOORS, buildCombinedLayoutScene, isometricLayoutEquipment, layoutCableGeometry, layoutFloorFootprint } from "../utils/layoutSceneUtils";
@@ -110,6 +110,19 @@ function overlapsViewport(rect: PowerPlanRect, viewport: PowerPlanRect): boolean
     rect.y <= viewport.y + viewport.height && rect.y + rect.height >= viewport.y;
 }
 
+/** Legend entry that doubles as a highlight toggle; the accent colour rings the active chip. */
+function LegendToggle({ pressed, accent, count, tone, disabled, controls, title, onClick, children }: {
+  pressed: boolean; accent: string; count?: number; tone?: string; disabled?: boolean; controls?: string; title: string;
+  onClick: () => void; children: ReactNode;
+}) {
+  return <button type="button" aria-pressed={pressed} aria-controls={controls} disabled={disabled} title={title} onClick={onClick}
+    style={pressed ? { borderColor: accent, boxShadow: `0 0 0 1px ${accent}` } : undefined}
+    className={`inline-flex items-center gap-2 rounded-full border px-2.5 py-1 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600
+      disabled:cursor-not-allowed disabled:opacity-50 ${pressed ? "bg-accent font-medium" : "border-transparent hover:bg-accent/60"} ${tone ?? ""}`}>
+    {children}{count !== undefined ? <span className="tabular-nums text-muted-foreground" aria-hidden="true">{count}</span> : null}
+  </button>;
+}
+
 export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?: number; equipment?: Equipment[] }) {
   const [isometric, setIsometric] = useState(() => {
     try { return localStorage.getItem(LAYOUT_VIEW_KEY) !== "plan"; } catch { return true; }
@@ -118,6 +131,8 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
   const [selectedCableId, setSelectedCableId] = useState<string | null>(null);
   const [showCables, setShowCables] = useState(true);
   const [highlightMissingReports, setHighlightMissingReports] = useState(false);
+  const [cableStateFilter, setCableStateFilter] = useState<LayoutCableTestState | null>(null);
+  const [statusFilter, setStatusFilter] = useState<LayoutStatus | null>(null);
   const [manifest, setManifest] = useState<LayoutPlanManifest | null>(null);
   const [loading, setLoading] = useState(true);
   const [retry, setRetry] = useState(0);
@@ -156,7 +171,7 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
       setFloorId(result?.floors[0]?.floor_id ?? "");
       setSelectedId(null); setSelectedCableId(null); setUnplacedEquipment(null);
       setSelectionKeys(new Set());
-      setHighlightMissingReports(false);
+      clearHighlights();
       setViewport(null);
       setLoading(false);
     });
@@ -189,9 +204,17 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
       : placedLayoutCables(manifest?.cables ?? [], rows, regions), [manifest, rows, regions, combined, combinedScene, isometric, floorId]);
   const selectedConnection = selectedCableId ? connections.find(({ cable }) => cable.cable_id === selectedCableId) : undefined;
   const missingReportConnections = useMemo(() => connections.filter(({ cable }) => layoutCableMissingReport(cable)), [connections]);
-  const missingReportCableIds = useMemo(() => new Set(missingReportConnections.map(({ cable }) => cable.cable_id)), [missingReportConnections]);
-  const missingReportEndpointKeys = useMemo(() => new Set(missingReportConnections.flatMap(({ cable }) =>
-    [cable.source_equipment_key, cable.target_equipment_key])), [missingReportConnections]);
+  const cableStateCounts = useMemo(() => connections.reduce<Record<LayoutCableTestState, number>>((counts, { cable }) => {
+    counts[layoutCableTestState(cable)] += 1; return counts;
+  }, { updated: 0, pending: 0, failed: 0, unconfirmed: 0 }), [connections]);
+  // Legend-driven highlight: "missing report" or one test state, never both.
+  const cableHighlightMode = highlightMissingReports || cableStateFilter !== null;
+  const highlightConnections = useMemo(() => highlightMissingReports ? missingReportConnections
+    : cableStateFilter ? connections.filter(({ cable }) => layoutCableTestState(cable) === cableStateFilter) : [],
+  [highlightMissingReports, cableStateFilter, missingReportConnections, connections]);
+  const missingReportCableIds = useMemo(() => new Set(highlightConnections.map(({ cable }) => cable.cable_id)), [highlightConnections]);
+  const missingReportEndpointKeys = useMemo(() => new Set(highlightConnections.flatMap(({ cable }) =>
+    [cable.source_equipment_key, cable.target_equipment_key])), [highlightConnections]);
   const cableGeometry = useMemo(() => !isometric ? [] : combined && combinedScene ? combinedScene.geometry
     : layoutCableGeometry(connections), [connections, combined, combinedScene, isometric]);
   const connectionIds = useMemo(() => new Set(connections.map((item) => item.cable.cable_id)), [connections]);
@@ -275,7 +298,8 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
   const connectedKeys = useMemo(() => new Set([...selectionKeys, ...focusConnections.flatMap((cable) =>
     [cable.source_equipment_key, cable.target_equipment_key])]), [selectionKeys, focusConnections]);
   const cableEndpointKeys = selectedCable ? [selectedCable.source_equipment_key, selectedCable.target_equipment_key] : [];
-  const rowIsDimmed = (row: LayoutEquipmentRecord) => isometric && highlightMissingReports ? !missingReportEndpointKeys.has(row.equipment_key)
+  const rowIsDimmed = (row: LayoutEquipmentRecord) => statusFilter ? statusOf(row) !== statusFilter
+    : isometric && cableHighlightMode ? !missingReportEndpointKeys.has(row.equipment_key)
     : isometric && selectedCable ? !cableEndpointKeys.includes(row.equipment_key)
     : selectionKeys.size ? !connectedKeys.has(row.equipment_key)
     : !!query && !row.equipment_key.includes(query);
@@ -335,7 +359,7 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
   }
 
   function confirmSuggestion(suggestion: LayoutSearchEntry) {
-    setHighlightMissingReports(false);
+    clearHighlights();
     if (suggestion.floorId === ALL_LAYOUT_FLOORS) {
       if (isometric) setCombinedFloors(true);
     } else if (suggestion.floorId && !combined) setFloorId(suggestion.floorId);
@@ -454,7 +478,7 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
 
   const selectDevice = useCallback((record: LayoutEquipmentRecord) => {
     toggleEquipmentSelection(record.equipment_key);
-    setHighlightMissingReports(false); setSearch(""); setSearchOpen(false);
+    clearHighlights(); setSearch(""); setSearchOpen(false);
     setSelectedId(record.annotation_id); setSelectedCableId(null); setUnplacedEquipment(null);
   }, [toggleEquipmentSelection]);
   const selectCable = useCallback((cableId: string) => {
@@ -489,15 +513,33 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
     if (next) setHasIsometric(true);
     const nextKeys = next && combinedFloors ? null : new Set((manifest ? visibleLayoutEquipment(manifest, floorId) : []).map((row) => row.equipment_key));
     setSelectionKeys((current) => selectionMode ? new Set() : new Set([...current].filter((key) => !nextKeys || nextKeys.has(key))));
-    setIsometric(next); setHighlightMissingReports(false); setViewport(null); setInspection(null); setSelectionBox(null);
+    setIsometric(next); clearHighlights(); setViewport(null); setInspection(null); setSelectionBox(null);
     panRef.current = null;
     setPanCullViewport(null);
     if (panLayerRef.current) { panLayerRef.current.style.transform = ""; panLayerRef.current.style.willChange = ""; }
     try { localStorage.setItem(LAYOUT_VIEW_KEY, next ? "isometric" : "plan"); } catch { /* View works without persistence. */ }
   }
 
+  function clearHighlights() {
+    setHighlightMissingReports(false); setCableStateFilter(null); setStatusFilter(null);
+  }
+
+  function toggleCableHighlight(next: "missing" | LayoutCableTestState) {
+    const active = next === "missing" ? highlightMissingReports : cableStateFilter === next;
+    clearFocus();
+    if (active) return;
+    if (next === "missing") setHighlightMissingReports(true); else setCableStateFilter(next);
+    setShowCables(true); setSelectionMode(false); setSelectionBox(null);
+  }
+
+  function toggleStatusHighlight(status: LayoutStatus) {
+    const active = statusFilter === status;
+    clearFocus();
+    if (!active) { setStatusFilter(status); setSelectionMode(false); setSelectionBox(null); }
+  }
+
   function clearFocus() {
-    setHighlightMissingReports(false);
+    clearHighlights();
     setSelectedId(null); setSelectedCableId(null); setUnplacedEquipment(null); setInspection(null); setSearch(""); setSearchOpen(false);
     setSelectionKeys(new Set());
   }
@@ -522,7 +564,7 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
   const equipmentFloorLabel = (row: LayoutEquipmentRecord) => row.fixed ? "Shared Outdoor Equipment"
     : manifest.floors.find((floor) => floor.floor_id === row.source_floor_id)?.label ?? "Floor equipment";
   const isCableActive = (cable: LayoutCableRecord) => selectedCableId ? selectedCableId === cable.cable_id : focusedCableIds.has(cable.cable_id);
-  const isCableHighlighted = (cable: LayoutCableRecord) => highlightMissingReports ? missingReportCableIds.has(cable.cable_id) : isCableActive(cable);
+  const isCableHighlighted = (cable: LayoutCableRecord) => cableHighlightMode ? missingReportCableIds.has(cable.cable_id) : isCableActive(cable);
   const undergroundCables = drawnCables.filter(({ route }) => route === "underground");
   const aboveGroundCables = drawnCables.filter(({ route }) => route !== "underground");
   const backgroundFeeds = aboveGroundCables.filter(({ connection }) => connection.externalKind === "shared-feed" &&
@@ -536,8 +578,8 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
     : combinedScene ? [{ id: floorId, rect: combinedScene.floorFootprint, raised: floorId !== manifest.floors[0].floor_id }] : [];
   const renderCable = ({ connection, path, markerPoint, route, zone }: (typeof cableGeometry)[number]) => {
     const cable = connection.cable;
-    const active = highlightMissingReports ? missingReportCableIds.has(cable.cable_id) : isCableActive(cable);
-    const dimmed = highlightMissingReports ? !active : selectedCableId || selectionKeys.size ? !active : (!!query &&
+    const active = cableHighlightMode ? missingReportCableIds.has(cable.cable_id) : isCableActive(cable);
+    const dimmed = cableHighlightMode ? !active : selectedCableId || selectionKeys.size ? !active : (!!query &&
       ![cable.cable_id, cable.source_equipment_key ?? "", cable.target_equipment_key ?? ""].some((key) => key.toUpperCase().includes(query)));
     return <LayoutCable key={cable.cable_id} cable={cable} path={path} route={route} zone={zone} selected={selectedCableId === cable.cable_id}
       markerPoint={markerPoint} markerSize={Number.isFinite(pixelsPerUnit) && pixelsPerUnit > 0 ? 15 / pixelsPerUnit : 7}
@@ -600,7 +642,7 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
           setCombinedFloors(event.target.value === ALL_LAYOUT_FLOORS);
           if (event.target.value !== ALL_LAYOUT_FLOORS) setFloorId(event.target.value);
           setViewport(null); setSelectedId(null); setSelectedCableId(null); setUnplacedEquipment(null); setSearchOpen(false); setInspection(null); setSelectionKeys(new Set());
-          setHighlightMissingReports(false);
+          clearHighlights();
         }} className="block h-9 rounded-md border bg-background px-3">
           {isometric ? <option value={ALL_LAYOUT_FLOORS}>All floors</option> : null}
           {manifest.floors.map((floor) => <option key={floor.floor_id} value={floor.floor_id}>{floor.label}</option>)}
@@ -612,32 +654,25 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
       <Button variant="outline" onClick={restoreGlobalView}><Maximize className="mr-2 h-4 w-4" />{isometric ? "Global view" : "Fit layout"}</Button>
     </div>
     {isometric ? <div className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-lg border bg-card px-4 py-3 text-xs">
-      <span className="inline-flex items-center font-medium"><Cable className="mr-2 h-4 w-4" />Cable connections ({connections.length})</span>
-      <Button variant="outline" aria-pressed={!showCables} aria-controls="layout-cables layout-shared-feed-cables layout-underground-cables" onClick={() => {
-        setShowCables((value) => !value); setSelectedCableId(null); setHighlightMissingReports(false);
-      }}>
-        {showCables ? <EyeOff className="mr-2 h-4 w-4" /> : <Eye className="mr-2 h-4 w-4" />}
-        {showCables ? "Hide all cables" : "Show all cables"}
-      </Button>
-      <Button variant={highlightMissingReports ? "secondary" : "outline"} aria-pressed={highlightMissingReports}
-        aria-controls="layout-cables layout-shared-feed-cables layout-underground-cables" disabled={!missingReportConnections.length && !highlightMissingReports}
-        className={highlightMissingReports ? "border border-amber-400 bg-amber-100 text-amber-900 hover:bg-amber-200" : undefined}
-        title="Highlight Infralink-updated cables with no listed ATP/NETA report on this floor."
-        onClick={() => {
-          const next = !highlightMissingReports;
-          clearFocus(); setHighlightMissingReports(next);
-          if (next) { setShowCables(true); setSelectionMode(false); setSelectionBox(null); }
+      <Button variant={showCables ? "outline" : "secondary"} aria-pressed={showCables} aria-controls="layout-cables layout-shared-feed-cables layout-underground-cables"
+        title={showCables ? "Click to hide all cables" : "Click to show all cables"} className={showCables ? undefined : "text-muted-foreground"} onClick={() => {
+          setShowCables((value) => !value); setSelectedCableId(null); clearHighlights();
         }}>
-        <CircleAlert className="mr-2 h-4 w-4" aria-hidden="true" />Highlight missing reports ({missingReportConnections.length})
+        {showCables ? <Cable className="mr-2 h-4 w-4" /> : <EyeOff className="mr-2 h-4 w-4" />}Cable connections ({connections.length})
       </Button>
-      {Object.entries(LAYOUT_CABLE_TEST_STATES).map(([key, state]) => <span key={key} className="inline-flex items-center gap-2">
-        <svg width="22" height="8" aria-hidden="true"><line x1="0" x2="22" y1="4" y2="4" stroke={state.color} strokeWidth="2.5" strokeDasharray={state.dash} /></svg>{state.label}
-      </span>)}
-      <span className="inline-flex items-center gap-2 text-amber-800" title={LAYOUT_CABLE_MISSING_REPORT_MESSAGE}>
+      {(Object.entries(LAYOUT_CABLE_TEST_STATES) as [LayoutCableTestState, (typeof LAYOUT_CABLE_TEST_STATES)[LayoutCableTestState]][]).map(([key, state]) =>
+        <LegendToggle key={key} pressed={cableStateFilter === key} count={cableStateCounts[key]} accent={state.color}
+          disabled={!cableStateCounts[key] && cableStateFilter !== key} controls="layout-cables layout-shared-feed-cables layout-underground-cables"
+          title={`Highlight ${state.label} cables on this floor.`} onClick={() => toggleCableHighlight(key)}>
+          <svg width="22" height="8" aria-hidden="true"><line x1="0" x2="22" y1="4" y2="4" stroke={state.color} strokeWidth="2.5" strokeDasharray={state.dash} /></svg>{state.label}
+        </LegendToggle>)}
+      <LegendToggle pressed={highlightMissingReports} count={missingReportConnections.length} accent="#b45309" tone="text-amber-800"
+        disabled={!missingReportConnections.length && !highlightMissingReports} controls="layout-cables layout-shared-feed-cables layout-underground-cables"
+        title={LAYOUT_CABLE_MISSING_REPORT_MESSAGE} onClick={() => toggleCableHighlight("missing")}>
         <CircleAlert className="h-4 w-4 fill-amber-100" aria-hidden="true" />Infralink updated · Report missing
-      </span>
-      <Button variant="ghost" className={selectionKeys.size || selectedCable || unplacedEquipment || highlightMissingReports ? undefined : "invisible"}
-        disabled={!selectionKeys.size && !selectedCable && !unplacedEquipment && !highlightMissingReports} onClick={clearFocus}><X className="mr-2 h-4 w-4" />Clear focus</Button>
+      </LegendToggle>
+      <Button variant="ghost" className={selectionKeys.size || selectedCable || unplacedEquipment || cableHighlightMode || statusFilter ? undefined : "invisible"}
+        disabled={!selectionKeys.size && !selectedCable && !unplacedEquipment && !cableHighlightMode && !statusFilter} onClick={clearFocus}><X className="mr-2 h-4 w-4" />Clear focus</Button>
       <span className="w-full text-muted-foreground">MV cables use underground ducts with straight bends; other cables use overhead routes. Routes and burial depth are illustrative. Selected devices highlight their direct connections.</span>
       {!manifest.cables ? <span className="text-amber-700">Cable data is unavailable. Rebuild Layout data to load connections.</span> : null}
     </div> : null}
@@ -646,7 +681,7 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
         setSelectionMode(false); setSelectionBox(null); setInspection(null);
       }}><Hand className="mr-2 h-4 w-4" />Pan</Button>
       <Button variant={selectionMode ? "default" : "outline"} aria-pressed={selectionMode} onClick={() => {
-        setHighlightMissingReports(false);
+        clearHighlights();
         setSelectionMode((current) => !current); setSelectedCableId(null); setSelectionBox(null); setInspection(null);
       }}><MousePointer2 className="mr-2 h-4 w-4" />Box select</Button>
       <span role="status" className="text-sm text-muted-foreground">{selectedRows.length} selected{selectionMode ? ` · ${eligibleRows.length} eligible` : ""}</span>
@@ -658,12 +693,16 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
       </> : null}
       <Button variant="ghost" disabled={!selectionKeys.size} onClick={() => { setSelectionKeys(new Set()); setSelectedId(null); setSelectedCableId(null); setSearch(""); }}><X className="mr-2 h-4 w-4" />Clear selection</Button>
     </div>
-    <div className="flex flex-wrap gap-4 text-sm">
-      {(Object.keys(LAYOUT_STATUS_LABELS) as LayoutStatus[]).map((status) => <span key={status} className="inline-flex items-center gap-2">
-        {status === "energized" || status === "energizeToday" ? <Zap className="h-4 w-4" color={LAYOUT_STATUS_COLORS[status].stroke} fill={LAYOUT_STATUS_COLORS[status].stroke} />
-          : <span className="h-3 w-3 rounded border" style={{ backgroundColor: LAYOUT_STATUS_COLORS[status].fill, borderColor: LAYOUT_STATUS_COLORS[status].stroke }} />}
-        {LAYOUT_STATUS_LABELS[status]} ({rows.filter((row) => statusOf(row) === status).length})
-      </span>)}
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-2 text-sm">
+      {(Object.keys(LAYOUT_STATUS_LABELS) as LayoutStatus[]).map((status) => {
+        const count = rows.filter((row) => statusOf(row) === status).length;
+        return <LegendToggle key={status} pressed={statusFilter === status} accent={LAYOUT_STATUS_COLORS[status].stroke}
+          disabled={!count && statusFilter !== status} title={`Highlight ${LAYOUT_STATUS_LABELS[status]} equipment.`} onClick={() => toggleStatusHighlight(status)}>
+          {status === "energized" || status === "energizeToday" ? <Zap className="h-4 w-4" color={LAYOUT_STATUS_COLORS[status].stroke} fill={LAYOUT_STATUS_COLORS[status].stroke} />
+            : <span className="h-3 w-3 rounded border" style={{ backgroundColor: LAYOUT_STATUS_COLORS[status].fill, borderColor: LAYOUT_STATUS_COLORS[status].stroke }} />}
+          {LAYOUT_STATUS_LABELS[status]} ({count})
+        </LegendToggle>;
+      })}
       <span className="text-muted-foreground">PODs and rooms are reference areas</span>
     </div>
     {isometric ? <p className="flex items-center gap-2 text-sm font-semibold text-amber-950">

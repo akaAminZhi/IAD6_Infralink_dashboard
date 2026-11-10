@@ -70,7 +70,7 @@ describe("2.5D Layout connections", () => {
     expect(duct.querySelector('[data-cable-state]')).toHaveAttribute("stroke-linejoin", "miter");
     await user.click(duct);
     expect(screen.getByLabelText("Cable details")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Hide all cables" }));
+    await user.click(screen.getByRole("button", { name: /^Cable connections \(\d+\)$/ }));
     expect(container.querySelector('[data-cable-route="underground"]')).not.toBeInTheDocument();
   });
 
@@ -647,7 +647,7 @@ describe("2.5D Layout connections", () => {
     const user = userEvent.setup();
     const { container } = render(<LayoutPlanPage />);
     await user.click(await screen.findByRole("button", { name: /FDR-IAD06-EQ-1-IAD06-EQ-FIX:/ }));
-    await user.click(screen.getByRole("button", { name: "Hide all cables" }));
+    await user.click(screen.getByRole("button", { name: /^Cable connections \(\d+\)$/ }));
     expect(container.querySelector("[data-layout-layer=cables]")).not.toBeInTheDocument();
     await user.selectOptions(screen.getByLabelText("Floor"), "second");
     expect(screen.queryByLabelText("Cable details")).not.toBeInTheDocument();
@@ -668,7 +668,7 @@ describe("2.5D Layout connections", () => {
     ];
     const user = userEvent.setup();
     const { container } = render(<LayoutPlanPage />);
-    const toggle = await screen.findByRole("button", { name: "Highlight missing reports (2)" });
+    const toggle = await screen.findByRole("button", { name: "Infralink updated · Report missing" });
     const route = (id: string) => container.querySelector(`[data-cable-id="${id}"]`)!;
     const unrelated = screen.getByRole("button", { name: "EQ-UNKNOWN: Unknown" });
     const map = screen.getByRole("img", { name: /^(First Floor|All floors) equipment layout$/ });
@@ -693,13 +693,38 @@ describe("2.5D Layout connections", () => {
     expect(unrelated).toHaveAttribute("opacity", "1");
   });
 
+  it("highlights cables of one test state and equipment of one status from the legends", async () => {
+    const manifest = isometricDataset();
+    manifest.cables = [
+      cable({ cable_id: "FDR-PENDING", eps_daily_test_status: "tested" }),
+      cable({ cable_id: "FDR-OTHER" }),
+    ];
+    const user = userEvent.setup();
+    const { container } = render(<LayoutPlanPage />);
+    const route = (id: string) => container.querySelector(`[data-cable-id="${id}"]`)!;
+    const state = await screen.findByRole("button", { name: "Tested - Infralink Update Pending" });
+    await user.click(state);
+    expect(state).toHaveAttribute("aria-pressed", "true");
+    expect(route("FDR-PENDING")).toHaveAttribute("opacity", "1");
+    expect(route("FDR-OTHER")).toHaveAttribute("opacity", "0.1");
+    await user.click(state);
+    expect(state).toHaveAttribute("aria-pressed", "false");
+    const energized = screen.getByRole("button", { name: /^Energized \(/ });
+    await user.click(energized);
+    expect(energized).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "EQ-1: Energized" })).toHaveAttribute("opacity", "1");
+    expect(screen.getByRole("button", { name: "EQ-UNKNOWN: Unknown" })).toHaveAttribute("opacity", "0.2");
+    await user.click(screen.getByRole("button", { name: "Clear focus" }));
+    expect(energized).toHaveAttribute("aria-pressed", "false");
+  });
+
   it("shows hidden cables for report highlighting and exits the mode through existing view controls", async () => {
     const manifest = isometricDataset();
     manifest.cables![0].system_element_status = "L3: Pre Func Testing & Startup";
     const user = userEvent.setup();
     const { container } = render(<LayoutPlanPage />);
-    const toggle = await screen.findByRole("button", { name: "Highlight missing reports (1)" });
-    await user.click(screen.getByRole("button", { name: "Hide all cables" }));
+    const toggle = await screen.findByRole("button", { name: "Infralink updated · Report missing" });
+    await user.click(screen.getByRole("button", { name: /^Cable connections \(\d+\)$/ }));
     await user.click(toggle);
     expect(container.querySelector("[data-cable-missing-report]")).toBeInTheDocument();
     expect(toggle).toHaveAttribute("aria-pressed", "true");
@@ -709,24 +734,24 @@ describe("2.5D Layout connections", () => {
     await user.click(screen.getByRole("button", { name: "Global view" }));
     expect(toggle).toHaveAttribute("aria-pressed", "false");
     await user.click(toggle);
-    await user.click(screen.getByRole("button", { name: "Hide all cables" }));
+    await user.click(screen.getByRole("button", { name: /^Cable connections \(\d+\)$/ }));
     expect(toggle).toHaveAttribute("aria-pressed", "false");
     expect(container.querySelector("[data-cable-id]")).not.toBeInTheDocument();
     await user.click(toggle);
     await user.click(screen.getByRole("button", { name: "2D plan" }));
     await user.click(screen.getByRole("button", { name: "2.5D" }));
-    expect(screen.getByRole("button", { name: "Highlight missing reports (1)" })).toHaveAttribute("aria-pressed", "false");
-    await user.click(screen.getByRole("button", { name: "Highlight missing reports (1)" }));
+    expect(screen.getByRole("button", { name: "Infralink updated · Report missing" })).toHaveAttribute("aria-pressed", "false");
+    await user.click(screen.getByRole("button", { name: "Infralink updated · Report missing" }));
     await user.selectOptions(screen.getByLabelText("Floor"), "second");
-    expect(screen.getByRole("button", { name: "Highlight missing reports (0)" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Infralink updated · Report missing" })).toBeDisabled();
   });
 
   it("keeps cable visibility off across global reset, floor/view changes and connection inspection", async () => {
     isometricDataset();
     const user = userEvent.setup();
     const { container } = render(<LayoutPlanPage />);
-    await user.click(await screen.findByRole("button", { name: "Hide all cables" }));
-    expect(screen.getByRole("button", { name: "Show all cables" })).toHaveAttribute("aria-pressed", "true");
+    await user.click(await screen.findByRole("button", { name: /^Cable connections \(\d+\)$/ }));
+    expect(screen.getByRole("button", { name: /^Cable connections \(\d+\)$/ })).toHaveAttribute("aria-pressed", "false");
     expect(container.querySelectorAll("[data-cable-id]")).toHaveLength(0);
     await user.click(screen.getByRole("button", { name: "Global view" }));
     await user.click(screen.getByRole("button", { name: "EQ-1: Energized" }));
@@ -736,10 +761,10 @@ describe("2.5D Layout connections", () => {
     await user.selectOptions(screen.getByLabelText("Floor"), "second");
     await user.click(screen.getByRole("button", { name: "2D plan" }));
     await user.click(screen.getByRole("button", { name: "2.5D" }));
-    expect(screen.getByRole("button", { name: "Show all cables" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Cable connections \(\d+\)$/ })).toBeInTheDocument();
     expect(container.querySelectorAll("[data-cable-id]")).toHaveLength(0);
     await user.selectOptions(screen.getByLabelText("Floor"), "first");
-    await user.click(screen.getByRole("button", { name: "Show all cables" }));
+    await user.click(screen.getByRole("button", { name: /^Cable connections \(\d+\)$/ }));
     expect(container.querySelectorAll("[data-cable-id]")).toHaveLength(1);
   });
 
