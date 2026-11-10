@@ -632,12 +632,13 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
         <RotateCcw className="mr-2 h-4 w-4" />Reset all statuses
       </Button>
     </div>
-    <div className="relative z-20 flex flex-wrap items-end gap-3 rounded-lg border bg-card p-4">
-      <div className="flex gap-1 self-end rounded-md border p-1" role="group" aria-label="Layout view">
+    <div className="relative z-20 space-y-3 rounded-lg border bg-card p-4">
+    <div className="flex flex-wrap items-center gap-3">
+      <div className="flex gap-1 rounded-md border p-1" role="group" aria-label="Layout view">
         <Button variant={!isometric ? "secondary" : "ghost"} aria-pressed={!isometric} onClick={() => switchView(false)}>2D plan</Button>
         <Button variant={isometric ? "secondary" : "ghost"} aria-pressed={isometric} onClick={() => switchView(true)}><Box className="mr-2 h-4 w-4" />2.5D</Button>
       </div>
-      <label className="space-y-1 text-sm font-medium">Floor
+      <label className="flex items-center gap-2 text-sm font-medium">Floor
         <select aria-label="Floor" value={combined ? ALL_LAYOUT_FLOORS : floorId} onChange={(event) => {
           setCombinedFloors(event.target.value === ALL_LAYOUT_FLOORS);
           if (event.target.value !== ALL_LAYOUT_FLOORS) setFloorId(event.target.value);
@@ -649,11 +650,27 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
         </select>
       </label>
       <Button variant="outline" aria-label="Zoom out" onClick={() => { setInspection(null); setViewport(zoomLayoutViewport(bounds, fullBounds, 1.2)); }}><ZoomOut className="h-4 w-4" /></Button>
-      <span className="pb-2 text-sm tabular-nums">{Math.round(zoom * 100)}%</span>
+      <span className="text-sm tabular-nums">{Math.round(zoom * 100)}%</span>
       <Button variant="outline" aria-label="Zoom in" onClick={() => { setInspection(null); setViewport(zoomLayoutViewport(bounds, fullBounds, 0.82)); }}><ZoomIn className="h-4 w-4" /></Button>
       <Button variant="outline" onClick={restoreGlobalView}><Maximize className="mr-2 h-4 w-4" />{isometric ? "Global view" : "Fit layout"}</Button>
+      <span className="mx-1 h-8 border-l" aria-hidden="true" />
+      <div className="flex gap-1 rounded-md border p-1" role="group" aria-label="Map tool">
+        <Button variant={!selectionMode ? "secondary" : "ghost"} aria-pressed={!selectionMode} onClick={() => {
+          setSelectionMode(false); setSelectionBox(null); setInspection(null);
+        }}><Hand className="mr-2 h-4 w-4" />Pan</Button>
+        <Button variant={selectionMode ? "secondary" : "ghost"} aria-pressed={selectionMode} onClick={() => {
+          clearHighlights();
+          setSelectionMode((current) => !current); setSelectedCableId(null); setSelectionBox(null); setInspection(null);
+        }}><MousePointer2 className="mr-2 h-4 w-4" />Box select</Button>
+      </div>
+      <span role="status" className="text-sm text-muted-foreground">{selectedRows.length} selected{selectionMode ? ` · ${eligibleRows.length} eligible` : ""}</span>
+      {selectionMode ? <Button disabled={!eligibleRows.length} onClick={() => saveOverrides(planLayoutSelection(rows, selectionKeys, overrides))}>
+        <Zap className="mr-2 h-4 w-4 text-orange-500" />Energize today ({eligibleRows.length})
+      </Button> : null}
+      <Button variant="ghost" disabled={!selectionKeys.size} onClick={() => { setSelectionKeys(new Set()); setSelectedId(null); setSelectedCableId(null); setSearch(""); }}><X className="mr-2 h-4 w-4" />Clear selection</Button>
     </div>
-    {isometric ? <div className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-lg border bg-card px-4 py-3 text-xs">
+    <div className="space-y-2 border-t pt-3">
+    {isometric ? <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs">
       <Button variant={showCables ? "outline" : "secondary"} aria-pressed={showCables} aria-controls="layout-cables layout-shared-feed-cables layout-underground-cables"
         title={showCables ? "Click to hide all cables" : "Click to show all cables"} className={showCables ? undefined : "text-muted-foreground"} onClick={() => {
           setShowCables((value) => !value); setSelectedCableId(null); clearHighlights();
@@ -673,26 +690,8 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
       </LegendToggle>
       <Button variant="ghost" className={selectionKeys.size || selectedCable || unplacedEquipment || cableHighlightMode || statusFilter ? undefined : "invisible"}
         disabled={!selectionKeys.size && !selectedCable && !unplacedEquipment && !cableHighlightMode && !statusFilter} onClick={clearFocus}><X className="mr-2 h-4 w-4" />Clear focus</Button>
-      <span className="w-full text-muted-foreground">MV cables use underground ducts with straight bends; other cables use overhead routes. Routes and burial depth are illustrative. Selected devices highlight their direct connections.</span>
       {!manifest.cables ? <span className="text-amber-700">Cable data is unavailable. Rebuild Layout data to load connections.</span> : null}
     </div> : null}
-    <div className="flex flex-wrap items-center gap-3">
-      <Button variant={!selectionMode ? "default" : "outline"} aria-pressed={!selectionMode} onClick={() => {
-        setSelectionMode(false); setSelectionBox(null); setInspection(null);
-      }}><Hand className="mr-2 h-4 w-4" />Pan</Button>
-      <Button variant={selectionMode ? "default" : "outline"} aria-pressed={selectionMode} onClick={() => {
-        clearHighlights();
-        setSelectionMode((current) => !current); setSelectedCableId(null); setSelectionBox(null); setInspection(null);
-      }}><MousePointer2 className="mr-2 h-4 w-4" />Box select</Button>
-      <span role="status" className="text-sm text-muted-foreground">{selectedRows.length} selected{selectionMode ? ` · ${eligibleRows.length} eligible` : ""}</span>
-      {selectionMode ? <>
-        <Button disabled={!eligibleRows.length} onClick={() => saveOverrides(planLayoutSelection(rows, selectionKeys, overrides))}>
-          <Zap className="mr-2 h-4 w-4 text-orange-500" />Energize today ({eligibleRows.length})
-        </Button>
-        <span className="text-xs text-muted-foreground">Drag to enclose equipment; Shift + drag adds more. Middle-drag to pan, or switch to Pan to keep your selection. Energized devices are skipped.</span>
-      </> : null}
-      <Button variant="ghost" disabled={!selectionKeys.size} onClick={() => { setSelectionKeys(new Set()); setSelectedId(null); setSelectedCableId(null); setSearch(""); }}><X className="mr-2 h-4 w-4" />Clear selection</Button>
-    </div>
     <div className="flex flex-wrap items-center gap-x-2 gap-y-2 text-sm">
       {(Object.keys(LAYOUT_STATUS_LABELS) as LayoutStatus[]).map((status) => {
         const count = rows.filter((row) => statusOf(row) === status).length;
@@ -703,15 +702,13 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
           {LAYOUT_STATUS_LABELS[status]} ({count})
         </LegendToggle>;
       })}
-      <span className="text-muted-foreground">PODs and rooms are reference areas</span>
+      {isometric ? <span className="ml-3 flex items-center gap-1.5 text-xs font-semibold text-amber-950">
+        <Zap className="h-4 w-4 shrink-0 fill-red-700 text-red-700" aria-hidden="true" />
+        Breathing lightning: energized or energizing today
+      </span> : null}
     </div>
-    {isometric ? <p className="flex items-center gap-2 text-sm font-semibold text-amber-950">
-      <Zap className="h-5 w-5 shrink-0 fill-red-700 text-red-700" aria-hidden="true" />
-      Electrical hazard: breathing lightning marks energized equipment and equipment scheduled to energize today.
-    </p> : null}
-    <p className="text-xs text-muted-foreground">{isometric
-      ? "Click devices to add or remove selections; only selected devices, their direct neighbors and connecting cables are highlighted. Click a cable to trace it alone. Click empty space to clear focus. Global view or Esc restores the full layout. Drag to pan; scroll to zoom."
-      : "Click devices to add or remove selections. Hover or focus equipment to read its full ID. Drag to pan; scroll to zoom. Confirm a search suggestion to zoom to the device. Energized equipment cannot be planned again. Reset restores Excel values for all floors."}</p>
+    </div>
+    </div>
     {storageError ? <p role="alert" className="text-sm text-amber-700">Browser storage is unavailable. Changes apply for this visit only.</p> : null}
     <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
       <div ref={mapRef} className="relative h-[68vh] min-h-[400px] overflow-hidden rounded-lg border bg-white" aria-label="Layout map">
