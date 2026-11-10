@@ -42,6 +42,10 @@ describe("EquipmentPage", () => {
     const user = userEvent.setup();
     const entries = [
       { id: "EQ-PENDING", complete: true, status: "pending" as const },
+      { id: "IAD06-CUPP6-04R-3", complete: true, status: "pending" as const },
+      { id: "IAD06-TX-CUPP6-01R-1", complete: true, status: "pending" as const },
+      { id: "IAD06-CUPP6-04F-3", complete: true, status: "pending" as const },
+      { id: "IAD06-TX-CUPP6-01A-1", complete: true, status: "pending" as const },
       { id: "IAD06-TX-UPP6-01A", complete: true, status: "pending" as const },
       { id: "IAD06-UPP6-01A", complete: true, status: "pending" as const },
       { id: "EQ-INCOMPLETE", complete: false, status: "pending" as const },
@@ -58,10 +62,11 @@ describe("EquipmentPage", () => {
     });
     render(<MemoryRouter initialEntries={[path]}><EquipmentPage data={data} /></MemoryRouter>);
     const card = screen.getByText("Pending CxAlloy Upload").closest("button")!;
-    expect(card).toHaveTextContent("1");
+    expect(card).toHaveTextContent("3");
     if (path === "/equipment") await user.click(card);
     expect(screen.getByRole("cell", { name: "EQ-PENDING" })).toBeInTheDocument();
-    for (const entry of entries.slice(1)) expect(screen.queryByRole("cell", { name: entry.id })).not.toBeInTheDocument();
+    for (const entry of entries.slice(0, 3)) expect(screen.getByRole("cell", { name: entry.id })).toBeInTheDocument();
+    for (const entry of entries.slice(3)) expect(screen.queryByRole("cell", { name: entry.id })).not.toBeInTheDocument();
   });
 
   beforeEach(() => {

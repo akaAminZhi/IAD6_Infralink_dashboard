@@ -53,6 +53,34 @@ function row(overrides: Partial<FlattenedEquipmentRow> = {}): FlattenedEquipment
 }
 
 describe("equipmentUtils", () => {
+  it.each([
+    ["IAD06-CUPP6-04F-3", false], ["CUPP6-04F-3", false],
+    ["IAD06-TX-CUPP6-01A-1", false], ["CUPP6", false],
+    ["CUPP6-01A-REMARK", false], ["TX-CUPP6-01A-R", false],
+    ["IAD06-CUPP6-04R-3", true], ["CUPP6-R", true],
+    ["TX-CUPP6-R", true], ["TX-CUPP6-01R-1", true],
+    [" iad6-tx-cupp6-04r-2 ", true], ["CUPP60-01A", true],
+    ["NFSS-TX-CUPP6-01R-4", true],
+    ["FDR-IAD06-TX-CUPP6-04F-3-IAD06-CUPP6-04F-3", true],
+  ])("applies CUPP6 upload scope to file and legacy pending results (%s)", (equipmentId, expected) => {
+    const pending = row({ equipment_id: equipmentId, display_equipment_id: equipmentId,
+      neta_complete: true, neta_test_report: "report.pdf", cxalloy_upload_status: "pending",
+      cxalloy_available_report_count: 1 });
+    expect(hasPendingCxalloyReport(pending)).toBe(expected);
+    expect(hasPendingCxalloyReport({ ...pending, cxalloy_reports: [
+      { report_name: "report.pdf", report_kind: "equipment", upload_status: "pending" },
+    ] })).toBe(expected);
+    expect(getNetaDisplayStatus(pending)).toBe("Complete + Report Available");
+  });
+
+  it.each(["equipment_id", "display_equipment_id", "source_equipment_label"] as const)(
+    "checks CUPP6 upload exclusions in %s", (field) => {
+      expect(hasPendingCxalloyReport(row({ [field]: "IAD06-CUPP6-04F-3",
+        neta_complete: true, cxalloy_upload_status: "pending", cxalloy_available_report_count: 1,
+      }))).toBe(false);
+    },
+  );
+
   it.each(["IAD06-TX-UPP6-01A", "IAD06-UPP6-01A", "IAD06-UPP6A", " iad06-tx-upp6-02b "])(
     "excludes upload-exempt UPP6 equipment from file and legacy pending results (%s)", (equipmentId) => {
       const pending = row({ equipment_id: equipmentId, display_equipment_id: equipmentId,

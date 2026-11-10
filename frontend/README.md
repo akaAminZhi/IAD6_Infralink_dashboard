@@ -102,6 +102,10 @@ Static deployments need the generated dataset along with rebuilt application cod
 Equipment IDs starting with `IAD06-TX-UPP6` or `IAD06-UPP6` are excluded from
 pending-upload counts and filters because they do not require CxAlloy uploads.
 Their EPS/NETA tracking remains unchanged.
+`CUPP6` and `TX-CUPP6` are also excluded unless the first zone is `R`
+or digits followed by `R`, matching the Tracker's default upload scope.
+For example, `IAD06-CUPP6-04F-3` is excluded while `IAD06-CUPP6-04R-3`
+remains eligible. Project prefixes and case do not affect this rule.
 
 Overview and Equipment use the same deduplicated pending-upload count and filter:
 the equipment must be tracked, have `neta_complete === true`, and contain at

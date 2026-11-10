@@ -1,5 +1,50 @@
 ﻿# Codex Handoff
 
+## Current update (2026-11-09): Layout search inside the map
+
+- Moved Layout's Find equipment combobox from the toolbar into a floating
+  overlay at the map's top-left corner, so searching no longer requires
+  scrolling back up. Label is screen-reader only; suggestions, keyboard
+  handling, confirm/zoom behavior and data loading are unchanged. The overlay
+  sits outside the SVG, so wheel/pan gestures over it do not move the map.
+- Suggestions now stack the full ID (wrapping at any character only when
+  needed) above a one-line truncated description/floor label, and the overlay
+  is 384px wide. Long descriptions no longer squeeze IDs into one letter/line.
+- Layout page tests: 57 passed. Preview-mode production build passed with the
+  existing chunk-size warning. No browser smoke performed.
+
+## Current update (2026-11-09): Isolate same-name NETA review results
+
+- Fixed review matching in Equipment details and summary/filter state to use
+  equipment ownership and manifest-relative paths. Different equipment directories
+  can contain the same GC basename; those reviews must not appear together or
+  expose another equipment's editable result. Ambiguous basename fallbacks fail
+  closed; unique legacy flat reviews and explicitly named shared cables remain.
+- Confirmed real UTILITY6-02 original Report-28 maps to its own temporary GC PDF.
+  That PDF's Station Name/Special ID/Circuit identify 02 (serial 3250365634),
+  but its Asset Tag says 01-WAY3-RLY2, explaining the GC filename. UTILITY6-01
+  has a distinct report and serial 3250365625. Source PDF metadata needs review;
+  no PDFs, Tracker files or saved review decisions were changed.
+- Validation: 20 targeted utility/Equipment tests passed; live local Tracker
+  results matched exactly one correct directory per utility using the updated
+  helper. Preview-mode TypeScript/production build passed with existing chunk
+  size/plugin timing warnings; git diff check passed. No browser smoke performed.
+  Local compiled assets rebuilt; remote hosts need updated frontend code/build,
+  rather than ETL alone, to apply this fix. Existing user changes preserved.
+
+## Current update (2026-11-09): CUPP6 pending-upload scope
+
+- Fixed the shared Overview/Equipment pending-upload predicate to exclude
+  CUPP6/TX-CUPP6 outside R zones, matching Tracker's existing default upload
+  scope. First-zone `R` or digits plus `R` stays eligible; later `-R` text does
+  not qualify. Existing UPP6 exclusions remain in place. Test tracking and
+  per-file upload evidence are unchanged; no ETL or live upload is required.
+- Targeted utility, Equipment and Overview tests: 61 passed. Preview-mode
+  production build passed with the existing chunk-size warning. Real local data
+  confirms CUPP6-04F-3 is excluded and CUPP6-04R-3 remains pending (10 unique
+  pending equipment overall). Local compiled assets were rebuilt; refresh the
+  browser to apply. Other hosts need the updated source/build.
+
 ## Current update (2026-11-09): System Elements update information
 
 - Added shared Updated By / Updated At metadata to Equipment and PDM equipment

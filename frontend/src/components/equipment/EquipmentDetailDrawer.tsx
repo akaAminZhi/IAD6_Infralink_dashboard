@@ -169,7 +169,7 @@ function NetaReportNames({
       <ul className="mt-3 divide-y overflow-hidden rounded-md border bg-muted/10" aria-label="NETA report list">
         {reportNames.map((reportName, reportIndex) => {
           const duplicates = getReportDuplicates(manifest, equipmentId, reportName);
-          const matchedReviews = getNetaReviewsForReport(reportName, reviews, manifest);
+          const matchedReviews = getNetaReviewsForReport(reportName, reviews, manifest, equipmentId);
           const primaryStatus = matchedReviews.some((review) => review.status === "FAILED")
             ? "FAILED"
             : matchedReviews.some(

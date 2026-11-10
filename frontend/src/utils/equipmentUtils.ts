@@ -398,9 +398,16 @@ export function hasMissingNetaReport(equipment: FlattenedEquipmentRow): boolean 
 
 export function hasPendingCxalloyReport(equipment: FlattenedEquipmentRow): boolean {
   if (!requiresEquipmentTestTracking(equipment) || equipment.neta_complete !== true) return false;
-  // UPP6 assets remain test-tracked but do not require CxAlloy uploads.
+  // Mirror Tracker's upload scope: CUPP6/TX-CUPP6 require an R zone.
+  // Upload exclusions do not change equipment test tracking or report evidence.
   if ([equipment.equipment_id, equipment.display_equipment_id, equipment.source_equipment_label]
-    .some((reference) => /^IAD06-(?:TX-)?UPP6/.test(normalizeLookup(reference)))) return false;
+    .some((reference) => {
+      const target = normalizeLookup(reference).replace(/^IAD0?6-/, "");
+      if (/^(?:TX-)?UPP6/.test(target)) return true;
+      const cupp = /^(?:TX-)?CUPP6(?:-(.*))?$/.exec(target);
+      const zone = cupp?.[1]?.split("-", 1)[0] ?? "";
+      return cupp !== null && !/^\d*R$/.test(zone);
+    })) return false;
   if (equipment.cxalloy_reports != null) {
     return equipment.cxalloy_reports.some((report) => report.upload_status === "pending");
   }

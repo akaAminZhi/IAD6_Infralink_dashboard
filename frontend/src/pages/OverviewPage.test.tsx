@@ -54,12 +54,16 @@ describe("OverviewPage", () => {
         { equipment_id: "EQ-STANDALONE", neta_complete: true },
         { equipment_id: "IAD06-TX-UPP6-01A", neta_complete: true },
         { equipment_id: "IAD06-UPP6-01A", neta_complete: true },
+        { equipment_id: "IAD06-CUPP6-04F-3", neta_complete: true },
+        { equipment_id: "IAD06-TX-CUPP6-01A-1", neta_complete: true },
+        { equipment_id: "IAD06-CUPP6-04R-3", neta_complete: true },
         { equipment_id: "EQ-INCOMPLETE", neta_complete: false },
         { equipment_id: "EQ-REVIEW", neta_complete: true },
         { equipment_id: "EQ-MISSING", neta_complete: true },
       ],
       cxalloyReportStatus: { summary: { pending_equipment: 999 }, records: [
-        ...["EQ-PDM", "EQ-STANDALONE", "EQ-INCOMPLETE", "IAD06-TX-UPP6-01A", "IAD06-UPP6-01A"].map((equipment_id) => ({ equipment_id, upload_status: "pending" as const,
+        ...["EQ-PDM", "EQ-STANDALONE", "EQ-INCOMPLETE", "IAD06-TX-UPP6-01A", "IAD06-UPP6-01A",
+          "IAD06-CUPP6-04F-3", "IAD06-TX-CUPP6-01A-1", "IAD06-CUPP6-04R-3"].map((equipment_id) => ({ equipment_id, upload_status: "pending" as const,
           reports: [{ report_name: "Report.pdf", report_kind: "equipment" as const, upload_status: "pending" as const }],
         })),
         { equipment_id: "EQ-REVIEW", upload_status: "pending", reports: [{ report_name: "Review.pdf", report_kind: "equipment", upload_status: "review_required" }] },
@@ -71,7 +75,7 @@ describe("OverviewPage", () => {
       <Route path="/equipment" element={<LocationProbe />} />
     </Routes></MemoryRouter>);
     const button = screen.getByRole("button", { name: /Pending CxAlloy report upload/ });
-    expect(button).toHaveTextContent("2");
+    expect(button).toHaveTextContent("3");
     expect(button).not.toHaveTextContent("999");
     await user.click(button);
     expect(screen.getByTestId("location")).toHaveTextContent("/equipment?quickFilter=cxalloyPending");

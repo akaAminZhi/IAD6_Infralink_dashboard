@@ -358,7 +358,7 @@ export function EquipmentPage({ data }: EquipmentPageProps) {
   const reviewStates = useMemo(() => new Map(
     equipmentRows.map((row) => [
       row.row_id,
-      getEquipmentNetaReviewState(row.neta_test_report, netaReportReviews, data.netaReportManifest),
+      getEquipmentNetaReviewState(row.neta_test_report, netaReportReviews, data.netaReportManifest, row.display_equipment_id),
     ]),
   ), [equipmentRows, netaReportReviews, data.netaReportManifest]);
   const netaReviewCounts = useMemo(() => {
