@@ -606,39 +606,6 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
           {manifest.floors.map((floor) => <option key={floor.floor_id} value={floor.floor_id}>{floor.label}</option>)}
         </select>
       </label>
-      <div className="relative min-w-56 flex-1 space-y-1 text-sm font-medium"
-        onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setSearchOpen(false); }}>
-        <label htmlFor="layout-equipment-search">Find equipment</label>
-        <div className="relative"><Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-          <input id="layout-equipment-search" role="combobox" aria-autocomplete="list" aria-controls="layout-equipment-suggestions"
-            aria-expanded={searchOpen && !!query} aria-activedescendant={searchOpen && suggestions.length ? `layout-equipment-option-${Math.min(activeSearchIndex, suggestions.length - 1)}` : undefined}
-            value={search} onFocus={() => setSearchOpen(true)} onChange={(event) => {
-              setSearch(event.target.value); setSearchOpen(true); setActiveSearchIndex(0);
-            }} onKeyDown={(event) => {
-              if (event.key === "Escape") setSearchOpen(false);
-              if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-                event.preventDefault(); setSearchOpen(true);
-                setActiveSearchIndex((value) => Math.max(0, Math.min(suggestions.length - 1, value + (event.key === "ArrowDown" ? 1 : -1))));
-              }
-              if (event.key === "Enter" && suggestions.length) {
-                event.preventDefault(); confirmSuggestion(suggestions[Math.min(activeSearchIndex, suggestions.length - 1)]);
-              }
-            }} placeholder="Equipment / cable ID · Enter to select"
-            className="h-9 w-full rounded-md border bg-background pl-9 pr-3" />
-        </div>
-        {searchOpen && query ? <div id="layout-equipment-suggestions" role="listbox" aria-label="Equipment suggestions"
-          className="absolute left-0 right-0 top-full z-30 mt-1 max-h-72 overflow-auto rounded-md border bg-card p-1 shadow-lg">
-          {suggestions.length ? suggestions.map((suggestion, index) => <button type="button" role="option"
-            id={`layout-equipment-option-${index}`} aria-selected={index === activeSearchIndex}
-            key={suggestion.id}
-            className={`flex w-full items-center justify-between gap-3 rounded px-3 py-2 text-left text-sm ${index === activeSearchIndex ? "bg-accent" : "hover:bg-accent"}`}
-            onPointerDown={(event) => event.preventDefault()} onClick={() => confirmSuggestion(suggestion)}>
-            <span className="min-w-0 break-all">{suggestion.label}</span><span className="shrink-0 text-xs font-normal text-muted-foreground">{suggestion.floorLabel}</span>
-          </button>) : !searchResource.loading && !searchResource.error ? <div className="px-3 py-2 text-sm text-muted-foreground">No matching equipment</div> : null}
-          {searchResource.loading ? <p role="status" className="px-3 py-2 text-sm text-muted-foreground">Loading Excel equipment IDs…</p> : null}
-          {searchResource.error ? <div className="px-3 py-2 text-sm">Excel equipment IDs could not be loaded. <Button variant="ghost" onClick={searchResource.retry}>Retry search data</Button></div> : null}
-        </div> : null}
-      </div>
       <Button variant="outline" aria-label="Zoom out" onClick={() => { setInspection(null); setViewport(zoomLayoutViewport(bounds, fullBounds, 1.2)); }}><ZoomOut className="h-4 w-4" /></Button>
       <span className="pb-2 text-sm tabular-nums">{Math.round(zoom * 100)}%</span>
       <Button variant="outline" aria-label="Zoom in" onClick={() => { setInspection(null); setViewport(zoomLayoutViewport(bounds, fullBounds, 0.82)); }}><ZoomIn className="h-4 w-4" /></Button>
@@ -768,6 +735,40 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
           </g>
           </g>
         </svg>
+        </div>
+        <div className="absolute left-3 top-3 z-20 w-96 max-w-[calc(100%-24px)] text-sm font-medium"
+          onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setSearchOpen(false); }}>
+          <label htmlFor="layout-equipment-search" className="sr-only">Find equipment</label>
+          <div className="relative"><Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+            <input id="layout-equipment-search" role="combobox" aria-autocomplete="list" aria-controls="layout-equipment-suggestions"
+              aria-expanded={searchOpen && !!query} aria-activedescendant={searchOpen && suggestions.length ? `layout-equipment-option-${Math.min(activeSearchIndex, suggestions.length - 1)}` : undefined}
+              value={search} onFocus={() => setSearchOpen(true)} onChange={(event) => {
+                setSearch(event.target.value); setSearchOpen(true); setActiveSearchIndex(0);
+              }} onKeyDown={(event) => {
+                if (event.key === "Escape") setSearchOpen(false);
+                if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+                  event.preventDefault(); setSearchOpen(true);
+                  setActiveSearchIndex((value) => Math.max(0, Math.min(suggestions.length - 1, value + (event.key === "ArrowDown" ? 1 : -1))));
+                }
+                if (event.key === "Enter" && suggestions.length) {
+                  event.preventDefault(); confirmSuggestion(suggestions[Math.min(activeSearchIndex, suggestions.length - 1)]);
+                }
+              }} placeholder="Equipment / cable ID · Enter to select"
+              className="h-9 w-full rounded-md border bg-background/95 pl-9 pr-3 shadow-md backdrop-blur" />
+          </div>
+          {searchOpen && query ? <div id="layout-equipment-suggestions" role="listbox" aria-label="Equipment suggestions"
+            className="absolute left-0 right-0 top-full z-30 mt-1 max-h-72 overflow-auto rounded-md border bg-card p-1 shadow-lg">
+            {suggestions.length ? suggestions.map((suggestion, index) => <button type="button" role="option"
+              id={`layout-equipment-option-${index}`} aria-selected={index === activeSearchIndex}
+              key={suggestion.id}
+              className={`flex w-full flex-col items-start gap-0.5 rounded px-3 py-1.5 text-left text-sm ${index === activeSearchIndex ? "bg-accent" : "hover:bg-accent"}`}
+              onPointerDown={(event) => event.preventDefault()} onClick={() => confirmSuggestion(suggestion)}>
+              <span className="w-full break-words font-medium leading-snug [overflow-wrap:anywhere]">{suggestion.label}</span>
+              <span className="w-full truncate text-xs font-normal text-muted-foreground" title={suggestion.floorLabel}>{suggestion.floorLabel}</span>
+            </button>) : !searchResource.loading && !searchResource.error ? <div className="px-3 py-2 text-sm text-muted-foreground">No matching equipment</div> : null}
+            {searchResource.loading ? <p role="status" className="px-3 py-2 text-sm text-muted-foreground">Loading Excel equipment IDs…</p> : null}
+            {searchResource.error ? <div className="px-3 py-2 text-sm">Excel equipment IDs could not be loaded. <Button variant="ghost" onClick={searchResource.retry}>Retry search data</Button></div> : null}
+          </div> : null}
         </div>
         {inspected && inspection ? <div id="layout-equipment-tooltip" role="tooltip"
           className="pointer-events-none absolute z-10 w-72 max-w-[calc(100%-24px)] rounded-lg border bg-card p-3 text-card-foreground shadow-lg"
