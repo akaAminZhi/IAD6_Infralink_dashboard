@@ -49,6 +49,7 @@ import {
   disconnectProvider,
   startDailyPipeline,
 } from "../utils/automationApi";
+import { usePolling } from "../hooks/usePolling";
 import { cn } from "../utils/cn";
 
 interface DataOperationsPageProps {
@@ -78,6 +79,9 @@ const defaultPipelineSteps = [
   "Run Dashboard ETL",
 ];
 const REPORT_PAGE_SIZE = DAILY_REPORT_PAGE_SIZE;
+export const ACTIVE_POLL_MS = 1500;
+export const IDLE_POLL_MS = 30000;
+export const LOG_POLL_MS = 1000;
 
 function formatDateTime(value: string | null | undefined): string {
   if (!value) {
@@ -174,16 +178,26 @@ export function DataOperationsPage({ onDashboardReload }: DataOperationsPageProp
   const logOffsetRef = useRef(0);
   const logPanelRef = useRef<HTMLPreElement | null>(null);
   const lastReloadedEtlRunRef = useRef<string | null>(null);
+  const jobsLoadedRef = useRef(false);
+  const selectedRunIdRef = useRef<string | null>(null);
+  const logInFlightRef = useRef(false);
+  const logRerunRef = useRef(false);
 
   const refreshService = useCallback(async () => {
     try {
-      const [nextHealth, nextJobs, nextRuns] = await Promise.all([
+      // The registered job list is static, so it is fetched once (and retried
+      // only if that fetch failed) instead of on every poll.
+      const jobsPromise = jobsLoadedRef.current ? null : getAutomationJobs();
+      const [nextHealth, nextRuns, nextJobs] = await Promise.all([
         getAutomationHealth(),
-        getAutomationJobs(),
         getAutomationRuns(),
+        jobsPromise,
       ]);
       setHealth(nextHealth);
-      setJobs(nextJobs);
+      if (nextJobs) {
+        jobsLoadedRef.current = true;
+        setJobs(nextJobs);
+      }
       setRuns(nextRuns);
       setServiceError(null);
       const activeId = nextHealth.active_run_id;
@@ -225,39 +239,65 @@ export function DataOperationsPage({ onDashboardReload }: DataOperationsPageProp
   useEffect(() => {
     void refreshService();
     void refreshReports();
-    const interval = window.setInterval(() => void refreshService(), 1500);
-    return () => window.clearInterval(interval);
   }, [refreshReports, refreshService]);
 
-  useEffect(() => {
-    logOffsetRef.current = 0;
-    setLogText("");
-    if (!selectedRunId) {
+  const serviceActive =
+    !!health?.busy || runs.some((run) => ACTIVE_STATUSES.has(run.status));
+  usePolling(refreshService, serviceActive ? ACTIVE_POLL_MS : IDLE_POLL_MS);
+
+  const selectedRunActive = ACTIVE_STATUSES.has(
+    runs.find((run) => run.run_id === selectedRunId)?.status ?? "succeeded",
+  );
+
+  const loadLogs = useCallback(async () => {
+    if (!selectedRunIdRef.current) {
       return;
     }
-    const runId = selectedRunId;
-    let active = true;
-    async function loadLogs() {
-      try {
-        const payload = await getRunLogs(runId, logOffsetRef.current);
-        if (!active) {
-          return;
-        }
-        logOffsetRef.current = payload.offset;
-        if (payload.content) {
-          setLogText((current) => current + payload.content);
-        }
-      } catch {
-        // A later polling cycle will retry transient log read failures.
-      }
+    if (logInFlightRef.current) {
+      // Never overlap reads (the offset would be reused and text duplicated).
+      logRerunRef.current = true;
+      return;
     }
-    void loadLogs();
-    const interval = window.setInterval(() => void loadLogs(), 1000);
-    return () => {
-      active = false;
-      window.clearInterval(interval);
-    };
+    logInFlightRef.current = true;
+    try {
+      do {
+        logRerunRef.current = false;
+        const runId: string | null = selectedRunIdRef.current;
+        if (!runId) {
+          break;
+        }
+        try {
+          const payload = await getRunLogs(runId, logOffsetRef.current);
+          if (selectedRunIdRef.current !== runId) {
+            logRerunRef.current = true;
+            continue;
+          }
+          logOffsetRef.current = payload.offset;
+          if (payload.content) {
+            setLogText((current) => current + payload.content);
+          }
+        } catch {
+          // A later poll or status change will retry transient log read failures.
+        }
+      } while (logRerunRef.current);
+    } finally {
+      logInFlightRef.current = false;
+    }
+  }, []);
+
+  useEffect(() => {
+    selectedRunIdRef.current = selectedRunId;
+    logOffsetRef.current = 0;
+    setLogText("");
   }, [selectedRunId]);
+
+  // One read on selection and one when the run stops being active (final tail).
+  useEffect(() => {
+    void loadLogs();
+  }, [selectedRunId, selectedRunActive, loadLogs]);
+
+  // Keep tailing only while the selected run is active.
+  usePolling(loadLogs, selectedRunId && selectedRunActive ? LOG_POLL_MS : null);
 
   useEffect(() => {
     const panel = logPanelRef.current;
