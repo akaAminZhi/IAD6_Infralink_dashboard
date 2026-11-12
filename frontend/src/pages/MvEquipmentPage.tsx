@@ -1157,7 +1157,10 @@ export function MvEquipmentPage({ data }: MvEquipmentPageProps) {
             equipment_id: row?.equipment?.equipment_id ?? annotation.matched_equipment_id,
             source_equipment_label: annotation.label,
           }),
-          failedCount: row?.failedCount || (isMvDailyTestFailed(annotation) ? 1 : 0),
+          // A cable with an Infralink test report is complete; daily-report fails no longer warn.
+          failedCount: isConnection(annotation) && hasInfralinkCableTestReport(annotation)
+            ? 0
+            : row?.failedCount || (isMvDailyTestFailed(annotation) ? 1 : 0),
           openIssueCount: row?.openIssues.length ?? 0,
         };
       }),
