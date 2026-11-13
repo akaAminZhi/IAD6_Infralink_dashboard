@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { LayoutCableRecord, LayoutEquipmentRecord, LayoutPlanManifest, LayoutRegionRecord } from "../types/data";
 import { layoutCableLanes, layoutCableMarkerPoint, layoutCablePath, layoutConnectionBounds, layoutDeviceHeight,
   overheadCablePoints, placedLayoutCables, projectLayoutPoint } from "./layoutIsometricUtils";
-import { buildCombinedLayoutScene } from "./layoutSceneUtils";
+import { buildCombinedLayoutScene, LAYOUT_FLOOR_GAP } from "./layoutSceneUtils";
 import { routeLayoutCables } from "./layoutCableRouting";
 
 const device = (key: string, floor: string, x: number, y: number, fixed = false): LayoutEquipmentRecord => ({
@@ -49,15 +49,16 @@ describe("combined Layout scene", () => {
     expect(first.y + first.height).toBeLessThan(scene.rows.find((row) => row.fixed)!.rect.y);
   });
 
-  it("uses a compact room-based lift, allows overlapping floor extents and keeps the shared group unchanged", () => {
+  it("stacks each floor's content just above the floor below and keeps the first floor and shared group in place", () => {
     const data = manifest(), before = JSON.stringify(data);
     const scene = buildCombinedLayoutScene(data);
     const [first, second, shared] = scene.groups;
     expect(first.offsetY).toBe(0);
     expect(shared.offsetY).toBe(0);
     expect(first.offsetY - second.offsetY).toBe(scene.floorLift);
-    expect(scene.floorLift).toBeLessThan(second.rect.height);
-    expect(second.rect.y + second.rect.height).toBeGreaterThan(first.rect.y);
+    // group.rect is each floor's drawn content (already offset); the gap between them is the tunable constant.
+    expect(first.rect.y - (second.rect.y + second.rect.height)).toBeGreaterThanOrEqual(LAYOUT_FLOOR_GAP - 1e-9);
+    expect(first.rect.y - (second.rect.y + second.rect.height)).toBeLessThan(LAYOUT_FLOOR_GAP + 1);
     expect(scene.rows).toHaveLength(5);
     expect(scene.rows.filter((row) => row.fixed)).toEqual(data.fixed_equipment);
     const b = scene.rows.find((row) => row.equipment_key === "B")!;
@@ -84,7 +85,7 @@ describe("combined Layout scene", () => {
     expect(scene.geometry.find(({ connection: item }) => item.cable.cable_id === "F-A")!.path).toBe(layoutCablePath(originalShared));
   });
 
-  it("routes cross-floor links near room edges with accurate roof ports, warnings and fit bounds", () => {
+  it("routes cross-floor links through one shared riser beside the rooms with accurate roof ports, warnings and fit bounds", () => {
     const scene = buildCombinedLayoutScene(manifest());
     expect(scene.connections).toHaveLength(6);
     expect(scene.connections.filter((item) => item.externalKind === "cross-floor")).toHaveLength(2);
@@ -97,10 +98,10 @@ describe("combined Layout scene", () => {
       const port = (row: LayoutEquipmentRecord) => projectLayoutPoint(row.rect.x + row.rect.width / 2, row.rect.y + row.rect.height / 2, layoutDeviceHeight(row));
       expect(points[0]).toEqual(port(a));
       expect(points[points.length - 1]).toEqual(port(b));
+      // The riser stands just outside the rooms' front-left corner, outside every deck's room strip.
       const hub = connection.source.equipment_key === connection.externalRoute!.hubEquipmentKey ? connection.source : connection.target;
-      const sourceRoom = scene.regions.find((region) => region.source_floor_id === hub.source_floor_id)!;
-      const height = layoutDeviceHeight(hub) + trunk[0].y - trunk[1].y;
-      expect(riser.y + height - riser.x / 2).toBeLessThan(sourceRoom.rect.y);
+      const hubRoom = scene.regions.find((region) => region.kind === "room" && region.source_floor_id === hub.source_floor_id)!;
+      expect(riser.x).toBeLessThan(projectLayoutPoint(hubRoom.rect.x, hubRoom.rect.y + hubRoom.rect.height).x);
       expect(riser.x).toBeGreaterThan(scene.contentBounds.x);
       expect(riser.x).toBeLessThan(scene.contentBounds.x + scene.contentBounds.width);
       expect(layoutCablePath(connection)).not.toContain(" C ");
@@ -120,7 +121,7 @@ describe("combined Layout scene", () => {
     }
   });
 
-  it("gives MDB6-01R's two ATS-TX-INV6 feeders the same trunk and distinct destination branches", () => {
+  it("merges MDB6-01R's two ATS-TX-INV6 feeders into one riser in front of the hub and splits them downstairs", () => {
     const data = manifest();
     data.floors[0].equipment = [device("ATS-TX-INV6-01R", "first", 180, 120), device("ATS-TX-INV6-02R", "first", 10, 120)];
     data.floors[1].equipment = [device("MDB6-01R", "second", 180, 120)];
@@ -133,15 +134,31 @@ describe("combined Layout scene", () => {
     expect(a.externalRoute!.trunk).toEqual(b.externalRoute!.trunk);
     expect(a.externalRoute!.points).not.toEqual(b.externalRoute!.points);
     expect(a.cable.cable_id).not.toBe(b.cable.cable_id);
-    const normalized = (connection: typeof a) => connection.source.equipment_key.localeCompare(connection.target.equipment_key) > 0
-      ? [...connection.externalRoute!.points].reverse() : connection.externalRoute!.points;
-    expect(a.externalRoute!.bundleLane).not.toBe(b.externalRoute!.bundleLane);
-    expect(Math.abs(normalized(a)[3].x - normalized(b)[3].x)).toBeCloseTo(2);
-    expect(normalized(a)[0]).toEqual(normalized(b)[0]);
-    expect(normalized(a).slice(0, 4)).not.toEqual(normalized(b).slice(0, 4));
-    expect(normalized(a)[normalized(a).length - 1]).not.toEqual(normalized(b)[normalized(b).length - 1]);
+    // Points run from the alphabetically first endpoint (ATS), so reverse to read from the hub.
+    const fromHub = (connection: typeof a) => [...connection.externalRoute!.points].reverse();
+    // Same source device: one shared rise, front run and riser; they split only on the lower floor.
+    expect(fromHub(a).slice(0, 4)).toEqual(fromHub(b).slice(0, 4));
+    expect(fromHub(a).slice(4)).not.toEqual(fromHub(b).slice(4));
+    expect(a.externalRoute!.bundleLane).toBe(b.externalRoute!.bundleLane);
+    for (const c of [a, b]) {
+      const [, , bottom, top] = c.externalRoute!.trunk;
+      expect(bottom.x).toBeCloseTo(top.x);
+      expect(fromHub(c)).toContainEqual(bottom);
+      expect(fromHub(c)).toContainEqual(top);
+    }
     data.cables.reverse();
     expect(buildCombinedLayoutScene(data).geometry.map(({ path }) => path).reverse()).toEqual(scene.geometry.map(({ path }) => path));
+  });
+
+  it("keeps cross-floor feeders from different source devices on separate risers", () => {
+    const data = manifest();
+    data.floors[0].equipment = [device("LOW-1", "first", 40, 120), device("LOW-2", "first", 120, 120)];
+    data.floors[1].equipment = [device("UP-1", "second", 60, 120), device("UP-2", "second", 140, 120)];
+    data.cables = [cable("UP-1", "LOW-1"), cable("UP-2", "LOW-2")];
+    const [a, b] = buildCombinedLayoutScene(data).connections;
+    expect(a.externalRoute!.hubEquipmentKey).not.toBe(b.externalRoute!.hubEquipmentKey);
+    expect(a.externalRoute!.bundleLane).not.toBe(b.externalRoute!.bundleLane);
+    expect(a.externalRoute!.trunk[2]).not.toEqual(b.externalRoute!.trunk[2]);
   });
 
   it("routes shared outdoor feeds to the second floor through a straight riser and room-edge approach", () => {
@@ -149,6 +166,14 @@ describe("combined Layout scene", () => {
     const feeder = scene.connections.find(({ cable: record }) => record.cable_id === "F-B")!;
     expect(feeder.externalKind).toBe("shared-feed");
     expect(feeder.externalRoute?.hubEquipmentKey).toBe("F");
+    // The outdoor feed climbs its own vertical riser directly in front of the device it serves.
+    const [, , bottom, top] = feeder.externalRoute!.trunk;
+    const target = feeder.source.fixed ? feeder.target : feeder.source;
+    expect(bottom.x).toBeCloseTo(top.x);
+    expect(top.y).toBeLessThan(bottom.y);
+    expect(top.x - projectLayoutPoint(target.rect.x + target.rect.width / 2, target.rect.y + target.rect.height / 2).x).toBeLessThan(0);
+    const crossFloor = scene.connections.find((item) => item.externalKind === "cross-floor")!;
+    expect(bottom.x).not.toBeCloseTo(crossFloor.externalRoute!.trunk[2].x);
     const geometry = scene.geometry.find(({ connection }) => connection === feeder)!;
     expect(geometry.route).toBe("long");
     expect(geometry.path).not.toContain(" C ");

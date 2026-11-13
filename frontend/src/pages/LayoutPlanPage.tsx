@@ -740,9 +740,6 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
             {undergroundCables.filter(({ connection }) => !isCableHighlighted(connection.cable)).map(renderCable)}
             {undergroundCables.filter(({ connection }) => isCableHighlighted(connection.cable)).map(renderCable)}
           </g> : null}
-          {isometric && showCables ? <g id="layout-shared-feed-cables" data-layout-layer="shared-feed-cables">
-            {backgroundFeeds.map(renderCable)}
-          </g> : null}
           <g data-layout-layer="equipment">
             {drawnRows.map((row) => {
               const selected = selectionKeys.has(row.equipment_key) || (isometric && cableEndpointKeys.includes(row.equipment_key));
@@ -756,6 +753,10 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
                 onInspect={inspectDevice} onLeave={leaveDevice} onSelect={selectDevice} />;
             })}
           </g>
+          {/* Outdoor feeds sit above the equipment (outdoor devices would hide them) but below the other cables. */}
+          {isometric && showCables ? <g id="layout-shared-feed-cables" data-layout-layer="shared-feed-cables">
+            {backgroundFeeds.map(renderCable)}
+          </g> : null}
           {isometric && showCables ? <g id="layout-cables" data-layout-layer="cables">
             {ordinaryCables.filter(({ connection }) => !connection.externalKind).map(renderCable)}
             {ordinaryCables.filter(({ connection }) => connection.externalKind).map(renderCable)}

@@ -1,11 +1,18 @@
 import type { LayoutEquipmentRecord, LayoutPlanManifest, LayoutRegionRecord, PowerPlanPoint, PowerPlanRect } from "../types/data";
 import { isNearbyCable, isUndergroundCable, layoutCableLanes, layoutCableMarkerPoint, layoutCablePath, layoutConnectionBounds,
   layoutDeviceHeight, layoutExternalCableKind, placedLayoutCables, projectedLayoutBounds, projectedLayoutRoomLabel,
-  routeLayoutCrossFloorCables, type PlacedLayoutCable } from "./layoutIsometricUtils";
+  type PlacedLayoutCable } from "./layoutIsometricUtils";
 import { layoutBounds, visibleLayoutEquipment, visibleLayoutRegions } from "./layoutPlanUtils";
 import { routeLayoutCables } from "./layoutCableRouting";
 
 export const ALL_LAYOUT_FLOORS = "all-floors";
+
+/**
+ * Vertical gap, in projected plan units, between one floor's lowest drawn content and the
+ * highest drawn content of the floor below in the combined 2.5D view. Lower it to stack the
+ * floors tighter (negative values let them overlap); raise it to add more air between floors.
+ */
+export const LAYOUT_FLOOR_GAP = 16;
 
 /** Give the main outdoor generator row clearance below the buried MV ducts. */
 export function isometricLayoutEquipment(rows: LayoutEquipmentRecord[]): LayoutEquipmentRecord[] {
@@ -57,12 +64,7 @@ export function buildCombinedLayoutScene(manifest: LayoutPlanManifest) {
   const groups: LayoutSceneGroup[] = [];
   const singleFloorConnections = new Map<string, PlacedLayoutCable[]>();
   const floorFootprint = layoutFloorFootprint(manifest);
-  const localRecords = manifest.floors.flatMap((floor) => visibleLayoutEquipment(manifest, floor.floor_id).filter((row) => !row.fixed));
-  const roomDepth = Math.max(0, ...manifest.floors.flatMap((floor) => (floor.regions ?? []).filter((region) => region.kind === "room").map((region) => region.rect.height)));
-  const tallestDevice = Math.max(0, ...localRecords.map(layoutDeviceHeight));
-  // Separate the occupied room strips rather than the full, mostly empty floor bounds.
-  const floorLift = Math.max(120, Math.ceil((roomDepth + tallestDevice + 80) / 20) * 20);
-  manifest.floors.forEach((floor, index) => {
+  const floors = manifest.floors.map((floor) => {
     const localRows = visibleLayoutEquipment(manifest, floor.floor_id).filter((row) => !row.fixed)
       .map((row) => ({ ...row, source_floor_id: floor.floor_id }));
     const localRegions = visibleLayoutRegions(manifest, floor.floor_id).filter((region) => !region.fixed);
@@ -79,6 +81,13 @@ export function buildCombinedLayoutScene(manifest: LayoutPlanManifest) {
       ...localRegions.filter((region) => region.kind === "room").map(projectedLayoutRoomLabel),
       ...localConnections.map((connection, i) => ({ rect: layoutConnectionBounds(connection, lanes[i]) })),
     ]);
+    return { floor, localRows, localRegions, frame };
+  });
+  // Stack floors by their drawn content (equipment, rooms, labels, trays), not the mostly empty
+  // deck plates: the lowest point of each floor sits LAYOUT_FLOOR_GAP above the highest point below it.
+  const floorLift = Math.max(120, Math.ceil(Math.max(0, ...floors.slice(1).map(({ frame }, i) =>
+    frame.y + frame.height - floors[i].frame.y)) + LAYOUT_FLOOR_GAP));
+  floors.forEach(({ floor, localRows, localRegions, frame }, index) => {
     const offsetY = index ? groups[index - 1].offsetY - floorLift : 0;
     const leftRoom = localRegions.filter((region) => region.kind === "room").map((region) => projectedLayoutBounds(region.rect))
       .sort((a, b) => a.x - b.x)[0];
@@ -103,7 +112,7 @@ export function buildCombinedLayoutScene(manifest: LayoutPlanManifest) {
     return externalKind ? { ...connection, externalKind, roomToOverhead: false, overheadRoom: undefined } : connection;
   });
   const offsets = new Map(groups.map((group) => [group.id, group.offsetY]));
-  const connections = routeLayoutCables(routeLayoutCrossFloorCables(placed, regions, offsets), regions, offsets);
+  const connections = routeLayoutCables(placed, regions, offsets);
   const geometry = layoutCableGeometry(connections);
   const bounds = layoutBounds([...groups, ...headings, ...grounds, ...geometry.map(({ extent }) => ({ rect: extent }))]);
   return { rows, regions, groups, connections, geometry, bounds, contentBounds, floorLift, floorFootprint, singleFloorConnections };

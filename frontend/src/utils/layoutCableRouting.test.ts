@@ -71,6 +71,31 @@ describe("fixed equipment cable routing", () => {
     expect(first[1].y - first[1].x * 0.5 - (third[1].y - third[1].x * 0.5)).toBeCloseTo(0);
   });
 
+  it("runs feeders between rooms on one shared front tray and drops each onto its device", () => {
+    const left = { ...room, annotation_id: "left", rect: { x: 0, y: 0, width: 100, height: 100 } };
+    const right = { ...room, annotation_id: "right", rect: { x: 100, y: 0, width: 100, height: 100 } };
+    const rows = [device("A-1", 20, 30), device("A-2", 60, 70), device("B-1", 130, 20), device("B-2", 170, 60)];
+    const placed = placedLayoutCables([cable("A-1", "B-1"), cable("A-2", "B-2"), cable("A-1", "B-2")], rows, [left, right]);
+    const routed = routeLayoutCables(placed, [left, right], new Map());
+    // Along a plan run at fixed y and height, screenY - screenX / 2 = y - height is constant.
+    const line = (p: PowerPlanPoint) => p.y - p.x / 2;
+    const shared = line(routed[0].corridorRoute![2]);
+    for (const c of routed) {
+      const points = c.corridorRoute!;
+      expect(points).toBeDefined();
+      expect(points[0]).toEqual(port(c.source));
+      expect(points[points.length - 1]).toEqual(port(c.target));
+      expect(pathsCross(points, points)).toBe(false);
+      // [roof, rise, front tray start, front tray end, over device, roof]: one front tray for all.
+      expect(points).toHaveLength(6);
+      expect(line(points[2])).toBeCloseTo(shared);
+      expect(line(points[3])).toBeCloseTo(shared);
+      // Straight vertical rise off the source roof and straight drop onto the target roof.
+      expect(points[1].x).toBeCloseTo(points[0].x);
+      expect(points[4].x).toBeCloseTo(points[5].x);
+    }
+  });
+
   it("preserves outdoor, buried and unclassified connections instead of inventing room membership", () => {
     const rows = [device("A", 8, 10), device("B", 40, 20), device("F", 40, 140, "first", true)];
     const original = placedLayoutCables([cable("A", "B"), cable("A", "F"), { ...cable("B", "A"), equipment_type: "Feeder Cable - MV" }], rows, [room]);

@@ -243,7 +243,7 @@ describe("2.5D Layout connections", () => {
     expect(sceneLayers.indexOf("floor-grounds")).toBeLessThan(sceneLayers.indexOf("equipment"));
   });
 
-  it("draws direct elevated outdoor feeds behind devices and raises the selected feeder for tracing", async () => {
+  it("draws direct elevated outdoor feeds above devices and raises the selected feeder for tracing", async () => {
     const manifest = isometricDataset();
     const id = "FDR-IAD06-EQ-FIX-IAD06-EQ-2";
     manifest.cables!.push(cable({ cable_id: id, source_equipment_key: "EQ-FIX", target_equipment_key: "EQ-2" }));
@@ -253,6 +253,9 @@ describe("2.5D Layout connections", () => {
     const feeder = () => container.querySelector(`[data-cable-id="${id}"]`)!;
     expect(feeder()).toHaveAttribute("data-cable-route", "arc");
     expect(feeder().closest("[data-layout-layer]")).toHaveAttribute("data-layout-layer", "shared-feed-cables");
+    const layers = [...container.querySelector("[data-layout-scene]")!.children].map((element) => element.getAttribute("data-layout-layer"));
+    expect(layers.indexOf("equipment")).toBeLessThan(layers.indexOf("shared-feed-cables"));
+    expect(layers.indexOf("shared-feed-cables")).toBeLessThan(layers.indexOf("cables"));
     await user.click(feeder());
     expect(screen.getByLabelText("Cable details")).toHaveTextContent(id);
     expect(feeder().closest("[data-layout-layer]")).toHaveAttribute("data-layout-layer", "cables");

@@ -128,7 +128,7 @@ function chooseRoutes(connections: PlacedLayoutCable[], candidates: ReadonlyMap<
 /** Keep equipment pinned; fan related feeders along ordered, parallel aisle tracks. */
 function roomRouteCandidates(connections: PlacedLayoutCable[], regions: LayoutRegionRecord[]) {
   const rooms = regions.filter((region) => region.kind === "room" && !region.fixed);
-  const candidates = connections.filter((c) => !isUndergroundCable(c.cable) && !c.externalKind &&
+  const candidates = connections.filter((c) => !c.corridorRoute && !isUndergroundCable(c.cable) && !c.externalKind &&
     !c.source.fixed && !c.target.fixed && !c.roomToOverhead &&
     c.source.source_floor_id === c.target.source_floor_id && containingRoom(c.source, rooms) && containingRoom(c.target, rooms));
   const degree = new Map<string, number>();
@@ -202,7 +202,7 @@ function outdoorRouteCandidates(connections: PlacedLayoutCable[], regions: Layou
   const rooms = regions.filter((region) => region.kind === "room" && !region.fixed);
   const groups = new Map<string, { hub: LayoutEquipmentRecord; room: LayoutRegionRecord; entries: PlacedLayoutCable[] }>();
   for (const c of connections) {
-    if (c.externalKind !== "shared-feed" || isUndergroundCable(c.cable)) continue;
+    if (c.externalKind !== "shared-feed" || c.externalRoute || isUndergroundCable(c.cable)) continue;
     const hub = c.source.fixed ? c.source : c.target, leaf = c.source.fixed ? c.target : c.source;
     const room = containingRoom(leaf, rooms);
     if (!room) continue;
@@ -237,51 +237,113 @@ function outdoorRouteCandidates(connections: PlacedLayoutCable[], regions: Layou
   return routes;
 }
 
+interface TrayEnd { row: LayoutEquipmentRecord; offset: number; x: number; y: number; inRoom: boolean }
+
 /**
- * Room-to-panel feeders share one overhead tray per floor: a common run along the
- * rooms' back edge, one trunk per aligned panel column, and a drop above each panel.
+ * One overhead tray network for room feeders, so related cables merge instead of fanning out:
+ * - a back-edge run behind the rooms with one trunk per aligned panel column (room-to-panel feeders);
+ * - a front-edge run in front of the rooms (feeders between rooms);
+ * Each cable leaves its device straight up, follows the shared runs, and drops onto the far device.
+ * Cross-floor feeders merge only per source device: each hub device gets its own lane and riser in
+ * front of it (outdoor feeds instead rise in front of the upper-floor device they serve), so the
+ * devices with cross-floor connections stay easy to spot.
+ * Plan coordinates are floor-local; `floorOffsets` restores each floor's exploded screen position.
  */
-export function routeLayoutPanelTrays(connections: PlacedLayoutCable[]): PlacedLayoutCable[] {
-  const floors = new Map<string, { connection: PlacedLayoutCable; index: number; indoor: LayoutEquipmentRecord; outdoor: LayoutEquipmentRecord }[]>();
-  connections.forEach((connection, index) => {
-    const room = connection.overheadRoom;
-    if (!connection.roomToOverhead || !room || connection.externalKind || isUndergroundCable(connection.cable)) return;
-    const { source, target } = connection, p = center(source);
-    const sourceInRoom = p.x >= room.rect.x && p.x <= room.rect.x + room.rect.width && p.y >= room.rect.y && p.y <= room.rect.y + room.rect.height;
-    const [indoor, outdoor] = sourceInRoom ? [source, target] : [target, source];
-    const entries = floors.get(indoor.source_floor_id) ?? [];
-    entries.push({ connection, index, indoor, outdoor }); floors.set(indoor.source_floor_id, entries);
+export function routeLayoutTrays(connections: PlacedLayoutCable[], regions: LayoutRegionRecord[], floorOffsets: ReadonlyMap<string, number>): PlacedLayoutCable[] {
+  const rooms = regions.filter((region) => region.kind === "room" && !region.fixed);
+  const offsetOf = (floor: string) => floorOffsets.get(floor) ?? 0;
+  const end = (row: LayoutEquipmentRecord): TrayEnd => {
+    const offset = offsetOf(row.source_floor_id), p = center(row);
+    return { row, offset, x: p.x - offset, y: p.y - offset, inRoom: Boolean(containingRoom(row, rooms)) };
+  };
+  const entries = connections.flatMap((connection, index) => {
+    const { cable, source, target } = connection;
+    if (isUndergroundCable(cable)) return [];
+    const a = end(source), b = end(target);
+    if (source.fixed || target.fixed) {
+      // Outdoor feeds into a room on an exploded upper floor get their own riser.
+      const outdoorRiser = connection.externalKind === "shared-feed" && source.fixed !== target.fixed && a.offset !== b.offset && (a.inRoom || b.inRoom);
+      return outdoorRiser ? [{ connection, index, a, b, crossFloor: true }] : [];
+    }
+    const crossFloor = source.source_floor_id !== target.source_floor_id;
+    const betweenRooms = a.inRoom && b.inRoom && containingRoom(source, rooms)!.annotation_id !== containingRoom(target, rooms)!.annotation_id;
+    const keep = crossFloor ? connection.externalKind === "cross-floor"
+      : !connection.externalKind && (Boolean(connection.roomToOverhead && connection.overheadRoom) || betweenRooms);
+    return keep ? [{ connection, index, a, b, crossFloor }] : [];
   });
-  if (!floors.size) return connections;
+  if (!entries.length) return connections;
+  // Without room outlines, the tray runs bound the routed devices themselves.
+  const extents = rooms.length ? rooms.map(({ rect, source_floor_id }) => { const o = offsetOf(source_floor_id);
+    return { x: rect.x - o, y: rect.y - o, bottom: rect.y + rect.height - o }; })
+    : entries.flatMap(({ a, b }) => [a, b]).filter((e) => !e.row.fixed).map((e) => ({ x: e.x, y: e.y, bottom: e.y }));
+  const roomTop = Math.min(...extents.map((room) => room.y));
+  const backY = roomTop - 12, frontY = Math.max(...extents.map((room) => room.bottom)) + 12;
+  const behind = (e: TrayEnd) => !e.row.fixed && !e.inRoom && e.y < roomTop;
+  const height = Math.max(...entries.flatMap(({ a, b }) => [a, b]).filter((e) => !e.row.fixed).map((e) => layoutDeviceHeight(e.row))) + 18;
+  // Panels standing in one line on a floor share a single column trunk.
+  const columns = new Map<string, number[][]>();
+  for (const e of entries.flatMap(({ a, b }) => [a, b]).filter(behind).sort((p, q) => p.x - q.x)) {
+    const floor = columns.get(e.row.source_floor_id) ?? [], column = floor[floor.length - 1];
+    if (column && e.x - column[0] <= 8) { if (!column.includes(e.x)) column.push(e.x); } else floor.push([e.x]);
+    columns.set(e.row.source_floor_id, floor);
+  }
+  const trunkX = (e: TrayEnd) => {
+    const column = columns.get(e.row.source_floor_id)!.find((values) => e.x >= values[0] && e.x <= values[values.length - 1])!;
+    return column.reduce((sum, value) => sum + value, 0) / column.length;
+  };
+  const at = (e: TrayEnd, x: number, y: number, z = height) => { const p = projectLayoutPoint(x, y, z); return { x: p.x, y: p.y + e.offset }; };
+  /** Tray points from the run at `lineY` to the point above the device. */
+  const leg = (e: TrayEnd, lineY: number) => {
+    if (!behind(e)) return [at(e, e.x, lineY), at(e, e.x, e.y)];
+    const x = trunkX(e);
+    // A sub-unit jog off the trunk would fold over its own drop in projection; drop straight instead.
+    return [at(e, x, lineY), at(e, x, e.y), ...Math.abs(e.x - x) > 1 ? [at(e, e.x, e.y)] : []];
+  };
+  const degree = new Map<string, number>();
+  const crossEntries = entries.filter(({ crossFloor }) => crossFloor);
+  for (const { connection, a, b } of crossEntries) if (connection.externalKind === "cross-floor")
+    for (const e of [a, b]) degree.set(e.row.equipment_key, (degree.get(e.row.equipment_key) ?? 0) + 1);
+  // Outdoor equipment is always the hub of its feed; otherwise the shared endpoint is,
+  // with ties going to the upper floor, then the equipment ID.
+  const hubOf = (a: TrayEnd, b: TrayEnd) => [a, b].sort((p, q) => Number(q.row.fixed) - Number(p.row.fixed) ||
+    (degree.get(q.row.equipment_key) ?? 0) - (degree.get(p.row.equipment_key) ?? 0) ||
+    p.offset - q.offset || p.row.equipment_key.localeCompare(q.row.equipment_key));
+  // One lane per hub device (outdoor and indoor hubs counted separately): cables leaving the same
+  // device share its riser/run and split only at their destinations; different devices never merge.
+  const hubKeys = [...new Set(crossEntries.map(({ a, b }) => hubOf(a, b)[0]))].sort((p, q) => p.row.equipment_key.localeCompare(q.row.equipment_key));
+  const lanes = new Map<string, number>();
+  let deviceLanes = 0, outdoorLanes = 0;
+  for (const hub of hubKeys) if (!lanes.has(hub.row.equipment_key)) lanes.set(hub.row.equipment_key, (hub.row.fixed ? outdoorLanes++ : deviceLanes++) * 2);
   const routed = [...connections];
-  for (const entries of floors.values()) {
-    const height = Math.max(...entries.flatMap(({ indoor, outdoor }) => [layoutDeviceHeight(indoor), layoutDeviceHeight(outdoor)])) + 18;
-    const edgeY = Math.min(...entries.map(({ connection }) => connection.overheadRoom!.rect.y)) - 12;
-    // Panels standing in one line share a single column trunk.
-    const columns: number[][] = [];
-    for (const x of entries.map(({ outdoor }) => center(outdoor).x).sort((a, b) => a - b)) {
-      const column = columns[columns.length - 1];
-      if (column && x - column[0] <= 8) column.push(x); else columns.push([x]);
+  for (const { connection, index, a, b, crossFloor } of entries) {
+    const lineY = behind(a) || behind(b) ? backY : frontY;
+    if (!crossFloor) {
+      const forward = [roof(a.row), ...leg(a, lineY).reverse(), ...leg(b, lineY), roof(b.row)];
+      routed[index] = { ...connection, corridorRoute: a.row.equipment_key.localeCompare(b.row.equipment_key) <= 0 ? forward : forward.reverse() };
+      continue;
     }
-    const trunkX = (x: number) => {
-      const column = columns.find((values) => x >= values[0] && x <= values[values.length - 1])!;
-      return column.reduce((sum, value) => sum + value, 0) / column.length;
-    };
-    for (const { connection, index, indoor, outdoor } of entries) {
-      const ip = center(indoor), op = center(outdoor), columnX = trunkX(op.x);
-      const trayY = Math.max(op.y, edgeY);
-      const p = (x: number, y: number) => projectLayoutPoint(x, y, height);
-      // A sub-unit jog off the trunk would fold over its own drop in projection; drop straight instead.
-      const overPanel = Math.abs(op.x - columnX) > 1 ? [p(op.x, op.y)] : [];
-      const points = [roof(indoor), p(ip.x, ip.y), p(ip.x, trayY), p(columnX, trayY), p(columnX, op.y), ...overPanel, roof(outdoor)];
-      routed[index] = { ...connection, corridorRoute: indoor.equipment_key.localeCompare(outdoor.equipment_key) <= 0 ? points : points.reverse() };
+    const [hub, other] = hubOf(a, b), lane = lanes.get(hub.row.equipment_key) ?? 0;
+    let fromHub: PowerPlanPoint[];
+    if (hub.row.fixed) {
+      // Outdoor feed: run at outdoor level to just in front of the upper-floor device, climb, then go straight in.
+      const z = Math.max(height, layoutDeviceHeight(hub.row) + 6), y = hub.y - 4 - lane;
+      fromHub = [roof(hub.row), at(hub, hub.x, hub.y, z), at(hub, hub.x, y, z), at(hub, other.x, y, z),
+        at(other, other.x, y), at(other, other.x, other.y), roof(other.row)];
+    } else {
+      // Device-to-device: climb in front of (or, for a panel, beside the back run of) the hub device.
+      const y = behind(hub) ? backY - 4 - lane : frontY + 4 + lane;
+      fromHub = [roof(hub.row), at(hub, hub.x, hub.y), at(hub, hub.x, y), at(other, hub.x, y),
+        at(other, other.x, y), at(other, other.x, other.y), roof(other.row)];
     }
+    const points = hub.row.equipment_key.localeCompare(other.row.equipment_key) <= 0 ? fromHub : [...fromHub].reverse();
+    const trunk = fromHub.slice(0, 2).concat(fromHub.slice(hub.row.fixed ? 3 : 2, hub.row.fixed ? 5 : 4));
+    routed[index] = { ...connection, externalRoute: { points, trunk, bundleLane: lane, hubEquipmentKey: hub.row.equipment_key } };
   }
   return routed;
 }
 
 /** Optimize indoor aisles and outdoor riser banks together, once per scene change. */
 export function routeLayoutCables(connections: PlacedLayoutCable[], regions: LayoutRegionRecord[], floorOffsets: ReadonlyMap<string, number>): PlacedLayoutCable[] {
-  const trays = routeLayoutPanelTrays(connections);
+  const trays = routeLayoutTrays(connections, regions, floorOffsets);
   return chooseRoutes(trays, new Map([...roomRouteCandidates(trays, regions), ...outdoorRouteCandidates(trays, regions, floorOffsets)]));
 }
