@@ -237,7 +237,51 @@ function outdoorRouteCandidates(connections: PlacedLayoutCable[], regions: Layou
   return routes;
 }
 
+/**
+ * Room-to-panel feeders share one overhead tray per floor: a common run along the
+ * rooms' back edge, one trunk per aligned panel column, and a drop above each panel.
+ */
+export function routeLayoutPanelTrays(connections: PlacedLayoutCable[]): PlacedLayoutCable[] {
+  const floors = new Map<string, { connection: PlacedLayoutCable; index: number; indoor: LayoutEquipmentRecord; outdoor: LayoutEquipmentRecord }[]>();
+  connections.forEach((connection, index) => {
+    const room = connection.overheadRoom;
+    if (!connection.roomToOverhead || !room || connection.externalKind || isUndergroundCable(connection.cable)) return;
+    const { source, target } = connection, p = center(source);
+    const sourceInRoom = p.x >= room.rect.x && p.x <= room.rect.x + room.rect.width && p.y >= room.rect.y && p.y <= room.rect.y + room.rect.height;
+    const [indoor, outdoor] = sourceInRoom ? [source, target] : [target, source];
+    const entries = floors.get(indoor.source_floor_id) ?? [];
+    entries.push({ connection, index, indoor, outdoor }); floors.set(indoor.source_floor_id, entries);
+  });
+  if (!floors.size) return connections;
+  const routed = [...connections];
+  for (const entries of floors.values()) {
+    const height = Math.max(...entries.flatMap(({ indoor, outdoor }) => [layoutDeviceHeight(indoor), layoutDeviceHeight(outdoor)])) + 18;
+    const edgeY = Math.min(...entries.map(({ connection }) => connection.overheadRoom!.rect.y)) - 12;
+    // Panels standing in one line share a single column trunk.
+    const columns: number[][] = [];
+    for (const x of entries.map(({ outdoor }) => center(outdoor).x).sort((a, b) => a - b)) {
+      const column = columns[columns.length - 1];
+      if (column && x - column[0] <= 8) column.push(x); else columns.push([x]);
+    }
+    const trunkX = (x: number) => {
+      const column = columns.find((values) => x >= values[0] && x <= values[values.length - 1])!;
+      return column.reduce((sum, value) => sum + value, 0) / column.length;
+    };
+    for (const { connection, index, indoor, outdoor } of entries) {
+      const ip = center(indoor), op = center(outdoor), columnX = trunkX(op.x);
+      const trayY = Math.max(op.y, edgeY);
+      const p = (x: number, y: number) => projectLayoutPoint(x, y, height);
+      // A sub-unit jog off the trunk would fold over its own drop in projection; drop straight instead.
+      const overPanel = Math.abs(op.x - columnX) > 1 ? [p(op.x, op.y)] : [];
+      const points = [roof(indoor), p(ip.x, ip.y), p(ip.x, trayY), p(columnX, trayY), p(columnX, op.y), ...overPanel, roof(outdoor)];
+      routed[index] = { ...connection, corridorRoute: indoor.equipment_key.localeCompare(outdoor.equipment_key) <= 0 ? points : points.reverse() };
+    }
+  }
+  return routed;
+}
+
 /** Optimize indoor aisles and outdoor riser banks together, once per scene change. */
 export function routeLayoutCables(connections: PlacedLayoutCable[], regions: LayoutRegionRecord[], floorOffsets: ReadonlyMap<string, number>): PlacedLayoutCable[] {
-  return chooseRoutes(connections, new Map([...roomRouteCandidates(connections, regions), ...outdoorRouteCandidates(connections, regions, floorOffsets)]));
+  const trays = routeLayoutPanelTrays(connections);
+  return chooseRoutes(trays, new Map([...roomRouteCandidates(trays, regions), ...outdoorRouteCandidates(trays, regions, floorOffsets)]));
 }

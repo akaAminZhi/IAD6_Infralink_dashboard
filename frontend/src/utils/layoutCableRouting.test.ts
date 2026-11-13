@@ -48,6 +48,29 @@ describe("fixed equipment cable routing", () => {
     expect(routeLayoutRoomCables(reverse, [room]).map((c) => layoutCablePath(c)).reverse()).toEqual(routed.map((c) => layoutCablePath(c)));
   });
 
+  it("bundles room-to-panel feeders into one shared tray with a trunk per aligned panel column", () => {
+    const hubs = [device("PDU-1", 20, 30), device("PDU-2", 60, 50)];
+    const panels = [device("RPP-1", 40, -80), device("RPP-2", 41, -50), device("RPP-3", 80, -60)];
+    const cables = [cable("PDU-1", "RPP-1"), cable("PDU-2", "RPP-2"), cable("PDU-1", "RPP-3")];
+    const placed = placedLayoutCables(cables, [...hubs, ...panels], [room]);
+    expect(placed.every((c) => c.roomToOverhead)).toBe(true);
+    const routed = routeLayoutCables(placed, [room], new Map());
+    const routes = routed.map((c) => c.corridorRoute!);
+    expect(routes.every(Boolean)).toBe(true);
+    for (const [index, c] of routed.entries()) {
+      const [a, b] = [c.source, c.target].sort((x, y) => x.equipment_key.localeCompare(y.equipment_key));
+      expect(routes[index][0]).toEqual(port(a));
+      expect(routes[index][routes[index].length - 1]).toEqual(port(b));
+      expect(pathsCross(routes[index], routes[index])).toBe(false);
+    }
+    // Indoor endpoints sort first ("PDU" < "RPP"): [roof, rise, edge, trunk start, trunk end, over panel, panel roof].
+    const [first, second, third] = routes;
+    expect(first[2].y - first[2].x * 0.5).toBeCloseTo(second[2].y - second[2].x * 0.5);
+    expect(first[3]).toEqual(second[3]);
+    expect(third[3]).not.toEqual(first[3]);
+    expect(first[1].y - first[1].x * 0.5 - (third[1].y - third[1].x * 0.5)).toBeCloseTo(0);
+  });
+
   it("preserves outdoor, buried and unclassified connections instead of inventing room membership", () => {
     const rows = [device("A", 8, 10), device("B", 40, 20), device("F", 40, 140, "first", true)];
     const original = placedLayoutCables([cable("A", "B"), cable("A", "F"), { ...cable("B", "A"), equipment_type: "Feeder Cable - MV" }], rows, [room]);

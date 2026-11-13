@@ -3,6 +3,7 @@ import type { LayoutCableRecord, LayoutEquipmentRecord, LayoutPlanManifest, Layo
 import { layoutCableLanes, layoutCableMarkerPoint, layoutCablePath, layoutConnectionBounds, layoutDeviceHeight,
   overheadCablePoints, placedLayoutCables, projectLayoutPoint } from "./layoutIsometricUtils";
 import { buildCombinedLayoutScene } from "./layoutSceneUtils";
+import { routeLayoutCables } from "./layoutCableRouting";
 
 const device = (key: string, floor: string, x: number, y: number, fixed = false): LayoutEquipmentRecord => ({
   annotation_id: `${floor}:${key}`, equipment_key: key, label: key, source_floor_id: floor, fixed,
@@ -70,7 +71,7 @@ describe("combined Layout scene", () => {
   it("translates same-floor geometry exactly and retains the first floor's shared feeder", () => {
     const data = manifest(), scene = buildCombinedLayoutScene(data);
     const floor = data.floors[1], offset = scene.groups[1].offsetY;
-    const original = placedLayoutCables(data.cables!, floor.equipment, floor.regions);
+    const original = routeLayoutCables(placedLayoutCables(data.cables!, floor.equipment, floor.regions), floor.regions ?? [], new Map());
     const lanes = layoutCableLanes(original);
     const connection = scene.connections.find(({ cable: record }) => record.cable_id === "B-V")!;
     const displayed = overheadCablePoints(connection, layoutCableLanes(scene.connections)[scene.connections.indexOf(connection)]);
