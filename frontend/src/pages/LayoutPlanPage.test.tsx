@@ -971,6 +971,28 @@ describe("LayoutPlanPage", () => {
     expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
   });
 
+  it("keeps suggestions mounted through Safari touch activation before selecting the tapped result", async () => {
+    const user = userEvent.setup();
+    render(<LayoutPlanPage />);
+    await screen.findByRole("button", { name: "EQ-1: Energized" });
+    const input = screen.getByRole("combobox", { name: "Find equipment" });
+    await user.type(input, "EQ-");
+    const option = screen.getByRole("option", { name: /EQ-2/ });
+    // Do not cancel touch pointerdown: the suggestions must remain scrollable.
+    expect(fireEvent.pointerDown(option, { pointerType: "touch" })).toBe(true);
+    fireEvent.pointerUp(option, { pointerType: "touch" });
+    expect(input).toHaveValue("EQ-");
+    expect(fireEvent.mouseDown(option)).toBe(false);
+    expect(input).toHaveFocus();
+    expect(option).toBeInTheDocument();
+    fireEvent.mouseUp(option);
+    fireEvent.click(option);
+    expect(input).toHaveValue("EQ-2");
+    expect(screen.getByLabelText("Floor")).toHaveValue("second");
+    expect(screen.getByRole("button", { name: "EQ-2: Not Energized" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+  });
+
   it.each(["EQ-1", "EQ-FIX"])("prevents planning Energized equipment %s", async (equipmentId) => {
     if (equipmentId === "EQ-FIX") localStorage.setItem(LAYOUT_OVERRIDES_KEY, JSON.stringify({ "EQ-FIX": "energized" }));
     const user = userEvent.setup();

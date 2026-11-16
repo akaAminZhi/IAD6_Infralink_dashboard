@@ -799,7 +799,8 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
               id={`layout-equipment-option-${index}`} aria-selected={index === activeSearchIndex}
               key={suggestion.id}
               className={`flex w-full flex-col items-start gap-0.5 rounded px-3 py-1.5 text-left text-sm ${index === activeSearchIndex ? "bg-accent" : "hover:bg-accent"}`}
-              onPointerDown={(event) => event.preventDefault()} onClick={() => confirmSuggestion(suggestion)}>
+              // Keep focus through Safari's compatibility mousedown without blocking touch scrolling.
+              onMouseDown={(event) => event.preventDefault()} onClick={() => confirmSuggestion(suggestion)}>
               <span className="w-full break-words font-medium leading-snug [overflow-wrap:anywhere]">{suggestion.label}</span>
               <span className="w-full truncate text-xs font-normal text-muted-foreground" title={suggestion.floorLabel}>{suggestion.floorLabel}</span>
             </button>) : !searchResource.loading && !searchResource.error ? <div className="px-3 py-2 text-sm text-muted-foreground">No matching equipment</div> : null}

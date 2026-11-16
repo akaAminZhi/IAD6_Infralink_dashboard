@@ -26,6 +26,30 @@ beforeEach(() => {
 
 describe("PowerPlanPage", () => {
 
+  it("keeps suggestions mounted through Safari touch activation before selecting the tapped result", async () => {
+    const user = userEvent.setup();
+    const pdmName = "IAD06-PDM-E6-110-01-PRIMARY-CDS";
+    const equipmentId = "IAD06-PDU6-01A-1";
+    render(<PowerPlanPage data={makeDashboardData({ pdms: [{
+      pdm_name: pdmName, equipment: [{ equipment_id: equipmentId }],
+    }] })} />);
+    const input = screen.getByRole("combobox", { name: "Search all equipment" });
+    await user.type(input, "PDU6");
+    const option = screen.getByRole("option", { name: new RegExp(equipmentId) });
+    // iPad Safari sends compatibility mouse events after the touch pointer ends.
+    expect(fireEvent.pointerDown(option, { pointerType: "touch" })).toBe(true);
+    fireEvent.pointerUp(option, { pointerType: "touch" });
+    expect(input).toHaveValue("PDU6");
+    expect(fireEvent.mouseDown(option)).toBe(false);
+    expect(input).toHaveFocus();
+    expect(option).toBeInTheDocument();
+    fireEvent.mouseUp(option);
+    fireEvent.click(option);
+    expect(input).toHaveValue(equipmentId);
+    expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+    expect(screen.getByText("Asset Information")).toBeInTheDocument();
+  });
+
   it.each([false, true])("opens local NETA reports independently of completion (%s)", async (complete) => {
     const user = userEvent.setup();
     const id = "IAD06-PDU6-01A-1";

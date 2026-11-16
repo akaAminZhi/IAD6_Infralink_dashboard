@@ -1784,6 +1784,8 @@ export function PowerPlanPage({ data }: PowerPlanPageProps) {
                           )}
                           key={suggestion.key}
                           onClick={() => selectGlobalSearchResult(suggestion)}
+                          // Safari may blur to the body before click and unmount this option.
+                          onMouseDown={(event) => event.preventDefault()}
                           onMouseEnter={() => setActiveSearchIndex(index)}
                           role="option"
                           type="button"
