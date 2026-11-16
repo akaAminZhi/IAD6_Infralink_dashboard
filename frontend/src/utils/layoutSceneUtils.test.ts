@@ -166,12 +166,15 @@ describe("combined Layout scene", () => {
     const feeder = scene.connections.find(({ cable: record }) => record.cable_id === "F-B")!;
     expect(feeder.externalKind).toBe("shared-feed");
     expect(feeder.externalRoute?.hubEquipmentKey).toBe("F");
-    // The outdoor feed climbs its own vertical riser directly in front of the device it serves.
+    // The outdoor feed runs along the strip in front of the building and climbs the shared riser at
+    // the strip's end, just outside the deck.
     const [, , bottom, top] = feeder.externalRoute!.trunk;
-    const target = feeder.source.fixed ? feeder.target : feeder.source;
     expect(bottom.x).toBeCloseTo(top.x);
     expect(top.y).toBeLessThan(bottom.y);
-    expect(top.x - projectLayoutPoint(target.rect.x + target.rect.width / 2, target.rect.y + target.rect.height / 2).x).toBeLessThan(0);
+    const ordered = feeder.source.fixed === (feeder.source.equipment_key.localeCompare(feeder.target.equipment_key) <= 0) ? feeder.externalRoute!.points : [...feeder.externalRoute!.points].reverse();
+    expect(ordered[3]).toEqual(bottom);
+    // The strip is a constant plan-y line (slope 1/2 on screen) at one height.
+    expect(bottom.y - ordered[2].y).toBeCloseTo((bottom.x - ordered[2].x) / 2);
     const crossFloor = scene.connections.find((item) => item.externalKind === "cross-floor")!;
     expect(bottom.x).not.toBeCloseTo(crossFloor.externalRoute!.trunk[2].x);
     const geometry = scene.geometry.find(({ connection }) => connection === feeder)!;
@@ -183,6 +186,27 @@ describe("combined Layout scene", () => {
     expect(singleFloor.externalKind).toBe("shared-feed");
     expect(singleFloor.externalRoute?.hubEquipmentKey).toBe("F");
     expect(layoutCablePath(singleFloor)).not.toContain(" C ");
+  });
+
+  it("merges outdoor feeds to the upper floor into one strip and one side riser", () => {
+    const data = manifest();
+    data.fixed_equipment = [device("F", "first", 20, 200, true), device("G", "first", 60, 200, true)];
+    data.floors[1].equipment.push(device("W", "second", 50, 130));
+    data.cables = [cable("F", "B"), cable("G", "W")];
+    const scene = buildCombinedLayoutScene(data);
+    const [f, g] = ["F-B", "G-W"].map((id) => scene.connections.find(({ cable: record }) => record.cable_id === id)!);
+    expect(f.externalRoute!.hubEquipmentKey).toBe("F");
+    expect(g.externalRoute!.hubEquipmentKey).toBe("G");
+    // Different outdoor devices share the strip and the riser; they split only on the upper floor.
+    expect(f.externalRoute!.trunk.slice(2)).toEqual(g.externalRoute!.trunk.slice(2));
+    expect(f.externalRoute!.bundleLane).toBe(g.externalRoute!.bundleLane);
+    // Points run from the alphabetically first endpoint; orient them from the outdoor hub.
+    const fromHub = (c: typeof f) => { const other = c.source.fixed ? c.target : c.source;
+      return c.externalRoute!.hubEquipmentKey.localeCompare(other.equipment_key) <= 0 ? c.externalRoute!.points : [...c.externalRoute!.points].reverse(); };
+    // Both join the same strip (a constant plan-y line: slope 1/2 on screen) and leave it at the same end.
+    const end = fromHub(f)[3];
+    expect(fromHub(g)[3]).toEqual(end);
+    for (const c of [f, g]) expect(fromHub(c)[2].y - end.y).toBeCloseTo((fromHub(c)[2].x - end.x) / 2);
   });
 
   it("keeps room-edge routes stable and compact independent of input order and feeder direction", () => {

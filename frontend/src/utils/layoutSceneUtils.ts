@@ -112,7 +112,7 @@ export function buildCombinedLayoutScene(manifest: LayoutPlanManifest) {
     return externalKind ? { ...connection, externalKind, roomToOverhead: false, overheadRoom: undefined } : connection;
   });
   const offsets = new Map(groups.map((group) => [group.id, group.offsetY]));
-  const connections = routeLayoutCables(placed, regions, offsets);
+  const connections = routeLayoutCables(placed, regions, offsets, floorFootprint);
   const geometry = layoutCableGeometry(connections);
   const bounds = layoutBounds([...groups, ...headings, ...grounds, ...geometry.map(({ extent }) => ({ rect: extent }))]);
   return { rows, regions, groups, connections, geometry, bounds, contentBounds, floorLift, floorFootprint, singleFloorConnections };

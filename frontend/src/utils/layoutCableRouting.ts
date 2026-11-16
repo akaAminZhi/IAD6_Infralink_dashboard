@@ -1,4 +1,4 @@
-import type { LayoutEquipmentRecord, LayoutRegionRecord, PowerPlanPoint } from "../types/data";
+import type { LayoutEquipmentRecord, LayoutRegionRecord, PowerPlanPoint, PowerPlanRect } from "../types/data";
 import { isUndergroundCable, layoutCableLanes, layoutCablePath, layoutDeviceHeight, projectLayoutPoint, type PlacedLayoutCable } from "./layoutIsometricUtils";
 
 const center = (row: LayoutEquipmentRecord) => ({ x: row.rect.x + row.rect.width / 2, y: row.rect.y + row.rect.height / 2 });
@@ -360,12 +360,16 @@ interface TrayEnd { row: LayoutEquipmentRecord; offset: number; x: number; y: nu
  * target: they share the hub feeder and that bus to the room's edge run, rise to tray height there,
  * and only then split toward their own targets.
  * Cross-floor feeders merge only per source device: each hub device gets its own lane and riser in
- * front of it (outdoor feeds instead rise in front of the upper-floor device they serve), so the
- * devices with cross-floor connections stay easy to spot.
+ * front of it, so the devices with cross-floor connections stay easy to spot.
+ * Outdoor feeds to an upper floor all share one tray: each leaves its outdoor device into the blank
+ * strip between the building and the outdoor equipment, runs along it to the nearer screen side
+ * (left or right end of the floor deck), climbs one shared side riser, then on the upper floor runs
+ * back along the same strip and drops into its device.
  * Plan coordinates are floor-local; `floorOffsets` restores each floor's exploded screen position.
+ * `footprint` is the floor deck (floor-local) whose left/right ends hold the outdoor side risers.
  */
 export function routeLayoutTrays(connections: PlacedLayoutCable[], regions: LayoutRegionRecord[], floorOffsets: ReadonlyMap<string, number>,
-  plans: ReadonlyMap<string, RoomBusPlan> = new Map(), trayHeight?: number): PlacedLayoutCable[] {
+  plans: ReadonlyMap<string, RoomBusPlan> = new Map(), trayHeight?: number, footprint?: PowerPlanRect): PlacedLayoutCable[] {
   const rooms = regions.filter((region) => region.kind === "room" && !region.fixed);
   const offsetOf = (floor: string) => floorOffsets.get(floor) ?? 0;
   const end = (row: LayoutEquipmentRecord): TrayEnd => {
@@ -390,8 +394,8 @@ export function routeLayoutTrays(connections: PlacedLayoutCable[], regions: Layo
   if (!entries.length) return connections;
   // Without room outlines, the tray runs bound the routed devices themselves.
   const extents = rooms.length ? rooms.map(({ rect, source_floor_id }) => { const o = offsetOf(source_floor_id);
-    return { x: rect.x - o, y: rect.y - o, bottom: rect.y + rect.height - o }; })
-    : entries.flatMap(({ a, b }) => [a, b]).filter((e) => !e.row.fixed).map((e) => ({ x: e.x, y: e.y, bottom: e.y }));
+    return { x: rect.x - o, right: rect.x + rect.width - o, y: rect.y - o, bottom: rect.y + rect.height - o }; })
+    : entries.flatMap(({ a, b }) => [a, b]).filter((e) => !e.row.fixed).map((e) => ({ x: e.x, right: e.x, y: e.y, bottom: e.y }));
   const roomTop = Math.min(...extents.map((room) => room.y));
   const backY = roomTop - 12, frontY = Math.max(...extents.map((room) => room.bottom)) + 12;
   const behind = (e: TrayEnd) => !e.row.fixed && !e.inRoom && e.y < roomTop;
@@ -455,7 +459,15 @@ export function routeLayoutTrays(connections: PlacedLayoutCable[], regions: Layo
   const lanes = new Map<string, number>();
   let deviceLanes = 0, outdoorLanes = 0;
   for (const hub of hubKeys) if (!lanes.has(hub.row.equipment_key)) lanes.set(hub.row.equipment_key, (hub.row.fixed ? outdoorLanes++ : deviceLanes++) * 2);
-  const routed = [...connections];
+  // Outdoor feeds to upper floors: one shared strip (plan y) between the building front and the
+  // outdoor equipment, one outdoor tray height, and side risers just beyond the deck's x extent.
+  const outdoorHubs = crossEntries.map(({ a, b }) => hubOf(a, b)).filter(([hub]) => hub.row.fixed);
+  const outdoorFront = Math.min(...outdoorHubs.map(([hub]) => hub.row.rect.y - hub.offset));
+  const outdoorY = Number.isFinite(outdoorFront) ? Math.max(frontY + 8, (frontY + 8 + outdoorFront) / 2) : frontY + 8;
+  const outdoorZ = Math.max(height, ...outdoorHubs.map(([hub]) => layoutDeviceHeight(hub.row) + 6));
+  const sideXs = [...extents.flatMap((room) => [room.x, room.right]), ...outdoorHubs.flatMap((pair) => pair.map((e) => e.x)),
+    ...footprint ? [footprint.x, footprint.x + footprint.width] : []];
+  const outdoorSides = { left: Math.min(...sideXs) - 12, right: Math.max(...sideXs) + 12 };  const routed = [...connections];
   for (const { connection, index, a, b, crossFloor } of entries) {
     const lineY = behind(a) || behind(b) ? backY : frontY;
     if (!crossFloor) {
@@ -464,13 +476,16 @@ export function routeLayoutTrays(connections: PlacedLayoutCable[], regions: Layo
       continue;
     }
     const [hub, other] = hubOf(a, b), lane = lanes.get(hub.row.equipment_key) ?? 0;
-    let fromHub: PowerPlanPoint[], riser = 3;
+    let fromHub: PowerPlanPoint[], riser = 3, bundleLane = lane;
     if (hub.row.fixed) {
-      // Outdoor feed: run at outdoor level to just in front of the upper-floor device's tray (its bus or
-      // room column), climb there, then ride that tray in and drop onto the device.
-      const z = Math.max(height, layoutDeviceHeight(hub.row) + 6), y = hub.y - 4 - lane;
-      const into = approach(other, y, hub.x);
-      fromHub = [roof(hub.row), at(hub, hub.x, hub.y, z), at(hub, hub.x, y, z), at(hub, into.x, y, z), ...into.points, roof(other.row)];
+      // Outdoor feed: into the shared strip, along it to the nearer deck end, up the side riser, then
+      // back along the upper floor's strip and in through the device's tray (bus or room column).
+      // Risers stand on the strip just outside the deck's left or right end.
+      const mid = (hub.x + other.x) / 2, side = mid - outdoorSides.left <= outdoorSides.right - mid ? "left" : "right";
+      const x = outdoorSides[side], into = approach(other, outdoorY, x);
+      fromHub = [roof(hub.row), at(hub, hub.x, hub.y, outdoorZ), at(hub, hub.x, outdoorY, outdoorZ), at(hub, x, outdoorY, outdoorZ),
+        at(other, x, outdoorY), ...into.points, roof(other.row)];
+      bundleLane = side === "left" ? 0 : 1;
     } else {
       // Device-to-device: climb in front of (or, for a panel, beside the back run of) the hub device,
       // riding the hub's nearest in-room bus out first when it has one.
@@ -482,14 +497,15 @@ export function routeLayoutTrays(connections: PlacedLayoutCable[], regions: Layo
     const points = hub.row.equipment_key.localeCompare(other.row.equipment_key) <= 0 ? fromHub : [...fromHub].reverse();
     // [hub roof, above hub, riser foot, riser top]: the riser is the vertical step between floors.
     const trunk = [fromHub[0], fromHub[1], fromHub[riser], fromHub[riser + 1]];
-    routed[index] = { ...connection, externalRoute: { points, trunk, bundleLane: lane, hubEquipmentKey: hub.row.equipment_key } };
+    routed[index] = { ...connection, externalRoute: { points, trunk, bundleLane, hubEquipmentKey: hub.row.equipment_key } };
   }
   return routed;
 }
 
 /** Optimize indoor aisles and outdoor riser banks together, once per scene change. */
-export function routeLayoutCables(connections: PlacedLayoutCable[], regions: LayoutRegionRecord[], floorOffsets: ReadonlyMap<string, number>): PlacedLayoutCable[] {
+export function routeLayoutCables(connections: PlacedLayoutCable[], regions: LayoutRegionRecord[], floorOffsets: ReadonlyMap<string, number>,
+  footprint?: PowerPlanRect): PlacedLayoutCable[] {
   const height = layoutTrayHeight(connections), plans = roomBusPlans(connections, regions, height);
-  const trays = routeRoomTrunks(routeLayoutTrays(connections, regions, floorOffsets, plans, height), regions, plans);
+  const trays = routeRoomTrunks(routeLayoutTrays(connections, regions, floorOffsets, plans, height, footprint), regions, plans);
   return chooseRoutes(trays, new Map([...roomRouteCandidates(trays, regions), ...outdoorRouteCandidates(trays, regions, floorOffsets)]));
 }
