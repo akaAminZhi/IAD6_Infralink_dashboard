@@ -884,6 +884,30 @@ describe("2.5D Layout connections", () => {
 });
 
 describe("LayoutPlanPage", () => {
+  it.each(["plan", "isometric"])("pinches %s without selecting equipment or completing a selection box", async (view) => {
+    localStorage.setItem(LAYOUT_VIEW_KEY, view);
+    const user = userEvent.setup();
+    render(<LayoutPlanPage />);
+    await screen.findByRole("button", { name: "EQ-1: Energized" });
+    const map = screen.getByLabelText("Layout map");
+    vi.spyOn(map, "getBoundingClientRect").mockReturnValue({ left: 0, top: 0, width: 600, height: 400 } as DOMRect);
+    const svg = map.querySelector("svg[role=img]")!;
+    const touch = (type: string, pointerId: number, clientX: number) => fireEvent(svg,
+      Object.assign(new Event(type, { bubbles: true, cancelable: true }), { pointerId, pointerType: "touch", button: 0, clientX, clientY: 200 }));
+    const original = svg.getAttribute("viewBox");
+    await user.click(screen.getByRole("button", { name: "Box select" }));
+    touch("pointerdown", 1, 200); touch("pointerdown", 2, 400);
+    touch("pointermove", 1, 100); touch("pointermove", 2, 500);
+    touch("pointerup", 1, 100); touch("pointerup", 2, 500);
+    expect(svg.getAttribute("viewBox")).not.toBe(original);
+    expect(screen.getByRole("button", { name: "EQ-1: Energized" })).toHaveAttribute("aria-pressed", "false");
+    expect(map.querySelector('rect[fill="#2563eb"]')).not.toBeInTheDocument();
+    await user.type(screen.getByRole("combobox", { name: "Find equipment" }), "EQ-2");
+    await user.click(screen.getByRole("option", { name: /EQ-2/ }));
+    expect(screen.getByRole("combobox", { name: "Find equipment" })).toHaveValue("EQ-2");
+    expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+  });
+
   it("preserves repeated fixed ID placements from the source floor and avoids copies from later floors", () => {
     const manifest = dataset();
     manifest.fixed_equipment.push(

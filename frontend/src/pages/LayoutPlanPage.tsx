@@ -17,6 +17,7 @@ import { LayoutCable } from "../components/layout/LayoutCable";
 import { LayoutBackground } from "../components/layout/LayoutBackground";
 import { LayoutFloorGround } from "../components/layout/LayoutFloorGround";
 import { useFrameState } from "../hooks/useFrameState";
+import { usePinchZoom } from "../hooks/usePinchZoom";
 import { useNetaReportManifest } from "../contexts/NetaReportManifestContext";
 import { useDashboardResources } from "../contexts/DashboardResourcesContext";
 import type { Equipment, LayoutCableRecord, LayoutEquipmentRecord, LayoutPlanManifest, PowerPlanRect } from "../types/data";
@@ -93,6 +94,8 @@ const EquipmentLightning = memo(function EquipmentLightning({ record, status, di
 });
 
 interface PanState {
+  latestX: number;
+  latestY: number;
   pointerId: number;
   button: number;
   x: number;
@@ -261,6 +264,25 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
   }, [manifest, combinedScene]);
   const fullBounds = combined && combinedScene ? combinedScene.bounds : isometric ? allBounds.isometric : allBounds.plan;
   const bounds = viewport ?? fullBounds;
+  const pinch = usePinchZoom({
+    sceneKey: `${floorId}/${combined}/${isometric}/${refreshKey}/${mapSize.width}/${mapSize.height}`,
+    getBounds: canvasRect,
+    begin: () => {
+      const pan = panRef.current, canvas = canvasRect();
+      let view = bounds;
+      if (pan?.mode === "pan" && pan.moved && canvas?.width && canvas.height) {
+        const scale = Math.min(canvas.width / pan.viewport.width, canvas.height / pan.viewport.height);
+        view = { ...pan.viewport, x: pan.viewport.x - (pan.latestX - pan.x) / scale,
+          y: pan.viewport.y - (pan.latestY - pan.y) / scale };
+      }
+      panRef.current = null; setSelectionBox(null); setInspection(null); setPanCullViewport(null);
+      setViewport(view);
+      return view;
+    },
+    zoom: (view, factor) => zoomLayoutViewport(view, fullBounds, factor),
+    change: queueViewport,
+    finish: flushViewport,
+  });
   const overscan = 0.4;
   const cullCenter = panCullViewport ?? bounds;
   const renderBounds = { x: cullCenter.x - cullCenter.width * overscan, y: cullCenter.y - cullCenter.height * overscan,
@@ -383,6 +405,7 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
 
   function handlePointerDown(event: ReactPointerEvent<SVGSVGElement>) {
     if (event.button !== 0 && event.button !== 1) return;
+    if (pinch.down(event)) return;
     const mode = selectionMode && event.button === 0 ? "select" : "pan";
     event.preventDefault();
     setInspection(null);
@@ -393,7 +416,7 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
       pointerId: event.pointerId, button: event.button, x: event.clientX, y: event.clientY, viewport: bounds, moved: false,
       annotationId: (event.target as Element).closest("[data-annotation-id][role=button]")?.getAttribute("data-annotation-id") ?? null,
       cableId: (event.target as Element).closest("[data-cable-id][role=button]")?.getAttribute("data-cable-id") ?? null,
-      mode, additive: event.shiftKey,
+      mode, additive: event.shiftKey, latestX: event.clientX, latestY: event.clientY,
     };
     panCullOffsetRef.current = { x: 0, y: 0 };
     if (isometric && mode === "pan" && panLayerRef.current) {
@@ -402,9 +425,11 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
   }
 
   function handlePointerMove(event: ReactPointerEvent<SVGSVGElement>) {
+    if (pinch.move(event)) return;
     const pan = panRef.current;
     const canvas = canvasRect();
     if (!pan || pan.pointerId !== event.pointerId || !canvas) return;
+    pan.latestX = event.clientX; pan.latestY = event.clientY;
     if (!pan.moved && Math.hypot(event.clientX - pan.x, event.clientY - pan.y) < 4) return;
     pan.moved = true;
     if (pan.mode === "select") {
@@ -430,6 +455,7 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
   }
 
   function endPan(event: ReactPointerEvent<SVGSVGElement>, cancelled = false) {
+    if (pinch.end(event)) return;
     const pan = panRef.current;
     if (!pan || pan.pointerId !== event.pointerId) return;
     if (isometric && pan.mode === "pan" && pan.moved) {
@@ -718,11 +744,12 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
           className={`${isometric ? "absolute -left-[40%] -top-[40%] h-[180%] w-[180%]" : "h-full w-full"} select-none outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600 ${selectionMode ? "cursor-crosshair" : "cursor-grab active:cursor-grabbing"}`} style={{ touchAction: "none" }}
           onPointerDown={handlePointerDown} onPointerMove={handlePointerMove}
           onPointerUp={(event) => endPan(event)} onPointerCancel={(event) => endPan(event, true)}
+          onLostPointerCapture={(event) => endPan(event, true)}
           onAuxClick={(event) => { if (event.button === 1) event.preventDefault(); }}
           onKeyDown={(event) => { if (event.key === "Escape") {
             if (isometric && !selectionMode) restoreGlobalView(); else { setInspection(null); cancelSelectionGesture(); }
           } }}
-          onClickCapture={(event) => { if (suppressClickRef.current && event.detail !== 0) { event.preventDefault(); event.stopPropagation(); } }}>
+          onClickCapture={(event) => { if ((suppressClickRef.current || pinch.shouldSuppressClick()) && event.detail !== 0) { event.preventDefault(); event.stopPropagation(); } }}>
           {hasIsometric ? <SimpleIsometricSymbols /> : null}
           <g data-layout-scene="true">
           {isometric ? <g data-layout-layer="floor-grounds" pointerEvents="none">

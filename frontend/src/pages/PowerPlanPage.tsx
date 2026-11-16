@@ -29,6 +29,7 @@ import {
 
 import { wheelZoomFactor } from "../utils/wheelZoom";
 import { useFrameState } from "../hooks/useFrameState";
+import { usePinchZoom } from "../hooks/usePinchZoom";
 import { EmptyState } from "../components/common/EmptyState";
 import { EnergisationMarker } from "../components/pdms/EnergisationMarker";
 import { ENERGISATION_COLORS, getEnergisationLabel, getEnergisationStage } from "../utils/energisation";
@@ -1296,11 +1297,19 @@ export function PowerPlanPage({ data }: PowerPlanPageProps) {
     [data.cases, data.equipment, data.pdms],
   );
   const layout = useMemo(() => getPdmCombinationLayout(rows), [rows]);
-  const [viewport, setViewport, queueViewport] = useFrameState<SchematicViewport>({
+  const [viewport, setViewport, queueViewport, flushViewport] = useFrameState<SchematicViewport>({
     x: 0,
     y: 0,
     width: layout.width,
     height: layout.height,
+  });
+  const pinch = usePinchZoom({
+    sceneKey: layout,
+    getBounds: () => svgRef.current?.getBoundingClientRect(),
+    begin: () => { panRef.current = null; return viewport; },
+    zoom: (view, factor) => zoomViewport(view, layout, factor),
+    change: queueViewport,
+    finish: flushViewport,
   });
   const selectedRow =
     rows.find((row) => row.annotation.annotation_id === selectedAnnotationId) ?? null;
@@ -1588,6 +1597,7 @@ export function PowerPlanPage({ data }: PowerPlanPageProps) {
 
   function handlePointerDown(event: ReactPointerEvent<SVGSVGElement>) {
     if (event.button !== 0) return;
+    if (pinch.down(event)) return;
     event.preventDefault();
     event.currentTarget.setPointerCapture(event.pointerId);
     const equipmentMarker = (event.target as Element).closest('[data-equipment-marker="true"]');
@@ -1604,6 +1614,7 @@ export function PowerPlanPage({ data }: PowerPlanPageProps) {
   }
 
   function handlePointerMove(event: ReactPointerEvent<SVGSVGElement>) {
+    if (pinch.move(event)) return;
     const pan = panRef.current;
     const bounds = svgRef.current?.getBoundingClientRect();
     if (!pan || pan.pointerId !== event.pointerId || !bounds) {
@@ -1637,6 +1648,7 @@ export function PowerPlanPage({ data }: PowerPlanPageProps) {
   }
 
   function handlePointerUp(event: ReactPointerEvent<SVGSVGElement>) {
+    if (pinch.end(event)) return;
     const pan = panRef.current;
     if (pan?.pointerId !== event.pointerId) return;
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
@@ -1673,6 +1685,7 @@ export function PowerPlanPage({ data }: PowerPlanPageProps) {
   }
 
   function handlePointerCancel(event: ReactPointerEvent<SVGSVGElement>) {
+    if (pinch.end(event)) return;
     if (panRef.current?.pointerId !== event.pointerId) return;
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
@@ -1990,6 +2003,10 @@ export function PowerPlanPage({ data }: PowerPlanPageProps) {
               onPointerMove={handlePointerMove}
               onPointerUp={handlePointerUp}
               onPointerCancel={handlePointerCancel}
+              onLostPointerCapture={handlePointerCancel}
+              onClickCapture={(event) => {
+                if (pinch.shouldSuppressClick() && event.detail !== 0) { event.preventDefault(); event.stopPropagation(); }
+              }}
               preserveAspectRatio="xMidYMid meet"
               ref={svgRef}
               role="img"

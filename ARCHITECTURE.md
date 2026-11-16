@@ -78,6 +78,17 @@ flowchart LR
   `/data-operations`.
 - All route pages load their code on demand inside a shared Suspense boundary.
 
+### Touch map gestures
+
+`usePinchZoom` shares touch-pointer tracking between Power Plan and Layout.
+The pages retain their own zoom limits and camera update paths. A second touch
+cancels single-pointer pan/selection, anchors the world point under the midpoint
+with SVG letterboxing accounted for, and updates zoom/pan from the initial
+two-touch pose. Remaining fingers are consumed after the first lift/cancel;
+click capture suppresses accidental equipment selection until a new interaction.
+Pointer capture loss and scene changes clear the gesture. Layout search controls
+are excluded from map gesture handling.
+
 ### Data loading
 
 `InfralinkEquipmentLinksProvider` loads the optional generated device-ID

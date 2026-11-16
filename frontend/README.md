@@ -2,6 +2,14 @@
 
 React + TypeScript + Vite frontend for the IAD06 PDM-centric equipment dashboard.
 
+## Touch map controls
+
+Power Plan and Layout (2D and 2.5D) support two-finger pinch zoom around the
+fingers' midpoint, including moving the midpoint to pan. Existing zoom limits
+apply. Lift both fingers before starting another single-finger drag. Pinching
+does not select equipment or complete a selection box; mouse/keyboard controls
+and search suggestion scrolling retain their existing behavior.
+
 ## Duplicate NETA reports
 
 `neta_report_manifest.json.duplicate_audit` supplies equipment-scoped groups,

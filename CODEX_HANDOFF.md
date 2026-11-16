@@ -1,5 +1,24 @@
 ﻿# Codex Handoff
 
+## Current update (2026-11-16): Two-finger map zoom
+
+- Added shared `usePinchZoom` for Power Plan and Layout 2D/2.5D. Two touch
+  pointers zoom around their moving midpoint, accounting for SVG letterboxing
+  and retaining each page's existing zoom limits/camera update path.
+- Starting a pinch abandons single-pointer pan/box selection. Remaining fingers
+  are consumed after either finger lifts/cancels; pointer capture and click
+  suppression prevent accidental equipment/PDM/export selection. A fresh gesture
+  restores single-pointer handling. Scene/size changes reset touch tracking.
+  Layout search controls bypass gesture/click suppression.
+- Validation: 74 targeted tests passed (both pages plus five gesture tests).
+  Two Layout pinch/search regressions also passed after the final control bypass.
+  Chromium iPad-profile native multitouch verified zoom in/out, no accidental
+  clicks, subsequent single-touch pan, both Layout views and touch cancellation.
+  These are browser simulations, not a physical iPad check. TypeScript and
+  preview-mode production build passed, with the existing chunk-size warning.
+- Rebuilt local compiled assets; refresh to load. No ETL/vendor writes, service
+  restart, commit or push. Earlier uncommitted Layout performance work remains.
+
 ## Current update (2026-11-09): Layout search inside the map
 
 - Moved Layout's Find equipment combobox from the toolbar into a floating

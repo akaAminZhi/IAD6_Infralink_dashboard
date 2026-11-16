@@ -26,6 +26,27 @@ beforeEach(() => {
 
 describe("PowerPlanPage", () => {
 
+  it("pinches the map without selecting equipment and resumes single-finger dragging", async () => {
+    render(<PowerPlanPage data={makeDashboardData({ pdms: [{
+      pdm_name: "IAD06-PDM-E6-110-01-PRIMARY-CDS", equipment: [{ equipment_id: "IAD06-PDU6-01A-1" }],
+    }] })} />);
+    const map = screen.getByRole("img", { name: "SVG equipment location schematic" });
+    vi.spyOn(map, "getBoundingClientRect").mockReturnValue({ left: 0, top: 0, width: 600, height: 400 } as DOMRect);
+    const touch = (type: string, pointerId: number, clientX: number, clientY = 200) => fireEvent(map,
+      Object.assign(new Event(type, { bubbles: true, cancelable: true }), { pointerId, pointerType: "touch", button: 0, clientX, clientY }));
+    const original = map.getAttribute("viewBox");
+    touch("pointerdown", 1, 200); touch("pointerdown", 2, 400);
+    touch("pointermove", 1, 100); touch("pointermove", 2, 500);
+    touch("pointerup", 1, 100); touch("pointerup", 2, 500);
+    expect(map.getAttribute("viewBox")).not.toBe(original);
+    expect(screen.queryByText("Asset Information")).not.toBeInTheDocument();
+    const zoomed = map.getAttribute("viewBox");
+    touch("pointerdown", 3, 200);
+    touch("pointermove", 3, 240, 230);
+    touch("pointerup", 3, 240, 230);
+    expect(map.getAttribute("viewBox")).not.toBe(zoomed);
+  });
+
   it("keeps suggestions mounted through Safari touch activation before selecting the tapped result", async () => {
     const user = userEvent.setup();
     const pdmName = "IAD06-PDM-E6-110-01-PRIMARY-CDS";
