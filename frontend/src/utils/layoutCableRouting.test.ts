@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { LayoutCableRecord, LayoutEquipmentRecord, LayoutRegionRecord, PowerPlanPoint } from "../types/data";
-import { routeLayoutCables, routeLayoutRoomCables } from "./layoutCableRouting";
+import { routeLayoutCables, routeLayoutRoomCables, routeRoomTrunks } from "./layoutCableRouting";
 import { layoutCableMarkerPoint, layoutCablePath, layoutConnectionBounds, layoutDeviceHeight, placedLayoutCables, projectLayoutPoint } from "./layoutIsometricUtils";
 
 const device = (key: string, x: number, y: number, floor = "first", fixed = false): LayoutEquipmentRecord => ({
@@ -46,6 +46,72 @@ describe("fixed equipment cable routing", () => {
     }
     const reverse = original.slice().reverse().map((c) => ({ ...c, source: c.target, target: c.source }));
     expect(routeLayoutRoomCables(reverse, [room]).map((c) => layoutCablePath(c)).reverse()).toEqual(routed.map((c) => layoutCablePath(c)));
+  });
+
+  it("runs a fanning hub's in-room feeders on one bus per device line with straight drops, keeping side-by-side single links as arcs", () => {
+    // Like CDS6-01R-8: ATS-1/3/5/7 stand in one column, ATS-2/4/6/8 in another; ATS-1 also has its PDU beside it.
+    const hub = device("CDS", 85, 10);
+    const ats = [1, 2, 3, 4, 5, 6, 7, 8].map((n) => device(`ATS-${n}`, n % 2 ? 50 : 65, 10 + Math.floor((n - 1) / 2) * 20));
+    const pdu = device("PDU", 40, 10);
+    const placed = placedLayoutCables([...ats.map((leaf) => cable("CDS", leaf.equipment_key)), cable("PDU", "ATS-1")], [hub, ...ats, pdu], [room]);
+    const routed = routeRoomTrunks(placed, [room]);
+    expect(routed[8]).toBe(placed[8]);
+    // Routes are stored from the alphabetically first end ("ATS-*"); reverse to read from the hub:
+    // [roof, rise, bus start, over device, roof].
+    const routes = routed.slice(0, 8).map((c) => [...c.corridorRoute!].reverse());
+    // Along a plan line at fixed x and height, screenY + screenX / 2 = x - height is constant.
+    const column = (p: PowerPlanPoint) => p.y + p.x / 2;
+    for (const [i, points] of routes.entries()) {
+      expect(points).toHaveLength(5);
+      expect(points[0]).toEqual(port(hub));
+      expect(points[4]).toEqual(port(ats[i]));
+      expect(points[1]).toEqual(routes[0][1]);
+      // Same column -> same bus start and same bus line; the other column -> a different bus.
+      const sibling = routes[i % 2], other = routes[(i + 1) % 2];
+      expect(points[2]).toEqual(sibling[2]);
+      expect(column(points[3])).toBeCloseTo(column(sibling[2]));
+      expect(column(points[3])).not.toBeCloseTo(column(other[2]));
+      expect(points[1].x).toBeCloseTo(points[0].x);
+      expect(points[3].x).toBeCloseTo(points[4].x);
+      expect(pathsCross(points, points)).toBe(false);
+    }
+    // Final routing applies the same buses and leaves the PDU-ATS pair as a direct arc.
+    const final = routeLayoutCables(placed, [room], new Map());
+    expect(final.slice(0, 8).map((c) => [...c.corridorRoute!].reverse())).toEqual(routes);
+    expect(final[8].corridorRoute).toBeUndefined();
+    expect(layoutCablePath(final[8])).toContain(" C ");
+    // A hub whose only links are side by side is left alone.
+    const near = [device("A", 10, 10), device("B", 20, 10), device("C", 10, 20)];
+    const tight = placedLayoutCables([cable("A", "B"), cable("A", "C")], near, [room]);
+    expect(routeRoomTrunks(tight, [room])).toEqual(tight);
+  });
+
+  it("sends a bus hub's cable to another room along its nearest bus at one tray height before it splits off", () => {
+    const left = { ...room, annotation_id: "left", rect: { x: 0, y: 0, width: 100, height: 100 } };
+    const right = { ...room, annotation_id: "right", rect: { x: 100, y: 0, width: 100, height: 100 } };
+    // CDS feeds two ATS columns in its own room (x 144 and 164) and one device T in the left room.
+    const hub = device("CDS", 180, 10), target = device("T", 30, 50);
+    const ats = [1, 2, 3, 4, 5, 6, 7, 8].map((n) => device(`ATS-${n}`, n % 2 ? 140 : 160, 20 + Math.floor((n - 1) / 2) * 20));
+    const placed = placedLayoutCables([...ats.map((leaf) => cable("CDS", leaf.equipment_key)), cable("CDS", "T")], [hub, ...ats, target], [left, right]);
+    const routed = routeLayoutCables(placed, [left, right], new Map());
+    const fromHub = (i: number) => routed[i].corridorRoute![0].x === port(hub).x && routed[i].corridorRoute![0].y === port(hub).y
+      ? routed[i].corridorRoute! : [...routed[i].corridorRoute!].reverse();
+    // ATS-1 sits on the column nearest T. The T cable shares its hub feeder and bus start...
+    const bus = fromHub(0), out = fromHub(8);
+    expect(out[0]).toEqual(port(hub));
+    expect(out[out.length - 1]).toEqual(port(target));
+    expect(out[1]).toEqual(bus[1]);
+    expect(out[2]).toEqual(bus[2]);
+    // ...runs on along that same bus line (fixed plan x: screenY + screenX / 2 is constant)...
+    const column = (p: PowerPlanPoint) => p.y + p.x / 2;
+    expect(column(out[3])).toBeCloseTo(column(bus[3]));
+    // ...and at the same height turns onto the front tray toward T (fixed plan y: screenY - screenX / 2 is constant).
+    const front = (p: PowerPlanPoint) => p.y - p.x / 2;
+    expect(front(out[4])).toBeCloseTo(front(out[3]));
+    // One tray height throughout: the only vertical segments are the rise off the hub and the drop onto T.
+    const vertical = out.slice(1).flatMap((p, i) => Math.abs(p.x - out[i].x) < 1e-9 ? [i] : []);
+    expect(vertical).toEqual([0, out.length - 2]);
+    expect(pathsCross(out, out)).toBe(false);
   });
 
   it("bundles room-to-panel feeders into one shared tray with a trunk per aligned panel column", () => {
