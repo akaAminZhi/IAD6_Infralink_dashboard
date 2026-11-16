@@ -1,5 +1,6 @@
 import type { CxalloyReportFileStatus } from "../../types/data";
 import type { FlattenedEquipmentRow } from "../../utils/equipmentUtils";
+import { NetaReportChips } from "../common/NetaReportChips";
 import { StatusBadge } from "../common/StatusBadge";
 
 type FileStatus = CxalloyReportFileStatus["upload_status"];
@@ -17,12 +18,17 @@ function equipmentStatus(reports: CxalloyReportFileStatus[]): FileStatus {
   return reports.every((report) => report.upload_status === "uploaded") ? "uploaded" : "pending";
 }
 
-function ReportList({ reports }: { reports: CxalloyReportFileStatus[] }) {
+function ReportList({ reports, equipmentId }: { reports: CxalloyReportFileStatus[]; equipmentId: string | null }) {
   return (
     <ul className="divide-y rounded-md border bg-background">
       {reports.map((report) => (
         <li className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-3 py-2" key={report.report_name}>
-          <span className="min-w-0 flex-1 break-all text-xs">{report.report_name}</span>
+          <div className="min-w-0 flex-1 break-all text-xs">
+            {report.upload_status === "missing_pdf" || !equipmentId?.trim() ? report.report_name : (
+              <NetaReportChips reports={[report.report_name]} equipmentId={equipmentId}
+                compactNameMode="gc" showLinkedFileNames listAppearance showDuplicateBadge={false} />
+            )}
+          </div>
           <span className="shrink-0"><UploadStatus status={report.upload_status} /></span>
         </li>
       ))}
@@ -58,14 +64,14 @@ export function CxalloyReportUploadPanel({ equipment }: { equipment: FlattenedEq
             {equipmentReports.length > 0 ? (
               <details key={`${equipment.row_id}-${status}`} open={status !== "uploaded"}>
                 <summary className="cursor-pointer text-xs text-muted-foreground">Equipment report files</summary>
-                <div className="mt-2"><ReportList reports={equipmentReports} /></div>
+                <div className="mt-2"><ReportList reports={equipmentReports} equipmentId={equipment.equipment_id} /></div>
               </details>
             ) : <p className="text-xs text-muted-foreground">No downloaded equipment reports.</p>}
           </section>
           <section aria-label="Cable Reports" className="space-y-3 rounded-md border bg-muted/20 p-3">
             <h4 className="text-sm font-medium">Cable Reports</h4>
             <p className="text-xs text-muted-foreground">Only downloaded cable reports are listed; this does not indicate that all cable reports are available.</p>
-            {cableReports.length > 0 ? <ReportList reports={cableReports} /> : (
+            {cableReports.length > 0 ? <ReportList reports={cableReports} equipmentId={equipment.equipment_id} /> : (
               <p className="text-xs text-muted-foreground">No downloaded cable reports.</p>
             )}
           </section>

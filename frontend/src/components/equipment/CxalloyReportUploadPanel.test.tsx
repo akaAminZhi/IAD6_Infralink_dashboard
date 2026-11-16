@@ -1,6 +1,8 @@
 import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 
+import { NetaReportManifestProvider } from "../../contexts/NetaReportManifestContext";
 import type { CxalloyReportFileStatus } from "../../types/data";
 import { flattenEquipmentFromPdms } from "../../utils/equipmentUtils";
 import { CxalloyReportUploadPanel } from "./CxalloyReportUploadPanel";
@@ -12,6 +14,39 @@ function equipment(reports?: CxalloyReportFileStatus[]) {
 }
 
 describe("CxalloyReportUploadPanel", () => {
+  it("opens equipment and cable PDFs for the current equipment, including temporary reports", async () => {
+    const user = userEvent.setup();
+    render(<NetaReportManifestProvider manifest={{ records: [
+      { equipment_id: "IAD06-OTHER", source_key: "gc", report_name: "switchboard.pdf", url: "/wrong.pdf" },
+      { equipment_id: "IAD06-MDS6-01D", source_key: "gc", report_name: "switchboard.pdf", url: "/neta-reports-gc/switchboard.pdf" },
+      { equipment_id: "IAD06-MDS6-01D", source_key: "gc", report_name: "cable.pdf", report_stage: "temporary", url: "/neta-reports-gc/_temporary/cable.pdf" },
+    ] }}><CxalloyReportUploadPanel equipment={equipment([
+      { report_name: "switchboard.pdf", report_kind: "equipment", upload_status: "uploaded" },
+      { report_name: "cable.pdf", report_kind: "cable", upload_status: "review_required" },
+    ])} /></NetaReportManifestProvider>);
+    await user.click(screen.getByText("Equipment report files"));
+    await user.click(screen.getByRole("button", { name: "switchboard.pdf" }));
+    expect(document.querySelector("iframe")).toHaveAttribute("src", "/neta-reports-gc/switchboard.pdf");
+    await user.click(screen.getByRole("button", { name: "Close NETA report preview" }));
+    await user.click(screen.getByRole("button", { name: "cable.pdf" }));
+    expect(document.querySelector("iframe")).toHaveAttribute("src", "/neta-reports-gc/_temporary/cable.pdf");
+    expect(screen.getByText("Temporary")).toBeInTheDocument();
+  });
+
+  it("keeps missing and unmatched PDFs visible without opening another equipment's report", () => {
+    render(<NetaReportManifestProvider manifest={{ records: [
+      { equipment_id: "IAD06-MDS6-01D", source_key: "gc", report_name: "missing.pdf", url: "/stale.pdf" },
+      { equipment_id: "IAD06-OTHER", source_key: "gc", report_name: "unmatched.pdf", url: "/wrong.pdf" },
+    ] }}><CxalloyReportUploadPanel equipment={equipment([
+      { report_name: "missing.pdf", report_kind: "equipment", upload_status: "missing_pdf" },
+      { report_name: "unmatched.pdf", report_kind: "cable", upload_status: "pending" },
+    ])} /></NetaReportManifestProvider>);
+    expect(screen.getByText("missing.pdf")).toBeInTheDocument();
+    expect(screen.getByText("unmatched.pdf")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /\.pdf$/ })).not.toBeInTheDocument();
+    expect(screen.getByText("No local PDF link found.")).toBeInTheDocument();
+  });
+
   it.each(["uploaded", "skipped_existing_on_site", "skipped_manifest_uploaded"])("does not show a successful %s note as an upload error", (status) => {
     render(<CxalloyReportUploadPanel equipment={{ ...equipment([
       { report_name: "report.pdf", report_kind: "equipment", upload_status: "uploaded" },
