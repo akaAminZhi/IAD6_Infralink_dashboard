@@ -125,8 +125,23 @@ explicit dependency map in `frontend/src/utils/dashboardResources.ts`:
   used for this dashboard metric; per-file upload evidence remains unchanged.
 - PDMs waits only for PDM records and EPS PDM execution; its equipment section
   loads EPS module/test-item detail and report links when the drawer opens.
-- Equipment starts its equipment/PDM/case/test-item, CxAlloy, report-manifest and
-  history reads together. Power Plan starts only its PDM/equipment/case and EPS
+- Equipment starts its equipment/PDM/case, Layout connection, CxAlloy,
+  report-manifest and history reads together. It uses all Layout cable records,
+  including unplaced/unresolved connections, with exact endpoint matching and
+  optional `IAD06-` prefix normalization. Its energization readiness requires
+  explicit equipment NETA completion and every connected cable tested with an
+  ATP/NETA report; absent cable scope stays unknown. Equipment excludes cables
+  with either endpoint in the uploader's default excluded families from its
+  list, test/report counts and readiness, preserving CUPP6/TX-CUPP6 first-zone R
+  exceptions. Equipment also excludes all AHU6 endpoints and non-R-zone UPS6
+  endpoints; UPS6's first-zone R exception follows the same zone syntax. These
+  page-specific additions do not alter uploader defaults or global tracking.
+  If every known connection is excluded, cable requirements are
+  satisfied; this differs from missing scope. Raw Layout data is unchanged.
+  Shared Layout test rules
+  and report evidence are reused without changing existing NETA quality metrics.
+  EPS test items are no longer displayed or requested by Equipment.
+  Power Plan starts only its PDM/equipment/case and EPS
   module/test-item reads. Status/filter dependencies finish before either renders.
 - Layout reads its own manifest immediately, independently of dashboard data.
   Its NETA manifest and device identities are deferred until selection.

@@ -25,6 +25,13 @@ const cableFilterLabels: Record<EquipmentCableFilter, string> = {
   non_cable: "Not cable",
 };
 
+const energizationFilterLabels = {
+  "": "All",
+  ready: "Energization ready",
+  not_ready: "Not ready",
+  unknown: "Not confirmed",
+};
+
 const netaFilterLabels: Record<EquipmentNetaFilter, string> = {
   "": "All",
   complete: "Complete with report",
@@ -33,6 +40,7 @@ const netaFilterLabels: Record<EquipmentNetaFilter, string> = {
 };
 
 export interface EquipmentFiltersState {
+  energizationReady?: "" | "ready" | "not_ready" | "unknown";
   equipmentSearch: string;
   pdmSearch: string;
   equipmentType: string;
@@ -147,8 +155,10 @@ export function EquipmentFilters({
     filters.netaReportFailedOnly,
     filters.netaReportReviewRequiredOnly,
     filters.duplicateReports,
+    filters.energizationReady,
   ].filter(Boolean).length;
   const filterLabels: Record<keyof EquipmentFiltersState, string> = {
+    energizationReady: "Energization readiness",
     equipmentSearch: "Equipment",
     pdmSearch: "PDM",
     equipmentType: "Equipment type",
@@ -258,6 +268,16 @@ export function EquipmentFilters({
                 </select>
               </label>
               <label className="flex min-w-0 flex-col gap-1 text-sm font-medium">
+                Energization readiness
+                <select aria-label="Energization readiness" className="h-9 rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                  value={filters.energizationReady ?? ""} onChange={(event) => update({ energizationReady: event.target.value as EquipmentFiltersState["energizationReady"] })}>
+                  <option value="">All</option>
+                  <option value="ready">Energization ready</option>
+                  <option value="not_ready">Not ready</option>
+                  <option value="unknown">Not confirmed</option>
+                </select>
+              </label>
+              <label className="flex min-w-0 flex-col gap-1 text-sm font-medium">
                 Feeder Tested
                 <select
                   aria-label="Feeder Tested"
@@ -361,6 +381,8 @@ export function EquipmentFilters({
                     ? `: ${feederTestedFilterLabels[filters.feederTested ?? ""]}`
                     : key === "cable"
                     ? `: ${cableFilterLabels[filters.cable ?? ""]}`
+                    : key === "energizationReady"
+                    ? `: ${energizationFilterLabels[filters.energizationReady ?? ""]}`
                     : typeof filters[key] === "string" ? `: ${filters[key]}` : ""}
                 </span>
                 <X className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />

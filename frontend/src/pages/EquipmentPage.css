@@ -5,6 +5,25 @@
   font-variant-numeric: tabular-nums;
 }
 
+.equipment-readiness {
+  padding: 16px;
+  border-left: 3px solid var(--equipment-blue);
+  background: #f0f5fa;
+}
+
+.equipment-readiness-gates {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+  padding: 14px 0;
+  border-block: 1px solid var(--equipment-line);
+}
+
+@media (max-width: 540px) {
+  .equipment-readiness-gates { grid-template-columns: 1fr; gap: 12px; }
+}
+
 .equipment-page-heading,
 .equipment-search-heading {
   display: flex;

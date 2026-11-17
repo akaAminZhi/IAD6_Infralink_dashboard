@@ -26,7 +26,9 @@ import {
 } from "../../utils/netaReports";
 import { getNetaReviewsForReport } from "../../utils/netaReportReviews";
 import { getReportDuplicates } from "../../utils/netaDuplicates";
-import { EpsTestItemsPanel } from "../common/EpsTestItemsPanel";
+import type { ConnectedCableIndex } from "../../utils/connectedCables";
+import { ConnectedCablesPanel } from "./ConnectedCablesPanel";
+import { EnergizationReadinessPanel } from "./EnergizationReadinessPanel";
 import { EquipmentExternalLinks } from "../common/EquipmentExternalLinks";
 import { EquipmentUpdateInfo } from "../common/EquipmentUpdateInfo";
 import { NetaReportChips } from "../common/NetaReportChips";
@@ -39,6 +41,7 @@ import { EquipmentCableAtpEvidence } from "./EquipmentCableAtpEvidence";
 import { EquipmentPdmAssociations } from "./EquipmentPdmAssociations";
 
 interface EquipmentDetailDrawerProps {
+  cableIndex?: ConnectedCableIndex | null;
   equipment: FlattenedEquipmentRow | null;
   associatedRows: FlattenedEquipmentRow[];
   netaReportReviews: NetaReportReviewsResponse | null;
@@ -147,7 +150,7 @@ function NetaReportNames({
     <div className="min-w-0">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-2">
         <div className="flex flex-wrap items-center gap-2">
-          <h4 className="text-sm font-semibold">NETA Test Report</h4>
+          <h3 className="text-sm font-semibold">NETA Test Report</h3>
           <span className="rounded bg-muted px-1.5 py-0.5 text-xs tabular-nums text-muted-foreground">{reportNames.length}</span>
           {!editable && reviews ? <span className="text-xs text-muted-foreground">Read only</span> : null}
         </div>
@@ -166,7 +169,7 @@ function NetaReportNames({
           </button>
         ) : null}
       </div>
-      <ul className="mt-3 divide-y overflow-hidden rounded-md border bg-muted/10" aria-label="NETA report list">
+      <ul className="mt-3 divide-y rounded-md border bg-muted/10" aria-label="NETA report list">
         {reportNames.map((reportName, reportIndex) => {
           const duplicates = getReportDuplicates(manifest, equipmentId, reportName);
           const matchedReviews = getNetaReviewsForReport(reportName, reviews, manifest, equipmentId);
@@ -195,12 +198,12 @@ function NetaReportNames({
           const panelId = `${disclosureId}-${reportIndex}`;
           return (
             <li className="min-w-0" data-review-status={primaryStatus ?? "NOT_CHECKED"} key={reportName}>
-              <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 px-3 py-2.5 sm:grid-cols-[minmax(0,1fr)_auto_6rem]">
-                <div className="col-span-2 min-w-0 sm:col-span-1">
+              <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 px-3 py-2.5">
+                <div className="col-span-2 min-w-0">
                   <NetaReportChips equipmentId={equipmentId} compactNameMode={nameMode}
                     reports={[reportName]} showLinkedFileNames listAppearance showDuplicateBadge={false} className="grid-cols-1 lg:grid-cols-1" />
                 </div>
-                <div className="flex flex-wrap items-center gap-1.5 sm:max-w-[19rem] sm:justify-self-end sm:justify-end">
+                <div className="flex flex-wrap items-center gap-1.5">
                   <span className={cn("inline-flex w-fit items-center gap-1.5 whitespace-nowrap rounded border px-2 py-0.5 text-[11px] font-medium", tone.container, tone.label)}>
                     <StatusIcon className="h-3 w-3 shrink-0" aria-hidden="true" />{tone.text}
                   </span>
@@ -260,6 +263,7 @@ function NetaReportNames({
 }
 
 export function EquipmentDetailDrawer({
+  cableIndex = null,
   equipment,
   associatedRows,
   netaReportReviews,
@@ -338,7 +342,13 @@ export function EquipmentDetailDrawer({
                   <Field label="Cases Missing Issue Image" value={formatNumber(missingImageCount)} />
                 </div>
                 <EquipmentUpdateInfo updated_by={equipment.updated_by} updated_at={equipment.updated_at} />
-                {trackingRequired ? <div>
+              </CardContent>
+            </Card>
+
+            <EnergizationReadinessPanel equipment={equipment} cableIndex={cableIndex} />
+            <div className={`grid min-w-0 items-start gap-4 ${trackingRequired ? "lg:grid-cols-2" : ""}`} aria-label="Equipment test evidence">
+              {trackingRequired ? <Card className="min-w-0">
+                <CardContent className="space-y-4 p-4">
                   <NetaReportNames
                     equipmentId={equipment.equipment_id}
                     editable={netaReviewsEditable}
@@ -348,12 +358,15 @@ export function EquipmentDetailDrawer({
                   />
                   <EquipmentCableAtpEvidence equipment={equipment} />
                   <NetaDuplicatePanel key={equipment.equipment_id} equipmentId={equipment.equipment_id} />
-                </div> : null}
-                {trackingRequired && equipment.cxalloy_upload_status ? (
-                  <CxalloyReportUploadPanel equipment={equipment} />
-                ) : null}
-              </CardContent>
-            </Card>
+                  {equipment.cxalloy_upload_status ? <CxalloyReportUploadPanel equipment={equipment} /> : null}
+                </CardContent>
+              </Card> : null}
+              <Card className="min-w-0">
+                <CardContent className="space-y-4 p-4">
+                  <ConnectedCablesPanel key={equipment.equipment_id ?? equipment.row_id} equipment={equipment} cableIndex={cableIndex} />
+                </CardContent>
+              </Card>
+            </div>
 
             <Card>
               <CardContent className="space-y-4 p-4">
@@ -367,18 +380,6 @@ export function EquipmentDetailDrawer({
                 </div>
               </CardContent>
             </Card>
-
-            {trackingRequired ? <Card>
-              <CardContent className="space-y-4 p-4">
-                <div>
-                  <h3 className="text-lg font-semibold tracking-normal">EPS Test Execution</h3>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Field test items matched to this equipment from the EPS tracker.
-                  </p>
-                </div>
-                <EpsTestItemsPanel items={equipment.eps_test_items} />
-              </CardContent>
-            </Card> : null}
 
             <Card>
               <CardContent className="space-y-4 p-4">

@@ -895,6 +895,7 @@ export interface KprSummary {
 }
 
 export interface DashboardData {
+  layoutPlanManifest?: LayoutPlanManifest | null;
   pdms: PdmRecord[];
   equipment: Equipment[];
   cases: CaseIssue[];

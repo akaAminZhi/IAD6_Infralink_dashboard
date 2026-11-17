@@ -34,6 +34,7 @@ import {
 import { matchesSearchQuery } from "../utils/searchUtils";
 import { getEquipmentNetaReviewState, type EquipmentNetaReviewState } from "../utils/netaReportReviews";
 import { formatNumber } from "../utils/formatters";
+import { buildConnectedCableIndex, equipmentEnergizationReadiness, type ConnectedCableIndex } from "../utils/connectedCables";
 import "./EquipmentPage.css";
 
 interface EquipmentPageProps {
@@ -57,6 +58,7 @@ const defaultFilters: EquipmentFiltersState = {
   netaReportFailedOnly: false,
   netaReportReviewRequiredOnly: false,
   duplicateReports: "",
+  energizationReady: "",
 };
 
 function normalizeFilterValue(value: unknown): string {
@@ -69,11 +71,13 @@ function filterEquipmentRows(
   newNetaCompleteIds: Set<string>,
   reviewStates: Map<string, EquipmentNetaReviewState | null>,
   manifest: NetaReportManifest | null,
+  cableIndex: ConnectedCableIndex | null,
 ): FlattenedEquipmentRow[] {
   const equipmentSearch = filters.equipmentSearch.trim();
   const pdmSearch = filters.pdmSearch.trim();
 
   return rows.filter((row) => {
+    if (filters.energizationReady && equipmentEnergizationReadiness(row, cableIndex).status !== filters.energizationReady) return false;
     if (filters.duplicateReports) {
       const duplicates = getEquipmentDuplicates(manifest, row.equipment_id);
       if (!duplicates.some((match) => filters.duplicateReports === "all" || match.status === filters.duplicateReports)) return false;
@@ -318,6 +322,7 @@ export function EquipmentPage({ data }: EquipmentPageProps) {
     useState<NetaReportReviewsResponse | null>(null);
   const [netaReviewsEditable, setNetaReviewsEditable] = useState(false);
   const deferredFilters = useDeferredValue(filters);
+  const cableIndex = useMemo(() => buildConnectedCableIndex(data.layoutPlanManifest, data.netaReportManifest), [data.layoutPlanManifest, data.netaReportManifest]);
 
   useEffect(() => {
     let cancelled = false;
@@ -398,6 +403,7 @@ export function EquipmentPage({ data }: EquipmentPageProps) {
       newNetaCompleteIds,
       reviewStates,
       data.netaReportManifest,
+      cableIndex,
     );
     return sortEquipmentRows(
       kprEquipmentFilterIds === null
@@ -411,6 +417,7 @@ export function EquipmentPage({ data }: EquipmentPageProps) {
     reviewStates,
     newNetaCompleteIds,
     data.netaReportManifest,
+    cableIndex,
   ]);
   const selectedGroup = useMemo(() => {
     if (!selectedEquipment) {
@@ -525,6 +532,7 @@ export function EquipmentPage({ data }: EquipmentPageProps) {
       </details>}
 
       <EquipmentTable
+        cableIndex={cableIndex}
         onSelectEquipment={setSelectedEquipment}
         prioritizeEquipment={Boolean(deferredFilters.equipmentSearch.trim())}
         rows={filteredRows}
@@ -532,6 +540,7 @@ export function EquipmentPage({ data }: EquipmentPageProps) {
       />
 
       <EquipmentDetailDrawer
+        cableIndex={cableIndex}
         associatedRows={selectedGroup}
         equipment={selectedEquipment}
         netaReportReviews={netaReportReviews}

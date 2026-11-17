@@ -6,6 +6,7 @@ import { clearPendingJsonRequests, fetchJson, unwrapRecords } from "../utils/dat
 import { dashboardResourceFiles, getRouteResources } from "../utils/dashboardResources";
 
 const emptyDashboardData: DashboardData = {
+  layoutPlanManifest: null,
   pdms: [],
   equipment: [],
   cases: [],

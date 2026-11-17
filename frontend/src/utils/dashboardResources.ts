@@ -1,6 +1,7 @@
 import type { DashboardResource } from "../types/dashboardResources";
 
 export const dashboardResourceFiles: Record<DashboardResource, string> = {
+  layoutPlanManifest: "layout_plan.json",
   pdms: "pdms.json",
   equipment: "equipment.json",
   cases: "cases.json",
@@ -36,7 +37,7 @@ export function getRouteResources(pathname: string, search = ""): DashboardResou
   switch (pathname) {
     case "/pdms": resources = ["pdms", "epsPdmExecution"]; break;
     case "/equipment": resources = [
-      "pdms", "equipment", "cases", "epsTestItems", "cxalloyReportStatus", "netaReportManifest", "historyComparison",
+      "pdms", "equipment", "cases", "layoutPlanManifest", "cxalloyReportStatus", "netaReportManifest", "historyComparison",
     ]; break;
     case "/power-plan": resources = power; break;
     case "/mv-equipment": resources = [...power, "powerPlanManifest"]; break;

@@ -39,6 +39,7 @@ function defaultPayload(path: string): unknown {
     "/data/neta_report_manifest.json": { records: [] },
     "/data/cxalloy_report_status.json": { records: [] },
     "/data/power_plan.json": { pages: [] },
+    "/data/layout_plan.json": { cables: [], floors: [], fixed_equipment: [] },
     "/data/kpr_summary.json": null,
     "/data/equipment.json": { records: [{ equipment_id: "IAD06-EQ-1" }] },
     "/data/cases.json": { records: [{ case_id: "CASE-1" }] },
@@ -113,12 +114,13 @@ describe("useDashboardData route loading", () => {
       ? new Promise((resolve) => { release = resolve; }) : Promise.resolve(defaultPayload(path)));
     const { result } = renderHook(() => useDashboardData("/equipment"));
     await waitFor(() => expect(fetchJsonMock).toHaveBeenCalledWith("/data/equipment.json"));
-    expect(fetchJsonMock).toHaveBeenCalledWith("/data/eps_test_items.json");
+    expect(fetchJsonMock).toHaveBeenCalledWith("/data/layout_plan.json");
     expect(result.current.loading).toBe(true);
     await act(async () => release(defaultPayload("/data/pdms.json")));
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(result.current.equipment).toHaveLength(1);
-    expect(result.current.epsTestItems).toHaveLength(1);
+    expect(result.current.layoutPlanManifest?.cables).toEqual([]);
+    expect(fetchJsonMock).not.toHaveBeenCalledWith("/data/eps_test_items.json");
     expect(fetchJsonMock).not.toHaveBeenCalledWith("/data/data_quality_report.json");
     expect(fetchJsonMock).not.toHaveBeenCalledWith("/data/eps_test_summary.json");
   });

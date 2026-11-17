@@ -8,12 +8,106 @@ import { clearPublishedNetaReviewCache } from "../utils/loadNetaReportReviews";
 import { NetaReportManifestProvider } from "../contexts/NetaReportManifestContext";
 import { InfralinkEquipmentLinksProvider } from "../contexts/InfralinkEquipmentLinksContext";
 import { CxalloyEquipmentLinksProvider } from "../contexts/CxalloyEquipmentLinksContext";
-import { makeDashboardData } from "../test/fixtures";
+import { makeDashboardData, makeLayoutCable, makeLayoutManifest } from "../test/fixtures";
 import { duplicateManifest, makeDuplicate } from "../test/netaDuplicateFixtures";
 import type { KprSummary } from "../types/data";
 import { EquipmentPage } from "./EquipmentPage";
 
 describe("EquipmentPage", () => {
+  it("shows connected cable evidence in the table and details, previews ATP and filters energization readiness", async () => {
+    const user = userEvent.setup();
+    const cable = makeLayoutCable({ feeder_cable_atp_names: ["ATP.pdf"], feeder_cable_atp_files: [
+      { file_name: "ATP.pdf", relative_path: "cable/ATP.pdf", url: "/feeder-cable-atp/cable/ATP.pdf" },
+    ] });
+    const data = makeDashboardData({ equipment: [
+      { equipment_id: "IAD06-EQ-1", neta_complete: true, neta_test_report: "Equipment.pdf" },
+      { equipment_id: "IAD06-EQ-2", neta_complete: false },
+      { equipment_id: "IAD06-EQ-3", neta_complete: true },
+    ], layoutPlanManifest: makeLayoutManifest([cable, makeLayoutCable({
+      cable_id: "FDR-IAD06-EQ-1-IAD06-TX-UPP6-01A", target_equipment_key: "TX-UPP6-01A", eps_daily_test_status: "failed",
+    }), makeLayoutCable({ cable_id: "FDR-EQ-1-UPS6-01A", target_equipment_key: "UPS6-01A", eps_daily_test_status: "failed" }),
+    makeLayoutCable({ cable_id: "FDR-EQ-1-AHU6-01R", target_equipment_key: "AHU6-01R", eps_daily_test_status: "failed" })]) });
+    render(<MemoryRouter><EquipmentPage data={data} /></MemoryRouter>);
+    const row = screen.getByRole("cell", { name: "IAD06-EQ-1" }).closest("tr")!;
+    expect(within(row).getByText("Energization ready")).toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: "EPS Test Items" })).not.toBeInTheDocument();
+    await user.click(within(row).getByRole("button", { name: "1 cables" }));
+    expect(screen.queryByText("Equipment Summary")).not.toBeInTheDocument();
+    const list = within(row).getByRole("region", { name: "Connected cables" });
+    expect(list).toHaveTextContent("Tested: 1");
+    expect(list).toHaveTextContent("Test failed: 0");
+    expect(list).toHaveTextContent("With reports: 1/1");
+    expect(list).toHaveTextContent("3 connection(s) excluded");
+    expect(list).not.toHaveTextContent("TX-UPP6-01A");
+    expect(list).not.toHaveTextContent("UPS6-01A");
+    expect(list).not.toHaveTextContent("AHU6-01R");
+    const cableName = within(list).getByText(cable.cable_id, { exact: true });
+    expect(cableName.closest("button")).toBeNull();
+    expect(cableName).toHaveClass("select-text", "cursor-pointer");
+    await user.click(within(list).getByRole("button", { name: /FDR-IAD06-EQ-1/ }));
+    const inspector = screen.getByRole("region", { name: "Cable inspector" });
+    expect(list).not.toContainElement(inspector);
+    await user.click(within(inspector).getByRole("button", { name: "ATP.pdf" }));
+    expect(screen.getByTitle("ATP.pdf")).toHaveAttribute("src", "/feeder-cable-atp/cable/ATP.pdf");
+    await user.click(screen.getByRole("button", { name: "Close Feeder Cable ATP preview" }));
+    await user.click(within(row).getByRole("button", { name: "1 cables" }));
+    await user.click(within(row).getByRole("button", { name: "IAD06-EQ-1" }));
+    expect(screen.getByRole("region", { name: "Energization readiness" })).toHaveTextContent("all 1 connected cables tested with reports");
+    expect(screen.getByRole("region", { name: "Connected cables" })).toHaveTextContent(cable.cable_id);
+    expect(screen.queryByText("EPS Test Execution")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Close equipment detail" }));
+    await user.click(screen.getByRole("button", { name: /More filters/ }));
+    await user.selectOptions(screen.getByRole("combobox", { name: "Energization readiness" }), "ready");
+    expect(screen.getByRole("cell", { name: "IAD06-EQ-1" })).toBeInTheDocument();
+    expect(screen.queryByRole("cell", { name: "IAD06-EQ-2" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("cell", { name: "IAD06-EQ-3" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Reset" }));
+    expect(screen.getByRole("cell", { name: "IAD06-EQ-3" })).toBeInTheDocument();
+  });
+  it("opens the GEN6-MDS6 cable by clicking its selectable ID in a separate inspector and closes it with Escape", async () => {
+    const user = userEvent.setup();
+    const cableId = "FDR-IAD06-GEN6-01R-IAD06-MDS6-01R";
+    const data = makeDashboardData({ equipment: [{ equipment_id: "IAD06-MDS6-01R", neta_complete: true }],
+      layoutPlanManifest: makeLayoutManifest([makeLayoutCable({ cable_id: cableId,
+        source_equipment_key: "GEN6-01R", target_equipment_key: "MDS6-01R", eps_daily_test_status: "tested" })]) });
+    render(<MemoryRouter><EquipmentPage data={data} /></MemoryRouter>);
+    await user.click(screen.getByRole("button", { name: "IAD06-MDS6-01R" }));
+    const list = screen.getByRole("region", { name: "Connected cables" });
+    await user.click(within(list).getByText(cableId, { exact: true }));
+    const inspector = screen.getByRole("region", { name: "Cable inspector" });
+    expect(inspector).toHaveFocus();
+    expect(list).not.toContainElement(inspector);
+    expect(inspector).toHaveTextContent("GEN6-01R");
+    expect(inspector).toHaveTextContent("MDS6-01R");
+    expect(inspector).toHaveTextContent("EPS daily: tested");
+    expect(screen.getByText("Equipment Summary")).toBeInTheDocument();
+    await user.click(within(inspector).getByText("Cable connection"));
+    expect(inspector).toBeInTheDocument();
+    await user.click(screen.getByText("Equipment Summary"));
+    expect(screen.queryByRole("region", { name: "Cable inspector" })).not.toBeInTheDocument();
+    const trigger = within(list).getByRole("button", { name: `View cable details for ${cableId}` });
+    trigger.focus();
+    await user.keyboard("{Enter}");
+    expect(screen.getByRole("region", { name: "Cable inspector" })).toHaveFocus();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("region", { name: "Cable inspector" })).not.toBeInTheDocument();
+    expect(within(list).getByText(cableId, { exact: true })).toBeInTheDocument();
+    expect(trigger).toHaveFocus();
+    await user.keyboard(" ");
+    await user.click(screen.getByRole("button", { name: "Close cable details" }));
+    expect(screen.queryByRole("region", { name: "Cable inspector" })).not.toBeInTheDocument();
+  });
+  it("shows no cable requirements when every connection is excluded", async () => {
+    const user = userEvent.setup();
+    const data = makeDashboardData({ equipment: [{ equipment_id: "IAD06-EQ-1", neta_complete: true }],
+      layoutPlanManifest: makeLayoutManifest([makeLayoutCable({ target_equipment_key: "UPP6-01A" })]) });
+    render(<MemoryRouter><EquipmentPage data={data} /></MemoryRouter>);
+    const row = screen.getByRole("cell", { name: "IAD06-EQ-1" }).closest("tr")!;
+    expect(within(row).getByText("Energization ready")).toBeInTheDocument();
+    await user.click(within(row).getByRole("button", { name: "IAD06-EQ-1" }));
+    expect(within(screen.getByRole("region", { name: "Energization readiness" })).getAllByText("None required")).toHaveLength(2);
+    expect(screen.getByRole("region", { name: "Connected cables" })).toHaveTextContent("Connected cables (0)");
+  });
   it("counts duplicate groups and filters possible, confirmed and invalid evidence", async () => {
     const user = userEvent.setup();
     const manifest = duplicateManifest([

@@ -32,8 +32,12 @@ import { EquipmentAttentionBadges } from "./EquipmentAttentionBadges";
 import { CxalloyUploadBadge } from "./CxalloyUploadBadge";
 import { EquipmentNetaBadge } from "./EquipmentNetaBadge";
 import { EquipmentCableAtpEvidence } from "./EquipmentCableAtpEvidence";
+import { connectedCableCounts, equipmentEnergizationReadiness, getConnectedCables, type ConnectedCableIndex } from "../../utils/connectedCables";
+import { ConnectedCablesPanel } from "./ConnectedCablesPanel";
+import { EnergizationReadyBadge } from "./EnergizationReadyBadge";
 
 interface EquipmentTableProps {
+  cableIndex?: ConnectedCableIndex | null;
   rows: FlattenedEquipmentRow[];
   selectedRowId: string | null;
   onSelectEquipment: (row: FlattenedEquipmentRow) => void;
@@ -42,6 +46,21 @@ interface EquipmentTableProps {
 
 const PAGE_SIZE = 100;
 type ReportNameMode = "original" | "gc";
+
+function ConnectedCablesCell({ equipment, cableIndex }: { equipment: FlattenedEquipmentRow; cableIndex: ConnectedCableIndex | null }) {
+  const [expanded, setExpanded] = useState(false);
+  if (!cableIndex) return <span className="text-xs text-muted-foreground">Unavailable</span>;
+  const counts = connectedCableCounts(getConnectedCables(equipment, cableIndex), cableIndex);
+  return <div className={expanded ? "w-[420px] space-y-3" : "space-y-1"} onClick={(event) => event.stopPropagation()}>
+    <Button type="button" variant="outline" className="h-8 px-2 text-xs" aria-expanded={expanded} onClick={() => setExpanded(!expanded)}>
+      {counts.total} cables
+    </Button>
+    <p className="text-xs text-muted-foreground" title={`${counts.tested} tested; ${counts.failed} failed; ${counts.unconfirmed} unconfirmed; ${counts.withReport} with reports`}>
+      {counts.ready}/{counts.total} tested + report
+    </p>
+    {expanded ? <ConnectedCablesPanel equipment={equipment} cableIndex={cableIndex} /> : null}
+  </div>;
+}
 
 function SortableHeader({
   children,
@@ -73,7 +92,7 @@ function SortableHeader({
   );
 }
 
-export function EquipmentTable({ rows, selectedRowId, onSelectEquipment, prioritizeEquipment = false }: EquipmentTableProps) {
+export function EquipmentTable({ rows, selectedRowId, onSelectEquipment, prioritizeEquipment = false, cableIndex = null }: EquipmentTableProps) {
   const [sorting, setSorting] = useState<SortingState>([
     { id: "openCases", desc: true },
   ]);
@@ -195,10 +214,16 @@ export function EquipmentTable({ rows, selectedRowId, onSelectEquipment, priorit
         cell: ({ row }) => <span>{row.original.status ?? "--"}</span>,
       },
       {
-        id: "epsTestItems",
-        header: "EPS Test Items",
-        accessorFn: (row) => row.eps_test_items.length,
-        cell: ({ row }) => <span>{formatNumber(row.original.eps_test_items.length)}</span>,
+        id: "connectedCables",
+        header: "Connected cables",
+        accessorFn: (row) => cableIndex ? getConnectedCables(row, cableIndex).length : -1,
+        cell: ({ row }) => <ConnectedCablesCell key={row.original.row_id} equipment={row.original} cableIndex={cableIndex} />,
+      },
+      {
+        id: "energizationReady",
+        header: "Energization ready",
+        accessorFn: (row) => equipmentEnergizationReadiness(row, cableIndex).status,
+        cell: ({ row }) => <EnergizationReadyBadge equipment={row.original} cableIndex={cableIndex} />,
       },
       {
         id: "neta",
@@ -234,7 +259,7 @@ export function EquipmentTable({ rows, selectedRowId, onSelectEquipment, priorit
         enableSorting: false,
       },
     ],
-    [expandedReportModes, onSelectEquipment, netaReportManifest],
+    [expandedReportModes, onSelectEquipment, netaReportManifest, cableIndex],
   );
 
   const table = useReactTable({
@@ -265,7 +290,7 @@ export function EquipmentTable({ rows, selectedRowId, onSelectEquipment, priorit
         <div>
           <CardTitle>Equipment Lookup Table</CardTitle>
           <CardDescription>
-            Select an equipment row to inspect EPS tests, NETA status, PDM context, and cases.
+            Select an equipment row to inspect connected cables, energization readiness, NETA status, and cases.
           </CardDescription>
         </div>
         <StatusBadge tone="muted">

@@ -1,5 +1,46 @@
 ﻿# Codex Handoff
 
+## Current update (2026-11-17): Equipment connected cables / energization ready
+
+- Replaced Equipment's EPS Test Items column/detail panel with connected cables
+  from the existing Layout manifest, including unplaced and one-ended connections.
+  Equipment requests this manifest through the dashboard resource cache instead
+  of loading EPS test items. Layout and EPS Test Execution remain unchanged.
+- Added a sortable Energization ready column, readiness filter and detail strip.
+  Requires explicit equipment NETA complete plus every in-scope cable tested
+  with an ATP/NETA report. Existing Layout test precedence applies. Infralink
+  attachment references and exact full cable-ID local PDFs count as reports.
+  Equipment's own missing NETA report remains a separate quality alert.
+- Either endpoint can exclude a connection from the list and all test/report/
+  readiness counts. Exact uploader defaults live in `cxalloyUploadScope.ts`:
+  UPP6/TX-UPP6 and CUPP6/TX-CUPP6 outside the first R zone. Additional page rules
+  exclude non-R UPS6 and all AHU6, including AHU6 R. UPS6-R/UPS6-01R remain.
+  Global tracking rules and the uploader itself are unchanged.
+- Missing data/no matching scope stays Not confirmed. If all known connections
+  are explicitly excluded, cable gates show None required, still requiring
+  equipment NETA complete. Cables, terminations and tracking exclusions show N/A.
+- Final detail order: Equipment Summary, Energization readiness, side-by-side
+  NETA Test Report / Connected cables, then Asset Information and other sections.
+  Evidence lists expand fully; narrow screens stack them. Applied frontend-design
+  to the engineering-blue readiness strip and readable connection rows.
+- Click a remote name/cable ID to open the floating CableInspector beside the
+  list (viewport overlay on narrow screens). Text uses a pointer cursor and
+  supports drag-copy without opening; no separate arrow. Enter/Space opens it.
+  Outside click, Close or Escape dismisses it and restores focus. The main
+  drawer/list position stays intact; ATP/NETA previews remain available.
+  Browser focus occurs after the initial hidden positioning frame is visible.
+- Validation: 69 targeted cable-scope/Equipment tests passed for the scope rules;
+  the latest Equipment suite passed all 16 tests after inspector refinements.
+  Route loader tests also passed during implementation. Final preview-mode
+  TypeScript/build and diff checks passed; existing chunk-size warning remains.
+  Real compiled-preview Chromium verified the supplied GEN6-01R/MDS6-01R cable,
+  pointer cursor, no arrow, native drag-copy, popup position, inside/outside
+  clicks, Escape, preserved scroll and 390px viewport fit; zero page errors.
+  Desktop/mobile screenshots were visually reviewed.
+- No ETL, vendor writes or user-service restart. Local commit prepared at the
+  user's request; push remains with the user. Refresh the browser for rebuilt
+  local assets. Other hosts need updated code plus current Layout/report data.
+
 ## Current update (2026-11-17): Smooth 2.5D Layout wheel zoom
 
 - 2.5D wheel zoom now previews as a rAF-eased CSS transform on the pan layer and

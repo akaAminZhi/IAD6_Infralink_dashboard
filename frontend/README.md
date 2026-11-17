@@ -31,6 +31,48 @@ keeping the current route, filters and equipment drawer mounted. If publication
 fails after saving, Refresh duplicate evidence retries publication without
 resubmitting the decision. No action starts a CxAlloy upload.
 
+## Equipment connected cables and energization readiness
+
+Equipment replaces the EPS Test Items column and EPS detail panel with connected
+cables from Layout. Expand the table's cable count or open equipment details to
+see remote endpoints, tested/failed/unconfirmed counts, report availability,
+daily evidence, external links and ATP/NETA PDF previews. Unplaced and
+one-ended connections stay included. Equipment no longer loads EPS test items
+for this page; the EPS Test Execution page retains them.
+Connections with either endpoint in the uploader's default excluded families
+(`UPP6`, `TX-UPP6`, and non-R-zone `CUPP6`/`TX-CUPP6`) are excluded from the
+Equipment cable list, test/report totals and readiness. Family boundaries and
+the first-zone R exception match `upload_cxalloy_reports.py`; unknown endpoints
+are retained. Additional Equipment-page exclusions remove every AHU6 connection
+and UPS6 connections outside the first R zone (UPS6-R / UPS6-01R remain).
+These additions apply to either endpoint without changing uploader defaults or
+global tracking exclusions. Excluded counts remain visible. Cable and remote-equipment names
+are selectable text with a pointer cursor. Clicking the remote name or cable ID
+opens a separate floating inspector beside the list, with an on-screen overlay
+on narrow displays. There is no separate arrow. Dragging the ID selects it
+without opening the inspector. Outside click, Close or Escape preserves the
+equipment drawer and cable list position; report previews remain available.
+Details put Equipment Summary first, followed by Energization readiness and
+NETA Test Report / Connected cables side by side (stacked on narrow screens).
+Both evidence lists expand to show all items without an internal height limit;
+the detail drawer scrolls as a whole. Asset information follows the evidence.
+
+**Energization ready** requires explicit equipment `neta_complete === true` and
+every connected cable tested with an ATP or NETA report. Test states reuse
+Layout's evidence rules. Report references in Infralink count even when the PDF
+has not been downloaded; exact full cable-ID PDFs in the report manifest also
+count. Merely reaching L3 without a report does not satisfy readiness. The
+equipment's own missing NETA report remains a separate quality alert.
+Absent cable data or no matching cable scope displays **Not confirmed**, never
+Ready. When known connections are all explicitly excluded, cable requirements
+show **None required** and equipment NETA completion still determines readiness.
+Cables, terminations and tracking-excluded equipment display **N/A**.
+The More filters disclosure includes Energization readiness.
+
+This reads the existing `layout_plan.json` through the dashboard resource cache,
+invalidated on ETL reload. Rebuild/restart compiled preview after source updates;
+no ETL is needed if the existing Layout/report datasets are current.
+
 ## Run Locally
 
 The recommended command starts both Vite and the local automation service from
