@@ -110,13 +110,49 @@ export function zoomLayoutViewport(
   viewport: PowerPlanRect, fullBounds: PowerPlanRect, factor: number,
   anchor = { x: viewport.x + viewport.width / 2, y: viewport.y + viewport.height / 2 },
 ): PowerPlanRect {
-  const width = Math.min(fullBounds.width * 2, Math.max(fullBounds.width * 0.02, viewport.width * factor));
+  const width = clampLayoutViewportWidth(viewport.width * factor, fullBounds);
   const scale = width / viewport.width;
   return {
     x: anchor.x - (anchor.x - viewport.x) * scale,
     y: anchor.y - (anchor.y - viewport.y) * scale,
     width, height: viewport.height * scale,
   };
+}
+
+export function clampLayoutViewportWidth(width: number, fullBounds: PowerPlanRect): number {
+  return Math.min(fullBounds.width * 2, Math.max(fullBounds.width * 0.02, width));
+}
+
+/** `translate(x, y) scale(scale)` with a top-left origin: maps p to (x + scale * p). */
+export interface LayoutTransform { x: number; y: number; scale: number }
+
+/**
+ * CSS transform (origin top-left of the canvas) that makes content rendered for
+ * `rendered` appear as `target`, so a gesture can preview zoom without a re-render.
+ */
+export function layoutViewportTransform(
+  rendered: PowerPlanRect, target: PowerPlanRect, canvas: { width: number; height: number },
+): LayoutTransform {
+  const offset = (view: PowerPlanRect) => {
+    const scale = Math.max(Number.EPSILON, Math.min(canvas.width / view.width, canvas.height / view.height));
+    return { scale, x: (canvas.width - view.width * scale) / 2 - view.x * scale,
+      y: (canvas.height - view.height * scale) / 2 - view.y * scale };
+  };
+  const from = offset(rendered), to = offset(target);
+  const scale = to.scale / from.scale;
+  return { scale, x: to.x - scale * from.x, y: to.y - scale * from.y };
+}
+
+/** Matches CSS interpolation of `translate() scale()` lists, which is per-function linear. */
+export function interpolateLayoutTransform(from: LayoutTransform, to: LayoutTransform, progress: number): LayoutTransform {
+  return { x: from.x + (to.x - from.x) * progress, y: from.y + (to.y - from.y) * progress,
+    scale: from.scale + (to.scale - from.scale) * progress };
+}
+
+/** Same on-screen result after the content underneath was re-rendered with `moved` applied: shown ∘ moved⁻¹. */
+export function rebaseLayoutTransform(shown: LayoutTransform, moved: LayoutTransform): LayoutTransform {
+  const scale = shown.scale / moved.scale;
+  return { scale, x: shown.x - scale * moved.x, y: shown.y - scale * moved.y };
 }
 
 export function layoutCanvasPoint(

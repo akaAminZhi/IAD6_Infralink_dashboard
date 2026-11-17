@@ -333,6 +333,21 @@ floor changes still replace floor-local geometry. Cable paths, lookup indexes,
 diagnostic counts and both view fit frames are memoized. `useFrameState.ts`
 coalesces wheel/pan updates using requestAnimationFrame, flushes final drag
 positions and cancels queued camera movement on explicit commands or unmount.
+2.5D wheel zoom does not use that path. The measured bottleneck is GPU raster of
+the whole SVG (hundreds of ms per raster on integrated GPUs), not React. During a
+2.5D wheel gesture `LayoutPlanPage` previews zoom as a rAF-eased inline CSS
+transform on the pan layer (`layoutViewportTransform`, `interpolateLayoutTransform`
+and `rebaseLayoutTransform` in `layoutPlanUtils.ts`). It commits the accumulated
+viewBox once, 160 ms after the last wheel event, so culling/LOD refresh only
+then. Constraints that keep the preview raster-free: the 2.5D pan layer stays
+permanently `will-change: transform` (promoting/demoting it re-rasters); easing
+uses rAF plus inline styles, never `element.animate()` (Chrome re-rasters at the
+animation's target scale); no mid-gesture viewBox rebase; hover inspection is
+suppressed while a wheel zoom is active; lightning marks render in a separate
+overlay `<svg data-layout-overlay="lightning">` with its own layer, and
+`[data-layout-gesture]` pauses their breathing animation, because any animated
+child inside the scene SVG repaints the whole SVG. Pointer down settles a pending
+wheel zoom first. Plan-view wheel zoom keeps the `useFrameState` viewBox path.
 Hide all cables removes cable marks/hit targets without changing connection data;
 Global view, search and floor/view changes preserve the user's visibility choice.
 

@@ -32,8 +32,8 @@ import {
   placedLayoutCables, projectLayoutPoint, projectedLayoutBounds, projectedLayoutRoomLabel,
 } from "../utils/layoutIsometricUtils";
 import {
-  equipmentInLayoutSelection, insetEquipmentRect, layoutBounds, layoutCanvasPoint, layoutEquipmentStatus, layoutRoomLabels,
-  layoutSelectionRect, planLayoutSelection,
+  equipmentInLayoutSelection, interpolateLayoutTransform, insetEquipmentRect, layoutBounds, layoutCanvasPoint, layoutEquipmentStatus, layoutRoomLabels,
+  layoutSelectionRect, layoutViewportTransform, planLayoutSelection, rebaseLayoutTransform, type LayoutTransform,
   LAYOUT_OVERRIDES_KEY, LAYOUT_STATUS_COLORS, LAYOUT_STATUS_LABELS, readLayoutOverrides,
   visibleLayoutEquipment, visibleLayoutRegions, zoomLayoutViewport, type LayoutStatus,
 } from "../utils/layoutPlanUtils";
@@ -92,6 +92,40 @@ const EquipmentLightning = memo(function EquipmentLightning({ record, status, di
       className="animate-energisation-breathe" role="img" aria-label={`${record.label} ${LAYOUT_STATUS_LABELS[status]} lightning`} />
   </g>;
 });
+
+/**
+ * 2.5D wheel zoom previewed as an eased CSS transform on the (already composited) pan layer,
+ * committed to the viewBox (one React render and one SVG re-raster) only when the wheel goes idle.
+ */
+interface WheelZoomState {
+  /** Viewport the SVG DOM currently renders. */
+  rendered: PowerPlanRect;
+  /** Viewport handed to React and not yet rendered. */
+  pending: PowerPlanRect | null;
+  /** Gesture ends once `pending` renders. */
+  finishing: boolean;
+  /** Viewport the gesture is heading to; the preview eases toward it. */
+  target: PowerPlanRect;
+  /** Transform on screen now, and the one that shows `target` (both relative to `rendered`). */
+  shown: LayoutTransform;
+  to: LayoutTransform;
+  smooth: boolean;
+  frame: number | null;
+  lastFrame: number | null;
+  idle: ReturnType<typeof setTimeout> | null;
+}
+
+/**
+ * Exponential ease time constant (~95% of a notch in 3τ). Driven from rAF with inline styles on purpose:
+ * a Web Animation per notch makes Chrome re-raster the layer at the animation's end scale.
+ */
+const WHEEL_ZOOM_EASE_TAU_MS = 70;
+const WHEEL_ZOOM_IDLE_MS = 160;
+const IDENTITY_TRANSFORM: LayoutTransform = { x: 0, y: 0, scale: 1 };
+
+function transformCss({ x, y, scale }: LayoutTransform): string {
+  return `translate(${x}px, ${y}px) scale(${scale})`;
+}
 
 interface PanState {
   latestX: number;
@@ -163,6 +197,8 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
   const panLayerRef = useRef<HTMLDivElement>(null);
   const panRef = useRef<PanState | null>(null);
   const panCullOffsetRef = useRef({ x: 0, y: 0 });
+  const wheelZoomRef = useRef<WheelZoomState | null>(null);
+  const boundsRef = useRef<PowerPlanRect | null>(null);
   const suppressClickRef = useRef(false);
 
   useEffect(() => {
@@ -296,7 +332,26 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
     : Number.POSITIVE_INFINITY;
   const detailThreshold = drawnRows.length > 400 ? Number.POSITIVE_INFINITY : 24;
   const compact = drawnRows.length > 400;
+  useLayoutEffect(() => { boundsRef.current = bounds; });
   useLayoutEffect(() => {
+    const zoom = wheelZoomRef.current;
+    if (zoom) {
+      const canvas = canvasRect();
+      if (zoom.pending && viewport === zoom.pending && !zoom.finishing && canvas?.width && canvas.height) {
+        // The new viewBox is in the DOM in this same commit: re-express the preview relative to it.
+        const previous = zoom.rendered;
+        zoom.rendered = zoom.pending; zoom.pending = null;
+        zoom.shown = rebaseLayoutTransform(zoom.shown, layoutViewportTransform(previous, zoom.rendered, canvas));
+        zoom.to = layoutViewportTransform(zoom.rendered, zoom.target, canvas);
+        writeWheelTransform(zoom);
+        scheduleWheelFrame(zoom);
+        return;
+      }
+      // Either the final commit rendered, or another viewport change (buttons, search, reset) supersedes the gesture.
+      stopWheelZoom(zoom);
+      wheelZoomRef.current = null;
+      resetWheelLayer();
+    }
     if (!panRef.current && panLayerRef.current) {
       panLayerRef.current.style.transform = "";
       panLayerRef.current.style.willChange = "";
@@ -342,24 +397,112 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
     return map?.width && map.height ? map : svgRef.current?.getBoundingClientRect();
   }
 
+  function writeWheelTransform(zoom: WheelZoomState) {
+    if (panLayerRef.current) panLayerRef.current.style.transform = transformCss(zoom.shown);
+  }
+
+  function scheduleWheelFrame(zoom: WheelZoomState) {
+    if (zoom.frame === null) zoom.frame = requestAnimationFrame((now) => stepWheelFrame(zoom, now));
+  }
+
+  function stepWheelFrame(zoom: WheelZoomState, now: number) {
+    zoom.frame = null;
+    if (wheelZoomRef.current !== zoom) return;
+    const dt = zoom.lastFrame === null ? 16 : Math.min(64, now - zoom.lastFrame);
+    let next = interpolateLayoutTransform(zoom.shown, zoom.to, zoom.smooth ? 1 - Math.exp(-dt / WHEEL_ZOOM_EASE_TAU_MS) : 1);
+    const settled = Math.abs(next.scale - zoom.to.scale) <= zoom.to.scale * 1e-4
+      && Math.abs(next.x - zoom.to.x) < 0.25 && Math.abs(next.y - zoom.to.y) < 0.25;
+    if (settled) next = zoom.to;
+    zoom.shown = next;
+    writeWheelTransform(zoom);
+    if (settled) zoom.lastFrame = null;
+    else { zoom.lastFrame = now; scheduleWheelFrame(zoom); }
+  }
+
+  function stopWheelZoom(zoom: WheelZoomState) {
+    if (zoom.frame !== null) cancelAnimationFrame(zoom.frame);
+    if (zoom.idle !== null) clearTimeout(zoom.idle);
+    zoom.frame = null; zoom.lastFrame = null; zoom.idle = null;
+  }
+
+  function markGesture(active: boolean) {
+    const map = mapRef.current;
+    if (!map) return;
+    if (active) map.dataset.layoutGesture = "true"; else delete map.dataset.layoutGesture;
+  }
+
+  function resetWheelLayer() {
+    markGesture(false);
+    if (!panLayerRef.current) return;
+    panLayerRef.current.style.transform = "";
+    panLayerRef.current.style.willChange = "";
+  }
+
+  /** Ends a wheel gesture synchronously (e.g. before a pan) and returns the viewport it reached. */
+  function settleWheelZoom(): PowerPlanRect | null {
+    const zoom = wheelZoomRef.current;
+    if (!zoom) return null;
+    stopWheelZoom(zoom);
+    wheelZoomRef.current = null;
+    resetWheelLayer();
+    setViewport(zoom.target);
+    return zoom.target;
+  }
+
   useEffect(() => {
     const svg = svgRef.current;
     if (!svg || loading) return;
+    function commit(zoom: WheelZoomState) {
+      zoom.pending = zoom.target; zoom.finishing = true;
+      setViewport(zoom.target);
+    }
+    function armIdle(zoom: WheelZoomState) {
+      if (zoom.idle !== null) clearTimeout(zoom.idle);
+      zoom.idle = setTimeout(() => {
+        zoom.idle = null;
+        if (wheelZoomRef.current !== zoom) return;
+        if (zoom.frame !== null) armIdle(zoom); else commit(zoom);
+      }, WHEEL_ZOOM_IDLE_MS);
+    }
     function handleWheel(event: WheelEvent) {
       event.preventDefault();
       if (!event.deltaY || panRef.current) return;
       setInspection(null);
       const canvas = canvasRect() ?? svg!.getBoundingClientRect();
       const factor = wheelZoomFactor(event, canvas.height);
-      queueViewport((current) => {
-        const view = current ?? fullBounds;
-        return zoomLayoutViewport(view, fullBounds, factor,
-          layoutCanvasPoint(view, canvas, event.clientX, event.clientY));
-      });
+      if (!isometric) {
+        queueViewport((current) => {
+          const view = current ?? fullBounds;
+          return zoomLayoutViewport(view, fullBounds, factor,
+            layoutCanvasPoint(view, canvas, event.clientX, event.clientY));
+        });
+        return;
+      }
+      let zoom = wheelZoomRef.current;
+      if (!zoom) {
+        const rendered = boundsRef.current ?? fullBounds;
+        zoom = { rendered, pending: null, finishing: false, target: rendered, shown: IDENTITY_TRANSFORM, to: IDENTITY_TRANSFORM,
+          smooth: false, frame: null, lastFrame: null, idle: null };
+        wheelZoomRef.current = zoom;
+        markGesture(true);
+      }
+      zoom.finishing = false;
+      // Same accumulation as a committed zoom, so the end state does not depend on frame timing.
+      zoom.target = zoomLayoutViewport(zoom.target, fullBounds, factor,
+        layoutCanvasPoint(zoom.target, canvas, event.clientX, event.clientY));
+      // Trackpads stream small deltas; a long ease would only add latency.
+      zoom.smooth = !(event.deltaMode === 0 && Math.abs(event.deltaY) < 40);
+      zoom.to = layoutViewportTransform(zoom.rendered, zoom.target, canvas);
+      scheduleWheelFrame(zoom);
+      armIdle(zoom);
     }
     svg.addEventListener("wheel", handleWheel, { passive: false });
-    return () => svg.removeEventListener("wheel", handleWheel);
-  }, [fullBounds, loading, queueViewport]);
+    return () => {
+      svg.removeEventListener("wheel", handleWheel);
+      const zoom = wheelZoomRef.current;
+      if (zoom) { stopWheelZoom(zoom); wheelZoomRef.current = null; resetWheelLayer(); }
+    };
+  }, [fullBounds, loading, queueViewport, setViewport, isometric]);
 
   function saveOverrides(next: Record<string, LayoutStatus>) {
     setOverrides(next);
@@ -405,6 +548,7 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
 
   function handlePointerDown(event: ReactPointerEvent<SVGSVGElement>) {
     if (event.button !== 0 && event.button !== 1) return;
+    const settled = settleWheelZoom();
     if (pinch.down(event)) return;
     const mode = selectionMode && event.button === 0 ? "select" : "pan";
     event.preventDefault();
@@ -413,7 +557,7 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
     suppressClickRef.current = false;
     event.currentTarget.setPointerCapture?.(event.pointerId);
     panRef.current = {
-      pointerId: event.pointerId, button: event.button, x: event.clientX, y: event.clientY, viewport: bounds, moved: false,
+      pointerId: event.pointerId, button: event.button, x: event.clientX, y: event.clientY, viewport: settled ?? bounds, moved: false,
       annotationId: (event.target as Element).closest("[data-annotation-id][role=button]")?.getAttribute("data-annotation-id") ?? null,
       cableId: (event.target as Element).closest("[data-cable-id][role=button]")?.getAttribute("data-cable-id") ?? null,
       mode, additive: event.shiftKey, latestX: event.clientX, latestY: event.clientY,
@@ -421,6 +565,7 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
     panCullOffsetRef.current = { x: 0, y: 0 };
     if (isometric && mode === "pan" && panLayerRef.current) {
       panLayerRef.current.style.willChange = "transform";
+      markGesture(true);
     }
   }
 
@@ -458,6 +603,7 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
     if (pinch.end(event)) return;
     const pan = panRef.current;
     if (!pan || pan.pointerId !== event.pointerId) return;
+    markGesture(false);
     if (isometric && pan.mode === "pan" && pan.moved) {
       const canvas = canvasRect() ?? event.currentTarget.getBoundingClientRect();
       const scale = Math.max(Number.EPSILON, Math.min(canvas.width / pan.viewport.width, canvas.height / pan.viewport.height));
@@ -527,7 +673,8 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
 
   const inspectDevice = useCallback((record: LayoutEquipmentRecord, element: SVGGElement) => {
     const map = mapRef.current?.getBoundingClientRect();
-    if (!map || panRef.current) return;
+    // Content sliding under a still cursor during a gesture must not re-render the whole page per device.
+    if (!map || panRef.current || wheelZoomRef.current) return;
     const device = element.getBoundingClientRect();
     const left = Math.max(12, Math.min(device.right - map.left + 12, map.width - 300));
     const preferredTop = device.top - map.top - 124;
@@ -543,6 +690,7 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
     panRef.current = null;
     setPanCullViewport(null);
     if (panLayerRef.current) { panLayerRef.current.style.transform = ""; panLayerRef.current.style.willChange = ""; }
+    markGesture(false);
     try { localStorage.setItem(LAYOUT_VIEW_KEY, next ? "isometric" : "plan"); } catch { /* View works without persistence. */ }
   }
 
@@ -738,7 +886,9 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
     {storageError ? <p role="alert" className="text-sm text-amber-700">Browser storage is unavailable. Changes apply for this visit only.</p> : null}
     <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
       <div ref={mapRef} className="relative h-[68vh] min-h-[400px] overflow-hidden rounded-lg border bg-white" aria-label="Layout map">
-        <div ref={panLayerRef} data-layout-pan="true" className="relative h-full w-full">
+        <div ref={panLayerRef} data-layout-pan="true"
+          // 2.5D keeps this layer composited: promoting it per gesture would re-raster the whole SVG each time.
+          className={`relative h-full w-full origin-top-left ${isometric ? "[will-change:transform]" : ""}`}>
         <svg ref={svgRef} role="img" tabIndex={0} aria-label={`${combined ? "All floors" : manifest.floors.find((floor) => floor.floor_id === floorId)?.label} equipment layout`}
           viewBox={`${svgBounds.x} ${svgBounds.y} ${svgBounds.width} ${svgBounds.height}`} preserveAspectRatio="xMidYMid meet"
           className={`${isometric ? "absolute -left-[40%] -top-[40%] h-[180%] w-[180%]" : "h-full w-full"} select-none outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600 ${selectionMode ? "cursor-crosshair" : "cursor-grab active:cursor-grabbing"}`} style={{ touchAction: "none" }}
@@ -793,10 +943,15 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
             {selectionBox ? <rect {...selectionBox} fill="#2563eb" fillOpacity={0.12} stroke="#2563eb"
               strokeWidth={1.5} strokeDasharray="5 3" vectorEffect="non-scaling-stroke" /> : null}
           </g>
+          </g>
+        </svg>
+        {/* Breathing lightning lives in its own SVG root: its per-frame repaint then skips the large scene above. */}
+        <svg data-layout-overlay="lightning" viewBox={`${svgBounds.x} ${svgBounds.y} ${svgBounds.width} ${svgBounds.height}`}
+          preserveAspectRatio="xMidYMid meet" pointerEvents="none"
+          className={`${isometric ? "absolute -left-[40%] -top-[40%] h-[180%] w-[180%]" : "absolute inset-0 h-full w-full"} pointer-events-none select-none [will-change:transform]`}>
           <g pointerEvents="none" data-layout-layer="lightning">
             {drawnRows.map((row) => <EquipmentLightning key={row.annotation_id} record={row} status={statusOf(row)}
               isometric={isometric} dimmed={rowIsDimmed(row)} />)}
-          </g>
           </g>
         </svg>
         </div>

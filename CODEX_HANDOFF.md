@@ -1,5 +1,28 @@
 ﻿# Codex Handoff
 
+## Current update (2026-11-17): Smooth 2.5D Layout wheel zoom
+
+- 2.5D wheel zoom now previews as a rAF-eased CSS transform on the pan layer and
+  commits the viewBox once after 160 ms idle. Lightning moved to an overlay SVG,
+  its breathing animation pauses during gestures, and hover is suppressed while
+  zooming. Plan view is unchanged. Design constraints are in `ARCHITECTURE.md`
+  (Layout performance paragraph); do not reintroduce Web Animations, layer
+  promotion per gesture, or mid-gesture viewBox rebases.
+- Files: `LayoutPlanPage.tsx`, `layoutPlanUtils.ts`, `index.css`, and both
+  matching test files. The layer-order test now expects lightning in the overlay
+  SVG above the scene, sharing the scene viewBox.
+- Benchmark (headed Chromium, Iris Xe, 10-notch synthetic wheel bursts at 70 ms,
+  separate `vite preview` builds per variant): 1x data 6.5 -> 60.7 presented fps,
+  worst gap 221 -> 39 ms; 8x data (5,024 devices, 34,464 cables, injected via
+  Playwright route) 1.6 -> 45.4 fps, worst gap 1019 -> 311 ms.
+- Known trade-offs: strokes/labels scale during the preview until commit; a fast
+  zoom-out beyond the 40% overscan shows blank edges until commit; at 8x the
+  commit raster still costs about 0.5-0.8 s. Next lever if needed: cheaper
+  commit raster (zoomed-out cable LOD or smaller 2.5D overscan).
+- Validation: TypeScript, full frontend suite (60 files, 500 tests) and
+  production build passed. `frontend/dist` rebuilt with the final code; refresh
+  to load. No ETL/data writes, commit or push.
+
 ## Current update (2026-11-16): Two-finger map zoom
 
 - Added shared `usePinchZoom` for Power Plan and Layout 2D/2.5D. Two touch
@@ -17,7 +40,25 @@
   These are browser simulations, not a physical iPad check. TypeScript and
   preview-mode production build passed, with the existing chunk-size warning.
 - Rebuilt local compiled assets; refresh to load. No ETL/vendor writes, service
-  restart, commit or push. Earlier uncommitted Layout performance work remains.
+  restart, commit or push. Layout performance work was later reverted at the
+  user's request.
+
+## Current update (2026-11-16): iPad search suggestion selection
+
+- Audited search inputs: Power Plan and Layout are the two custom suggestion
+  lists. Reproduced both failures with Playwright WebKit's iPad Pro 11 profile:
+  compatibility mousedown blurred the input (outside/null relatedTarget), the
+  wrapper removed the list, and the option never received click.
+- Both option buttons now prevent mousedown's focus change while selecting on
+  click. Layout no longer cancels pointerdown, preserving native touch scrolling.
+  Existing keyboard selection and blur-to-outside behavior remain.
+- Both page suites passed: 66 tests, including touch/compatibility-mouse
+  regressions. WebKit iPad touch selection, ArrowDown/Enter, Escape and keyboard
+  focus dismissal passed on both pages. Preview-mode TypeScript/build and diff
+  checks passed, with existing build warnings. Physical iPad was not available.
+- Existing compiled preview assets rebuilt; refresh the browser to load them.
+  No services restarted, ETL/data/vendor writes, commit or push. Preserved all
+  pre-existing Layout performance changes in the worktree.
 
 ## Current update (2026-11-09): Layout search inside the map
 

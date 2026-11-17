@@ -94,6 +94,11 @@
     animation: equipment-status-breathe 2.2s ease-in-out infinite;
   }
 
+  /* SVG children are not composited separately: a running animation repaints the whole map every frame. */
+  [data-layout-gesture] .animate-energisation-breathe {
+    animation-play-state: paused;
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .animate-trend-rise,
     .animate-trend-fall,

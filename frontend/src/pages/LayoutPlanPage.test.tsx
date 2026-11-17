@@ -456,12 +456,26 @@ describe("2.5D Layout connections", () => {
           await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
         });
       }
-      readView().forEach((value, index) => expect(value).toBeCloseTo(single[index], 8));
+      await waitFor(() => readView().forEach((value, index) => expect(value).toBeCloseTo(single[index], 8)));
       fireEvent.click(screen.getByRole("button", { name: /^(Global view|Fit layout)$/ }));
     }
     fireEvent.wheel(map, { deltaY: 0, deltaX: 100 });
     await act(async () => { await new Promise<void>((resolve) => requestAnimationFrame(() => resolve())); });
     expect(readView()).toEqual(initial);
+  });
+
+  it("previews 2.5D wheel zoom as a pan-layer transform and commits the viewBox when idle", async () => {
+    isometricDataset();
+    const { container } = render(<LayoutPlanPage />);
+    const map = await screen.findByRole("img", { name: "All floors equipment layout" });
+    vi.spyOn(map, "getBoundingClientRect").mockReturnValue({ left: 0, top: 0, width: 600, height: 400 } as DOMRect);
+    const layer = container.querySelector<HTMLElement>("[data-layout-pan]")!;
+    const initial = map.getAttribute("viewBox");
+    fireEvent.wheel(map, { deltaY: -100, clientX: 180, clientY: 140 });
+    await waitFor(() => expect(layer.style.transform).toMatch(/scale\(1\.\d+\)/));
+    expect(map.getAttribute("viewBox")).toBe(initial);
+    await waitFor(() => expect(map.getAttribute("viewBox")).not.toBe(initial));
+    expect(layer.style.transform).toBe("");
   });
 
   it("defaults to both floors in 2.5D, draws unique endpoints, and shows cable IDs and test evidence", async () => {
@@ -1103,7 +1117,7 @@ describe("LayoutPlanPage", () => {
     expect(container.querySelector('[data-layout-region="room"]')).not.toBeInTheDocument();
   });
 
-  it("keeps room names behind equipment and every lightning in the last SVG layer", async () => {
+  it("keeps room names behind equipment and every lightning in an overlay SVG above the scene", async () => {
     const user = userEvent.setup();
     const manifest = dataset();
     manifest.floors[0].regions = [{ annotation_id: "room-1", label: "E6-110-01", kind: "room", fixed: false,
@@ -1113,8 +1127,11 @@ describe("LayoutPlanPage", () => {
     await screen.findByRole("button", { name: "EQ-1: Energized" });
     const map = screen.getByRole("img", { name: /^(First Floor|All floors) equipment layout$/ });
     expect([...map.querySelector("[data-layout-scene]")!.children].map((element) => element.getAttribute("data-layout-layer"))).toEqual([
-      "regions", "room-labels", "equipment", "selection", "lightning",
+      "regions", "room-labels", "equipment", "selection",
     ]);
+    const overlay = container.querySelector('[data-layout-overlay="lightning"]')!;
+    expect(map.compareDocumentPosition(overlay) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(overlay.getAttribute("viewBox")).toBe(map.getAttribute("viewBox"));
     const before = container.querySelector('[data-room-label="E6-110-01"]')?.outerHTML;
     await user.click(screen.getByRole("button", { name: "EQ-FIX: Not Energized" }));
     await user.click(screen.getByRole("button", { name: "Energize today" }));

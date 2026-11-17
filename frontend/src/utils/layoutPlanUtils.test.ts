@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { LayoutEquipmentRecord, LayoutPlanManifest, LayoutRegionRecord } from "../types/data";
-import { equipmentInLayoutSelection, insetEquipmentRect, layoutCanvasPoint, layoutRoomLabels, layoutSelectionRect, planLayoutSelection, visibleLayoutRegions, zoomLayoutViewport } from "./layoutPlanUtils";
+import { equipmentInLayoutSelection, insetEquipmentRect, layoutCanvasPoint, layoutRoomLabels, layoutSelectionRect, layoutViewportTransform, planLayoutSelection, rebaseLayoutTransform, visibleLayoutRegions, zoomLayoutViewport } from "./layoutPlanUtils";
 
 describe("layout geometry", () => {
   it("retains distinct fixed POD placements while avoiding copied regions on later floors", () => {
@@ -29,6 +29,31 @@ describe("layout geometry", () => {
     expect(layoutCanvasPoint(zoomed, canvas, 200, 200)).toEqual(anchor);
     expect(zoomLayoutViewport(view, view, 0.0001).width).toBe(8);
     expect(zoomLayoutViewport(view, view, 100).width).toBe(800);
+  });
+
+  it("maps a rendered viewport onto a zoomed one with a transform that keeps the cursor point fixed", () => {
+    const view = { x: 0, y: 0, width: 400, height: 200 };
+    const canvas = { left: 0, top: 0, width: 600, height: 400 };
+    const anchor = layoutCanvasPoint(view, canvas, 150, 120);
+    const zoomed = zoomLayoutViewport(view, view, 0.5, anchor);
+    const { x, y, scale } = layoutViewportTransform(view, zoomed, canvas);
+    expect(scale).toBeCloseTo(2, 10);
+    expect(150 * scale + x).toBeCloseTo(150, 8);
+    expect(120 * scale + y).toBeCloseTo(120, 8);
+    expect(layoutViewportTransform(view, view, canvas)).toEqual({ x: 0, y: 0, scale: 1 });
+  });
+
+  it("keeps the on-screen preview unchanged when the content underneath is re-rendered mid-gesture", () => {
+    const canvas = { width: 600, height: 400 };
+    const rendered = { x: 0, y: 0, width: 400, height: 200 };
+    const next = zoomLayoutViewport(rendered, rendered, 1.7, { x: 120, y: 60 });
+    const target = zoomLayoutViewport(rendered, rendered, 2.2, { x: 90, y: 40 });
+    const shown = layoutViewportTransform(rendered, target, canvas);
+    const rebased = rebaseLayoutTransform(shown, layoutViewportTransform(rendered, next, canvas));
+    const direct = layoutViewportTransform(next, target, canvas);
+    expect(rebased.scale).toBeCloseTo(direct.scale, 10);
+    expect(rebased.x).toBeCloseTo(direct.x, 8);
+    expect(rebased.y).toBeCloseTo(direct.y, 8);
   });
 
   it("keeps room labels centered at a fixed position inside the room", () => {
