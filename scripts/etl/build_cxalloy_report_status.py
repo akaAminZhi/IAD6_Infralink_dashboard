@@ -6,6 +6,9 @@ import csv
 import hashlib
 import json
 import os
+import re
+import stat
+import sys
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
@@ -21,6 +24,10 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_TRACKER_ROOT = PROJECT_ROOT.parent / "IAD6_EPS_Testing_Tracker"
 DATA_DIR = PROJECT_ROOT / "frontend" / "public" / "data"
 OUTPUT_PATH = DATA_DIR / "cxalloy_report_status.json"
+HASH_CACHE_PATH = PROJECT_ROOT / "runtime" / "etl-cache" / "cxalloy_report_hashes.json"
+HASH_CACHE_VERSION = 1
+REHASH_ENV = "IAD6_CXALLOY_REHASH"
+SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 VALID_RENAME_STATUSES = {"copied", "skipped_existing"}
 COMPLETED_UPLOAD_STATUSES = {"uploaded", "skipped_existing_on_site"}
 
@@ -47,6 +54,59 @@ def sha256_file(path: Path) -> str:
         for block in iter(lambda: file.read(1024 * 1024), b""):
             digest.update(block)
     return digest.hexdigest()
+
+
+class FileHashCache:
+    """Reuse PDF hashes while size and mtime_ns are unchanged.
+
+    Opening thousands of OneDrive PDFs is slow on a cold machine, so unchanged
+    files are verified by stat only. Pass rehash=True to recompute everything.
+    """
+
+    def __init__(self, path: Path | None, rehash: bool = False) -> None:
+        self.path = path
+        self.entries = {} if path is None or rehash else self._load(path)
+        self.used: dict[str, dict[str, Any]] = {}
+        self.hits = 0
+        self.misses = 0
+
+    @staticmethod
+    def _load(path: Path) -> dict[str, dict[str, Any]]:
+        payload = read_status_payload(path)
+        if payload.get("version") != HASH_CACHE_VERSION:
+            return {}
+        files = payload.get("files")
+        if not isinstance(files, dict):
+            return {}
+        return {
+            key: entry for key, entry in files.items()
+            if isinstance(entry, dict)
+            and isinstance(entry.get("size"), int)
+            and isinstance(entry.get("mtime_ns"), int)
+            and isinstance(entry.get("sha256"), str)
+            and SHA256_PATTERN.match(entry["sha256"])
+        }
+
+    def sha256(self, path: Path, key: str, file_stat: os.stat_result) -> str:
+        entry = self.entries.get(key)
+        if (entry is not None and entry["size"] == file_stat.st_size
+                and entry["mtime_ns"] == file_stat.st_mtime_ns):
+            self.hits += 1
+        else:
+            self.misses += 1
+            entry = {"size": file_stat.st_size, "mtime_ns": file_stat.st_mtime_ns,
+                     "sha256": sha256_file(path)}
+        self.used[key] = entry
+        return entry["sha256"]
+
+    def save(self) -> None:
+        """Persist only files seen this run; never fail the ETL on cache I/O."""
+        if self.path is None or (not self.misses and self.used.keys() == self.entries.keys()):
+            return
+        try:
+            write_json_payload(self.path, {"version": HASH_CACHE_VERSION, "files": self.used})
+        except OSError as error:
+            print(f"Warning: could not write CxAlloy hash cache {self.path}: {error}")
 
 
 def combined_sha256(files: Iterable[tuple[Path, str]]) -> str:
@@ -282,6 +342,7 @@ def build_cxalloy_report_status(
     upload_manifest: Path,
     tracker_root: Path,
     prior_status_manifest: Path | None = None,
+    hash_cache: FileHashCache | None = None,
 ) -> dict[str, Any]:
     try:
         from .cxalloy_upload_plan import ReportEvidence, plan_upload
@@ -310,6 +371,7 @@ def build_cxalloy_report_status(
     prior_attempts = prior_attempts_by_target(prior_payload)
     prior_report_hashes = prior_report_hashes_by_target(trusted_prior)
     records: list[dict[str, Any]] = []
+    hash_cache = hash_cache or FileHashCache(None)
 
     for device_name in sorted(grouped_rows, key=str.casefold):
         target = target_equipment(device_name)
@@ -332,8 +394,12 @@ def build_cxalloy_report_status(
                     "report_kind": "equipment",
                 }
                 report_names.append(report_path.name)
-                if report_path.is_file() and report_path.stat().st_size > 0:
-                    digest = sha256_file(report_path)
+                try:
+                    file_stat: os.stat_result | None = report_path.stat()
+                except OSError:
+                    file_stat = None
+                if file_stat is not None and stat.S_ISREG(file_stat.st_mode) and file_stat.st_size > 0:
+                    digest = hash_cache.sha256(report_path, path_key, file_stat)
                     existing_files.append((report_path, digest))
                     report_hashes[path_key] = digest
                 else:
@@ -442,21 +508,27 @@ def build_cxalloy_report_status(
     }
 
 
-def main() -> None:
+def main(rehash: bool | None = None) -> None:
+    if rehash is None:
+        rehash = os.environ.get(REHASH_ENV, "").strip().casefold() in {"1", "true", "yes"}
     tracker_root = get_tracker_root()
     gc_directory = tracker_root / "NETA_eport_To_GC"
     rename_manifest = gc_directory / "rename_manifest.csv"
     upload_manifest = gc_directory / "cxalloy_upload_manifest.csv"
+    hash_cache = FileHashCache(HASH_CACHE_PATH, rehash=rehash)
 
     payload = build_cxalloy_report_status(
         rename_manifest,
         upload_manifest,
         tracker_root,
         prior_status_manifest=OUTPUT_PATH,
+        hash_cache=hash_cache,
     )
     write_json_payload(OUTPUT_PATH, payload)
+    hash_cache.save()
     summary = payload["summary"]
     print(f"Wrote CxAlloy report status to {OUTPUT_PATH}")
+    print(f"CxAlloy PDF hashes reused / recomputed: {hash_cache.hits} / {hash_cache.misses}")
     print(
         "CxAlloy report equipment uploaded / pending: "
         f"{summary['uploaded_equipment']} / {summary['pending_equipment']}"
@@ -464,4 +536,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    main(rehash=True if "--rehash" in sys.argv[1:] else None)

@@ -485,3 +485,96 @@ def test_bad_history_revokes_package_and_per_file_caches(tmp_path: Path, case: s
         assert record["upload_status"] == expected
         assert record["reports"][0]["upload_status"] == expected
         prior.write_text(json.dumps(payload), encoding="utf-8")
+
+
+def _hash_cache_fixture(tmp_path: Path) -> tuple[Path, Path, Path]:
+    report = tmp_path / "NETA_eport_To_GC" / "IAD06-PDU6-01A-1" / "report.pdf"
+    report.parent.mkdir(parents=True)
+    report.write_bytes(b"original")
+    rename_manifest = tmp_path / "NETA_eport_To_GC" / "rename_manifest.csv"
+    write_csv(rename_manifest, ["device_name", "output_path", "status"], [{
+        "device_name": "IAD06-PDU6-01A-1",
+        "output_path": str(report.relative_to(tmp_path)),
+        "status": "copied",
+    }])
+    upload_manifest = tmp_path / "NETA_eport_To_GC" / "cxalloy_upload_manifest.csv"
+    write_csv(upload_manifest, ["target_equipment", "sha256", "status", "error", "uploaded_at"], [{
+        "target_equipment": "PDU6-01A-1",
+        "sha256": uploader_group_hash([report]),
+        "status": "uploaded",
+        "error": "",
+        "uploaded_at": "2026-07-16T10:00:00-04:00",
+    }])
+    return report, rename_manifest, upload_manifest
+
+
+def _build_with_cache(tmp_path: Path, cache_path: Path, rehash: bool = False):
+    from scripts.etl.build_cxalloy_report_status import FileHashCache
+
+    rename_manifest = tmp_path / "NETA_eport_To_GC" / "rename_manifest.csv"
+    upload_manifest = tmp_path / "NETA_eport_To_GC" / "cxalloy_upload_manifest.csv"
+    cache = FileHashCache(cache_path, rehash=rehash)
+    payload = build_cxalloy_report_status(rename_manifest, upload_manifest, tmp_path, hash_cache=cache)
+    cache.save()
+    return payload, cache
+
+
+def test_hash_cache_reuses_unchanged_pdf_hash(tmp_path: Path, monkeypatch) -> None:
+    import scripts.etl.build_cxalloy_report_status as module
+
+    _hash_cache_fixture(tmp_path)
+    cache_path = tmp_path / "cache.json"
+    first, cache = _build_with_cache(tmp_path, cache_path)
+    assert (cache.hits, cache.misses) == (0, 1)
+    assert first["records"][0]["upload_status"] == "uploaded"
+
+    def fail(_: Path) -> str:
+        raise AssertionError("unchanged PDF must not be reopened")
+
+    monkeypatch.setattr(module, "sha256_file", fail)
+    second, cache = _build_with_cache(tmp_path, cache_path)
+    assert (cache.hits, cache.misses) == (1, 0)
+    assert second["records"] == first["records"]
+
+
+def test_hash_cache_rehashes_changed_pdf(tmp_path: Path) -> None:
+    import os
+
+    report, _, _ = _hash_cache_fixture(tmp_path)
+    cache_path = tmp_path / "cache.json"
+    _build_with_cache(tmp_path, cache_path)
+    original = report.stat()
+    report.write_bytes(b"replaced")  # same size as "original"
+    os.utime(report, ns=(original.st_atime_ns, original.st_mtime_ns + 1_000_000_000))
+
+    payload, cache = _build_with_cache(tmp_path, cache_path)
+    assert (cache.hits, cache.misses) == (0, 1)
+    assert payload["records"][0]["upload_status"] == "pending"
+    assert json.loads(cache_path.read_text())["files"].popitem()[1]["sha256"] == hashlib.sha256(b"replaced").hexdigest()
+
+
+@pytest.mark.parametrize("content", ["not json", '{"version": 999, "files": {}}', '{"version": 1, "files": []}'])
+def test_hash_cache_ignores_corrupt_or_outdated_cache(tmp_path: Path, content: str) -> None:
+    _hash_cache_fixture(tmp_path)
+    cache_path = tmp_path / "cache.json"
+    cache_path.write_text(content)
+    payload, cache = _build_with_cache(tmp_path, cache_path)
+    assert (cache.hits, cache.misses) == (0, 1)
+    assert payload["records"][0]["upload_status"] == "uploaded"
+    assert json.loads(cache_path.read_text())["version"] == 1
+
+
+def test_hash_cache_rehash_ignores_poisoned_entry(tmp_path: Path) -> None:
+    _hash_cache_fixture(tmp_path)
+    cache_path = tmp_path / "cache.json"
+    _build_with_cache(tmp_path, cache_path)
+    cache = json.loads(cache_path.read_text())
+    for entry in cache["files"].values():
+        entry["sha256"] = "0" * 64
+    cache_path.write_text(json.dumps(cache))
+
+    poisoned, _ = _build_with_cache(tmp_path, cache_path)
+    assert poisoned["records"][0]["upload_status"] == "pending"
+    rehashed, cache = _build_with_cache(tmp_path, cache_path, rehash=True)
+    assert (cache.hits, cache.misses) == (0, 1)
+    assert rehashed["records"][0]["upload_status"] == "uploaded"
