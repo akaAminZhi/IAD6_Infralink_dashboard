@@ -39,11 +39,11 @@ describe("DailyReportAuditPanel", () => {
     const user = userEvent.setup();
     render(<DailyReportAuditPanel audit={audit} />);
     expect(screen.queryByRole("option", { name: "All daily items" })).not.toBeInTheDocument();
-    expect(screen.getByLabelText("Repeat review")).toHaveValue("all");
+    expect(screen.getByLabelText("Records")).toHaveValue("all");
     expect(screen.queryByRole("columnheader", { name: "PDM / Equipment" })).not.toBeInTheDocument();
     expect(screen.queryByText("TX6-SINGLE")).not.toBeInTheDocument();
     expect(screen.getByText("TX6-SAME")).toBeInTheDocument();
-    await user.selectOptions(screen.getByLabelText("Repeat review"), "dates");
+    await user.selectOptions(screen.getByLabelText("Records"), "dates");
     expect(screen.queryByText("TX6-SAME")).not.toBeInTheDocument();
     const row = screen.getByText("TX6-REPEAT").closest("tr")!;
     expect(within(row).getByText("2026-10-01")).toBeInTheDocument();
@@ -57,18 +57,18 @@ describe("DailyReportAuditPanel", () => {
   it("separates same-day entries and retains complete history under source and date filters", async () => {
     const user = userEvent.setup();
     render(<DailyReportAuditPanel audit={audit} />);
-    await user.selectOptions(screen.getByLabelText("Repeat review"), "sameDay");
+    await user.selectOptions(screen.getByLabelText("Records"), "sameDay");
     expect(screen.getByText("TX6-SAME")).toBeInTheDocument();
     expect(screen.queryByText("TX6-REPEAT")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Reset daily review" }));
-    await user.selectOptions(screen.getByLabelText("Repeat review"), "crossSource");
+    await user.selectOptions(screen.getByLabelText("Records"), "crossSource");
     await user.selectOptions(screen.getByLabelText("Report source"), "MV_Daily_test_report");
     await user.clear(screen.getByLabelText("Repeat date through"));
     await user.type(screen.getByLabelText("Repeat date through"), "2026-10-03");
     expect(screen.queryByText("TX6-SINGLE")).not.toBeInTheDocument();
     const row = screen.getByText("TX6-REPEAT").closest("tr")!;
     expect(within(row).getByText("2026-10-01")).toBeInTheDocument();
-    await user.type(screen.getByLabelText("Search repeated items"), "TX6-SAME");
+    await user.type(screen.getByLabelText("Search test items"), "TX6-SAME");
     expect(screen.queryByText("TX6-REPEAT")).not.toBeInTheDocument();
     expect(screen.getByText("TX6-SAME")).toBeInTheDocument();
   });
@@ -99,7 +99,7 @@ describe("DailyReportAuditPanel", () => {
     await user.selectOptions(screen.getByLabelText("Report source"), "Daily_test_report");
     expect(screen.queryByText("TX6-BOUNDARY")).not.toBeInTheDocument();
     await user.selectOptions(screen.getByLabelText("Report source"), "");
-    await user.click(screen.getByRole("button", { name: "All repeat history" }));
+    await user.click(screen.getByRole("button", { name: "All dates" }));
     expect(screen.getByText("TX6-OLD")).toBeInTheDocument();
     expect(screen.queryByText("TX6-ONCE")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Reset daily review" }));
@@ -133,7 +133,7 @@ describe("DailyReportAuditPanel", () => {
     expect(screen.getByText("TX6-PAGE-11")).toBeInTheDocument();
     expect(screen.getByText("TX6-PAGE-12")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
-    await user.type(screen.getByLabelText("Search repeated items"), "TX6-PAGE-01");
+    await user.type(screen.getByLabelText("Search test items"), "TX6-PAGE-01");
     expect(screen.getByText("TX6-PAGE-01")).toBeInTheDocument();
     expect(screen.getByText("Page 1 / 1 · 10 per page")).toBeInTheDocument();
   });
@@ -148,7 +148,7 @@ describe("DailyReportAuditPanel", () => {
     render(<DailyReportAuditPanel audit={{ ...audit, items: records }} />);
     expect(screen.getByText("TX6-LINES")).toBeInTheDocument();
     expect(screen.queryByText("TX6-CROSS-CT01")).not.toBeInTheDocument();
-    await user.selectOptions(screen.getByLabelText("Repeat review"), "crossSite");
+    await user.selectOptions(screen.getByLabelText("Records"), "crossSite");
     expect(screen.queryByText("TX6-LINES")).not.toBeInTheDocument();
     expect(screen.getByText("Cross-site repeat")).toBeInTheDocument();
     await user.selectOptions(screen.getByLabelText("Test site"), "onsite");
@@ -157,9 +157,33 @@ describe("DailyReportAuditPanel", () => {
     expect(within(row).getByText("2025-01-01 · Tested / Passed")).toBeVisible();
     expect(within(row).getByText("2026-10-03 · Failed")).toBeVisible();
     expect(within(row).getByText(/offsite · Offsite Test Report/)).toBeVisible();
-    await user.click(screen.getByRole("button", { name: "All repeat history" }));
+    await user.click(screen.getByRole("button", { name: "All dates" }));
     await user.selectOptions(screen.getByLabelText("Test site"), "offsite");
     expect(screen.getByText("TX6-CROSS")).toBeInTheDocument();
+  });
+
+  it("searches all test history including single tests and switches back to repeats", async () => {
+    const user = userEvent.setup();
+    render(<DailyReportAuditPanel audit={audit} />);
+    expect(screen.queryByText("TX6-SINGLE")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /All tested items/ }));
+    expect(screen.getByLabelText("Records")).toHaveValue("history");
+    expect(screen.getByLabelText("Test date from")).toHaveValue("");
+    expect(screen.getByText("3 matching test items · full report history shown")).toBeInTheDocument();
+    expect(screen.getAllByRole("row")[1]).toHaveTextContent("TX6-SINGLE");
+    const row = screen.getByText("TX6-SINGLE").closest("tr")!;
+    expect(within(row).getByText("Single test")).toBeInTheDocument();
+    await user.type(screen.getByLabelText("Search test items"), "TX6-SINGLE");
+    expect(screen.queryByText("TX6-REPEAT")).not.toBeInTheDocument();
+    await user.clear(screen.getByLabelText("Search test items"));
+    await user.type(screen.getByLabelText("Test date through"), "2026-10-03");
+    expect(screen.queryByText("TX6-SINGLE")).not.toBeInTheDocument();
+    expect(screen.getByText("TX6-REPEAT")).toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText("Records"), "all");
+    expect(screen.getByLabelText("Repeat date through")).toHaveValue("2026-10-03");
+    await user.clear(screen.getByLabelText("Repeat date through"));
+    expect(screen.queryByText("TX6-SINGLE")).not.toBeInTheDocument();
+    expect(screen.getByText("TX6-SAME")).toBeInTheDocument();
   });
 
   it("reports unavailable data and source coverage instead of presenting false zeroes", () => {

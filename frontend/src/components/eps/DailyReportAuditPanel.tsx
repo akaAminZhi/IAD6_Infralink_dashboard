@@ -32,7 +32,7 @@ const statusLabels: Record<EpsDailyReportEvent["status"], string> = {
 };
 const inputClass = "h-9 rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring";
 const PAGE_SIZE = 10;
-type RepeatReview = "all" | "dates" | "sameDay" | "crossSource" | "crossSite";
+type RepeatReview = "history" | "all" | "dates" | "sameDay" | "crossSource" | "crossSite";
 const eventSite = (event: EpsDailyReportEvent) => event.site ??
   (event.source === "Onsite_Test_Report" ? "onsite" : event.source === "Offsite_Test_Report" ? "offsite" : "legacy");
 const crossSite = (item: EpsDailyReportItem) => item.events.some((event) => eventSite(event) === "onsite") && item.events.some((event) => eventSite(event) === "offsite");
@@ -51,7 +51,8 @@ function recentRepeatWindow() {
 function latestMatchingRepeatDate(
   item: EpsDailyReportItem, review: RepeatReview, source: string, from: string, through: string, site = "",
 ): string | undefined {
-  if (item.events.length < 2) return;
+  const history = review === "history";
+  if (!history && item.events.length < 2) return;
   if (review === "crossSite" && !crossSite(item)) return;
   if (review === "dates" && !item.repeated_on_different_dates) return;
   if (review === "sameDay" && !item.repeated_on_same_day) return;
@@ -61,7 +62,7 @@ function latestMatchingRepeatDate(
   return item.events.reduce<string | undefined>((latest, event) => {
     const laterDate = event.date > item.test_dates[0];
     const sameDayRepeat = (dateCounts.get(event.date) ?? 0) > 1;
-    const isRepeat = review === "dates" ? laterDate
+    const isRepeat = history ? true : review === "dates" ? laterDate
       : review === "sameDay" ? sameDayRepeat : (from || through) ? laterDate || sameDayRepeat : true;
     if (!isRepeat || (source && event.source !== source) || (site && eventSite(event) !== site) ||
         (from && event.date < from) || (through && event.date > through)) return latest;
@@ -98,6 +99,9 @@ export function DailyReportAuditPanel({ audit }: { audit: EpsDailyReportAudit | 
   useEffect(() => {
     if (recordsRef.current) recordsRef.current.scrollTop = 0;
   }, [currentPage, filtered]);
+  const historyMode = repeat === "history";
+  const dateLabel = historyMode ? "Test date" : "Repeat date";
+  const showAllHistory = () => { setRepeat("history"); setSearch(""); setSource(""); setSite(""); setFromDate(""); setToDate(""); setPage(1); };
   const reset = () => {
     const currentWindow = recentRepeatWindow();
     setRecentWindow(currentWindow);
@@ -107,9 +111,9 @@ export function DailyReportAuditPanel({ audit }: { audit: EpsDailyReportAudit | 
   return (
     <Card className="eps-daily-audit">
       <CardHeader className="rounded-t-lg border-b border-blue-100 bg-blue-50/70">
-        <CardTitle className="text-blue-900">Daily Reports / Repeated Tests</CardTitle>
+        <CardTitle className="text-blue-900">Daily Reports / Test History</CardTitle>
         <CardDescription>
-          All repeated test records across Legacy, Onsite and Offsite reports, including failures and retests. Defaults to repeats in the last 7 days, including today (Eastern Time); complete test item IDs identify repeats.
+          Complete test history across Legacy, Onsite and Offsite reports, including failures and retests. Choose "All test history" to search every tested item, or a repeat filter to isolate repeats. Defaults to repeats in the last 7 days, including today (Eastern Time); complete test item IDs identify repeats.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4 pt-5">
@@ -130,17 +134,23 @@ export function DailyReportAuditPanel({ audit }: { audit: EpsDailyReportAudit | 
               <div className="mt-1 text-xl font-semibold">{audit.repeated_item_count}</div>
               <div className="text-xs text-muted-foreground">Same-day repeated entries: {audit.same_day_item_count} items</div>
             </button>
+            <button className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-left text-emerald-900 transition-colors hover:bg-emerald-100" onClick={showAllHistory} type="button">
+              <div className="text-sm font-medium">All tested items</div>
+              <div className="mt-1 text-xl font-semibold">{audit.item_count}</div>
+              <div className="text-xs text-muted-foreground">{audit.event_count} test entries</div>
+            </button>
           </div>
           <div className="flex gap-2 rounded-md border border-amber-200 bg-amber-50/70 p-3 text-xs text-amber-900">
             <AlertTriangle className="h-4 w-4 shrink-0" />
             <p>Any repeated complete test item ID is included, even across sites or within one report. An Offsite test followed by an Onsite test is a cross-site repeat. Failed tests and subsequent retests remain visible. Filters retain full history. M-D filenames use the file modification year (marked *). Partial records are excluded.</p>
           </div>
           <div className="flex flex-wrap items-end gap-3 rounded-md border bg-slate-50/70 p-4">
-            <label className="flex flex-col gap-1 text-xs">Search repeated items
+            <label className="flex flex-col gap-1 text-xs">Search test items
               <input className={inputClass} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Item ID, PDM, report" value={search} />
             </label>
-            <label className="flex flex-col gap-1 text-xs">Repeat review
-              <select aria-label="Repeat review" className={inputClass} onChange={(event) => { setRepeat(event.target.value as RepeatReview); setPage(1); }} value={repeat}>
+            <label className="flex flex-col gap-1 text-xs">Records
+              <select aria-label="Records" className={inputClass} onChange={(event) => { setRepeat(event.target.value as RepeatReview); setPage(1); }} value={repeat}>
+                <option value="history">All test history (repeated and single)</option>
                 <option value="all">All repeated records</option>
                 <option value="crossSite">Cross-site repeated tests</option>
                 <option value="dates">Repeated on different dates</option>
@@ -158,14 +168,14 @@ export function DailyReportAuditPanel({ audit }: { audit: EpsDailyReportAudit | 
                 <option value="">All sites</option><option value="onsite">Onsite</option><option value="offsite">Offsite</option><option value="legacy">Legacy</option>
               </select>
             </label>
-            <label className="flex flex-col gap-1 text-xs">Repeat date from<input className={inputClass} onChange={(event) => { setFromDate(event.target.value); setPage(1); }} type="date" value={fromDate} /></label>
-            <label className="flex flex-col gap-1 text-xs">Repeat date through<input className={inputClass} onChange={(event) => { setToDate(event.target.value); setPage(1); }} type="date" value={toDate} /></label>
-            <button className={inputClass} onClick={() => { setFromDate(""); setToDate(""); setPage(1); }} type="button">All repeat history</button>
+            <label className="flex flex-col gap-1 text-xs">{dateLabel} from<input className={inputClass} onChange={(event) => { setFromDate(event.target.value); setPage(1); }} type="date" value={fromDate} /></label>
+            <label className="flex flex-col gap-1 text-xs">{dateLabel} through<input className={inputClass} onChange={(event) => { setToDate(event.target.value); setPage(1); }} type="date" value={toDate} /></label>
+            <button className={inputClass} onClick={() => { setFromDate(""); setToDate(""); setPage(1); }} type="button">All dates</button>
             <button className={inputClass} onClick={reset} type="button">Reset daily review</button>
           </div>
-          <div className="rounded-md bg-blue-50 px-3 py-2 text-sm text-blue-900">{filtered.length} matching repeated items · full report history shown</div>
-          <div aria-label="Repeated test records" className="h-[800px] overflow-auto overscroll-contain rounded-md border [overflow-anchor:none]" ref={recordsRef} role="region" tabIndex={0}>
-          {visible.length === 0 ? <p className="py-6 text-sm text-muted-foreground">No repeated test items match these filters.</p> :
+          <div className="rounded-md bg-blue-50 px-3 py-2 text-sm text-blue-900">{filtered.length} matching {historyMode ? "test" : "repeated"} items · full report history shown</div>
+          <div aria-label="Daily report test records" className="h-[800px] overflow-auto overscroll-contain rounded-md border [overflow-anchor:none]" ref={recordsRef} role="region" tabIndex={0}>
+          {visible.length === 0 ? <p className="py-6 text-sm text-muted-foreground">{historyMode ? "No test items match these filters." : "No repeated test items match these filters."}</p> :
             <table className="w-full min-w-[950px] text-left text-sm">
               <thead className="sticky top-0 z-10 border-b bg-background text-xs uppercase text-muted-foreground"><tr>
                 <th className="px-3 py-2">Test item / Equipment ID</th>
@@ -179,6 +189,7 @@ export function DailyReportAuditPanel({ audit }: { audit: EpsDailyReportAudit | 
                 <td className="px-3 py-3">{item.test_dates.slice(1).join(", ") || "—"}</td>
                 <td className="min-w-[350px] px-3 py-3">
                   <div className="mb-2 flex flex-wrap gap-1">
+                    {item.events.length === 1 && <StatusBadge tone="muted">Single test</StatusBadge>}
                     {item.repeated_on_different_dates && <StatusBadge tone="warning">Repeated across dates</StatusBadge>}
                     {item.repeated_on_same_day && <StatusBadge tone="muted">Same-day entries</StatusBadge>}
                     {item.cross_source && <StatusBadge tone="muted">Multiple sources</StatusBadge>}
