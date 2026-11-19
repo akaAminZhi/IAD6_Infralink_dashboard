@@ -64,6 +64,7 @@ export interface AutoSyncStatus {
   active_run_id?: string | null;
   active_mode?: AutoSyncMode | null;
   current_step?: string | null;
+  owned_by_other?: boolean;
 }
 
 export interface SessionStatus {

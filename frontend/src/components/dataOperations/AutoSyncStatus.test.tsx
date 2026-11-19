@@ -129,3 +129,32 @@ describe("AutoSyncPanel interval editor", () => {
     expect(validateIntervals("10", "1441")).toMatch(/Full interval/);
   });
 });
+
+describe("AutoSyncPanel for another operator's auto-sync", () => {
+  it("shows the state read-only without a log link", () => {
+    const onSave = vi.fn();
+    render(
+      <AutoSyncPanel
+        onSaveIntervals={onSave}
+        onShowRun={vi.fn()}
+        status={{ ...base, state: "running", armed: true, owned_by_other: true, active_mode: "light", interval_minutes: 10, full_interval_minutes: 60 }}
+      />,
+    );
+    expect(screen.getByRole("status")).toHaveTextContent("Auto-sync running (another operator)");
+    expect(screen.getByRole("status")).toHaveTextContent("takes it over with your session");
+    expect(screen.getByRole("status")).toHaveTextContent("Light every 10 min · full every 60 min");
+    expect(screen.queryByLabelText("Light sync interval (minutes)")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "View log" })).not.toBeInTheDocument();
+  });
+
+  it("hides the other operator's stop reason", () => {
+    render(<AutoSyncPanel status={{ ...base, state: "stopped", owned_by_other: true, stopped_reason: "secret" }} />);
+    expect(screen.getByRole("status")).toHaveTextContent("Another operator's auto-sync stopped");
+    expect(screen.getByRole("status")).not.toHaveTextContent("secret");
+  });
+
+  it("labels the badge", () => {
+    render(<AutoSyncBadge status={{ ...base, state: "on", armed: true, owned_by_other: true }} />);
+    expect(screen.getByTestId("auto-sync-badge")).toHaveTextContent("Auto-sync on (another operator)");
+  });
+});

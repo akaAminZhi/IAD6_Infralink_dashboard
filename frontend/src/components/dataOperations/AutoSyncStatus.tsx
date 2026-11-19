@@ -75,6 +75,7 @@ export function AutoSyncBadge({ status }: { status: AutoSyncStatusData | undefin
     >
       <span className={cn("h-2 w-2 rounded-full", DOT_TONE[current.state])} />
       {STATE_LABEL[current.state]}
+      {current.owned_by_other ? " (another operator)" : null}
     </span>
   );
 }
@@ -103,6 +104,7 @@ export function AutoSyncPanel({ status, onShowRun, onSaveIntervals }: AutoSyncPa
   }, [editing, saved.light, saved.full]);
 
   const dirty = light !== String(saved.light) || full !== String(saved.full);
+  const ownedByOther = Boolean(current.owned_by_other);
 
   async function save() {
     const problem = validateIntervals(light, full);
@@ -147,9 +149,14 @@ export function AutoSyncPanel({ status, onShowRun, onSaveIntervals }: AutoSyncPa
     detail = "Sync is due; it will run after the current task finishes.";
   } else if (current.state === "stopped") {
     icon = <AlertTriangle className="h-4 w-4 shrink-0" />;
-    detail = `Stopped: ${current.stopped_reason ?? "unknown reason"} Run Daily Data Refresh to resume.`;
+    detail = ownedByOther
+      ? "Another operator's auto-sync stopped. Run Daily Data Refresh to start yours."
+      : `Stopped: ${current.stopped_reason ?? "unknown reason"} Run Daily Data Refresh to resume.`;
   } else {
     detail = "Starts after a successful manual Daily Data Refresh and runs until the service restarts.";
+  }
+  if (ownedByOther && current.state !== "stopped") {
+    detail += " · Your successful Daily Data Refresh takes it over with your session.";
   }
 
   return (
@@ -163,11 +170,14 @@ export function AutoSyncPanel({ status, onShowRun, onSaveIntervals }: AutoSyncPa
     >
       <div className="flex min-w-0 items-center gap-2">
         {icon}
-        <span className="font-semibold">{STATE_LABEL[current.state]}</span>
+        <span className="font-semibold">
+          {STATE_LABEL[current.state]}
+          {ownedByOther ? " (another operator)" : null}
+        </span>
         <span className="min-w-0 break-words">{detail}</span>
       </div>
       <div className="flex flex-wrap items-center gap-3 text-xs">
-        {onSaveIntervals ? (
+        {onSaveIntervals && !ownedByOther ? (
           <form
             className="flex flex-wrap items-center gap-1.5"
             onSubmit={(event) => {

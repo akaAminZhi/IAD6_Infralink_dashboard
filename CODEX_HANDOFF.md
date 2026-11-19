@@ -20,6 +20,10 @@
   `PUT /api/automation/auto-sync/settings`. The values persist in
   `runtime/automation/auto_sync_settings.json` (gitignored) and reschedule a
   waiting sync immediately.
+- Multi-user: there is one global auto-sync. It runs with the session of the
+  operator whose manual refresh most recently succeeded; another operator's
+  successful manual refresh takes it over. Non-owners see it read-only as
+  `owned_by_other` and get 403 on the settings endpoint.
 - Tests: `scripts/tests/test_automation_auto_sync.py`, `AutoSyncStatus.test.tsx`.
   JC2 has not been tested live yet.
 

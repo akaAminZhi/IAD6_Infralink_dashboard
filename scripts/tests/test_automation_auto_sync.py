@@ -254,3 +254,45 @@ def test_settings_api_updates_intervals(tmp_path: Path) -> None:
     assert client.get("/api/automation/health").json()["auto_sync"]["full_interval_minutes"] == 45
     assert client.put(url, json={"light_minutes": 20, "full_minutes": 10}).status_code == 422
     assert client.put(url, json={"light_minutes": 0, "full_minutes": 10}).status_code == 422
+
+
+def test_non_owner_sees_global_auto_sync_but_cannot_edit(tmp_path: Path) -> None:
+    from fastapi.testclient import TestClient
+
+    from scripts.automation.api import create_app
+    from scripts.automation.auth import require_operator
+
+    manager, clock, _ = make_manager(tmp_path)
+    app = create_app(manager.config, manager)
+    client = TestClient(app)
+    manual_pipeline(manager)  # owned by local_operator
+    clock.now += manager.auto_sync_interval_s
+    run_id = manager._auto_sync_tick()
+    with manager._lock:
+        manager._runs[run_id]["status"] = "running"
+
+    app.dependency_overrides[require_operator] = lambda: "user_other"
+    other = client.get("/api/automation/health").json()["auto_sync"]
+    assert other["state"] == "running"
+    assert other["owned_by_other"] is True
+    assert other["active_run_id"] is None
+    assert "owner_user_id" not in other
+    url = "/api/automation/auto-sync/settings"
+    assert client.put(url, json={"light_minutes": 5, "full_minutes": 30}).status_code == 403
+
+    app.dependency_overrides[require_operator] = lambda: "local_operator"
+    owner = client.get("/api/automation/health").json()["auto_sync"]
+    assert owner["owned_by_other"] is False
+    assert owner["active_run_id"] == run_id
+    assert client.put(url, json={"light_minutes": 5, "full_minutes": 30}).status_code == 200
+
+    # The other operator's successful manual refresh takes the single auto-sync over.
+    finish(manager, run_id, "succeeded")
+    run = manager._new_run(kind="pipeline", label="Daily Data Refresh", steps=list(DAILY_PIPELINE),
+                           options={}, owner_user_id="user_other")
+    finish(manager, run["run_id"], "succeeded")
+    assert manager.auto_sync_status()["owner_user_id"] == "user_other"
+    clock.now += manager.auto_sync_interval_s
+    next_run = manager._auto_sync_tick()
+    assert manager.get_run(next_run)["owner_user_id"] == "user_other"
+    assert manager._auto_sync_tick() is None  # still one auto-sync, never two

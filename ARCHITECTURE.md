@@ -476,6 +476,11 @@ Operators can edit the light and full intervals (whole minutes, 1-1440, full >=
 light) on the Auto-sync panel. Edits go to `PUT /api/automation/auto-sync/settings`,
 are saved to `runtime/automation/auto_sync_settings.json`, override the environment
 defaults, and reschedule a waiting sync from the previous run's finish time.
+Auto-sync is one global schedule, not one per operator. Each auto run uses the JC2
+session of the operator whose manual refresh most recently succeeded; a successful
+manual refresh by another operator takes it over. Other operators see its state as
+`owned_by_other`, without the owner's ID, run ID or stop reason, and cannot change
+its intervals (403).
 Onsite/Offsite daily-report endpoints accept a fixed site enum and ISO date
 filenames. Their three-section editor preserves duplicate evidence. Saves are
 atomic and schedule the allowlisted wash job; saved evidence remains recoverable

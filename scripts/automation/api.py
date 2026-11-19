@@ -220,10 +220,14 @@ def create_app(
     )
 
     def auto_sync_for(user_id: str) -> dict[str, Any]:
+        # One global auto-sync: non-owners see its state (without the owner's
+        # identity or run id) but cannot change or cancel it.
         status = task_manager.auto_sync_status()
         owner = status.pop("owner_user_id", None)
-        if status["state"] != "off" and not visible({"owner_user_id": owner}, user_id):
-            return {"state": "off", "armed": False}
+        owned_by_other = status["state"] != "off" and not visible({"owner_user_id": owner}, user_id)
+        status["owned_by_other"] = owned_by_other
+        if owned_by_other:
+            status["active_run_id"] = None
         return status
 
     @app.get("/api/automation/access")
