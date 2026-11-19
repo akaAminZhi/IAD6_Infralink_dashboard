@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { NetaReportManifest } from "../types/data";
 import {
+  getGcReportRecord,
   getNetaReportCount,
   getNetaReportLinks,
   getNetaReportNames,
@@ -108,5 +109,20 @@ describe("netaReports", () => {
     ] };
     expect(getNetaReportLinks("FDR-EQ1-EQ2.pdf", data, "FDR-EQ1-EQ2")[0]?.url).toBe("/gc/cable.pdf");
     expect(getNetaReportLinks("FDR-EQ1-EQ2.pdf", data, "EQ-2")).toEqual([]);
+  });
+});
+
+describe("getGcReportRecord", () => {
+  it("returns the scoped GC record with its Tracker hash for renaming", () => {
+    const data: NetaReportManifest = { records: [
+      { source_key: "downloaded", equipment_id: "EQ-1", report_name: "orig.pdf", url: "/o/orig.pdf" },
+      { source_key: "gc", equipment_id: "EQ-1", report_name: "EQ-1-A.pdf", source_report_name: "orig.pdf",
+        relative_path: "EQ-1/EQ-1-A.pdf", source_sha256: "a".repeat(64), url: "/gc/EQ-1-A.pdf" },
+      { source_key: "gc", equipment_id: "EQ-2", report_name: "EQ-2-A.pdf", source_report_name: "orig.pdf",
+        relative_path: "EQ-2/EQ-2-A.pdf", url: "/gc/EQ-2-A.pdf" },
+    ] };
+    expect(getGcReportRecord("orig.pdf", data, "EQ-1")?.relative_path).toBe("EQ-1/EQ-1-A.pdf");
+    expect(getGcReportRecord("orig.pdf", data, "EQ-1")?.source_sha256).toBe("a".repeat(64));
+    expect(getGcReportRecord("missing.pdf", data, "EQ-1")).toBeNull();
   });
 });

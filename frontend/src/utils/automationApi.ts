@@ -39,6 +39,30 @@ export function decideNetaDuplicate(matchId: string, revision: string, action: "
   });
 }
 
+export interface NetaGcRenamePreview {
+  device: string;
+  old_name: string;
+  new_name: string;
+  will_queue_cxalloy: boolean;
+}
+
+function gcRenameBody(reportFile: string, newName: string, expectedSha256: string) {
+  return JSON.stringify({ report_file: reportFile, new_name: newName, expected_sha256: expectedSha256, confirmed: true });
+}
+
+/** Read-only Tracker preflight; local operator only. */
+export function previewNetaGcRename(reportFile: string, newName: string, expectedSha256: string) {
+  return request<NetaGcRenamePreview>("/neta-report-names/preview", {
+    method: "POST", body: gcRenameBody(reportFile, newName, expectedSha256),
+  });
+}
+
+export function renameNetaGcReport(reportFile: string, newName: string, expectedSha256: string) {
+  return request<AutomationRun>("/neta-report-names", {
+    method: "POST", body: gcRenameBody(reportFile, newName, expectedSha256),
+  });
+}
+
 export function getAutomationRun(runId: string) {
   return request<AutomationRun>(`/runs/${encodeURIComponent(runId)}`);
 }

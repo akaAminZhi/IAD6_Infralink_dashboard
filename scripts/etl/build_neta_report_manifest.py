@@ -103,9 +103,33 @@ def read_gc_source_report_lookup(gc_directory: Path) -> dict[str, dict[str, str]
             lookup[output_relative.casefold()] = {
                 "source_report_name": Path(source_relative).name,
                 "equipment_id": (row.get("device_name") or Path(source_relative).parent.name).strip(),
+                "source_sha256": (row.get("source_sha256") or "").strip() or None,
+                "parsed_source": (row.get("parsed_source") or "").strip() or None,
+                "identifier_version": (row.get("identifier_version") or "").strip() or None,
             }
 
     return lookup
+
+
+def read_pending_cxalloy_renames(gc_directory: Path) -> dict[tuple[str, str], dict[str, Any]]:
+    """Index queued operator renames by (equipment, current GC file name)."""
+    path = gc_directory / "pending_cxalloy_renames.json"
+    if not path.exists():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {}
+    pending = payload.get("pending") if isinstance(payload, dict) else None
+    result: dict[tuple[str, str], dict[str, Any]] = {}
+    for entry in pending if isinstance(pending, list) else []:
+        if not isinstance(entry, dict) or not entry.get("device") or not entry.get("new_name"):
+            continue
+        result[(str(entry["device"]).casefold(), str(entry["new_name"]).casefold())] = {
+            key: entry.get(key) for key in (
+                "old_name", "new_name", "status", "last_error", "requested_at", "attempts")
+        }
+    return result
 
 
 def create_public_directory_link(public_directory: Path, source_directory: Path) -> dict[str, Any]:
@@ -174,6 +198,11 @@ def build_records_for_source(
         if source["source_key"] == "gc"
         else {}
     )
+    pending_renames = (
+        read_pending_cxalloy_renames(source_directory)
+        if source["source_key"] == "gc"
+        else {}
+    )
     records: list[dict[str, Any]] = []
 
     for file_path in sorted(source_directory.rglob("*")):
@@ -211,6 +240,11 @@ def build_records_for_source(
                 bytes=file_path.stat().st_size,
                 modified_at=metadata["modified_at"],
                 report_stage="temporary" if temporary else "formal",
+                source_sha256=gc_metadata.get("source_sha256"),
+                parsed_source=gc_metadata.get("parsed_source"),
+                identifier_version=gc_metadata.get("identifier_version"),
+                pending_cxalloy_rename=pending_renames.get(
+                    ((equipment_id or "").casefold(), file_path.name.casefold())),
             ).to_dict()
         )
 

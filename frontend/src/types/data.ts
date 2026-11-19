@@ -199,6 +199,21 @@ export interface NetaReportFileRecord {
   url?: string | null;
   bytes?: number | null;
   modified_at?: string | null;
+  /** GC only: SHA-256 bound in the Tracker rename manifest; required to rename. */
+  source_sha256?: string | null;
+  parsed_source?: string | null;
+  identifier_version?: string | null;
+  pending_cxalloy_rename?: NetaPendingCxalloyRename | null;
+}
+
+/** An operator GC rename the next CxAlloy upload still has to apply. */
+export interface NetaPendingCxalloyRename {
+  old_name?: string | null;
+  new_name?: string | null;
+  status?: string | null;
+  last_error?: string | null;
+  requested_at?: string | null;
+  attempts?: number | null;
 }
 
 export interface NetaReportManifest {

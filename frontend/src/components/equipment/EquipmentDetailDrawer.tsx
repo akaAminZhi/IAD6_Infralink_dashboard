@@ -1,6 +1,7 @@
 import { AlertTriangle, CheckCircle2, ChevronRight, CircleHelp, Repeat2, X, XCircle } from "lucide-react";
 import { useId, useState } from "react";
 
+import { useDashboardResources } from "../../contexts/DashboardResourcesContext";
 import { useNetaReportManifest } from "../../contexts/NetaReportManifestContext";
 import { NetaDuplicatePanel } from "../common/NetaDuplicatePanel";
 import { NetaDuplicateBadge } from "../common/NetaDuplicateBadge";
@@ -21,6 +22,7 @@ import {
   type FlattenedEquipmentRow,
 } from "../../utils/equipmentUtils";
 import {
+  getGcReportRecord,
   hasGcNetaReportLinks,
   type NetaReportNameMode,
 } from "../../utils/netaReports";
@@ -39,6 +41,7 @@ import { CxalloyReportUploadPanel } from "./CxalloyReportUploadPanel";
 import { EquipmentNetaBadge } from "./EquipmentNetaBadge";
 import { EquipmentCableAtpEvidence } from "./EquipmentCableAtpEvidence";
 import { EquipmentPdmAssociations } from "./EquipmentPdmAssociations";
+import { NetaGcNameEditor, useLocalGcRenameAccess } from "./NetaGcNameEditor";
 
 interface EquipmentDetailDrawerProps {
   cableIndex?: ConnectedCableIndex | null;
@@ -48,6 +51,8 @@ interface EquipmentDetailDrawerProps {
   netaReviewsEditable?: boolean;
   onClose: () => void;
   onNetaReportReviewUpdated: (review: NetaReportReview) => void;
+  /** Called after a GC report rename so review results can be reloaded. */
+  onNetaReportsChanged?: () => void;
 }
 
 function valueOrDash(value: string | number | boolean | null | undefined): string {
@@ -115,15 +120,19 @@ function NetaReportNames({
   equipmentId,
   reviews,
   onReviewUpdated,
+  onReportsChanged,
   editable,
 }: {
   value: string | null;
   equipmentId: string | null;
   reviews: NetaReportReviewsResponse | null;
   onReviewUpdated: (review: NetaReportReview) => void;
+  onReportsChanged?: () => void;
   editable: boolean;
 }) {
   const manifest = useNetaReportManifest();
+  const manifestResource = useDashboardResources(["netaReportManifest"]);
+  const canRenameGc = useLocalGcRenameAccess();
   const disclosureId = useId();
   const [expandedReports, setExpandedReports] = useState<Set<string>>(new Set());
   const [nameMode, setNameMode] = useState<NetaReportNameMode>("original");
@@ -196,12 +205,23 @@ function NetaReportNames({
           const expanded = expandedReports.has(reportKey);
           const hasDetails = evidenceReviews.length > 0 || editable && matchedReviews.length > 0;
           const panelId = `${disclosureId}-${reportIndex}`;
+          const gcRecord = getGcReportRecord(reportName, manifest, equipmentId);
           return (
             <li className="min-w-0" data-review-status={primaryStatus ?? "NOT_CHECKED"} key={reportName}>
               <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 px-3 py-2.5">
                 <div className="col-span-2 min-w-0">
                   <NetaReportChips equipmentId={equipmentId} compactNameMode={nameMode}
                     reports={[reportName]} showLinkedFileNames listAppearance showDuplicateBadge={false} className="grid-cols-1 lg:grid-cols-1" />
+                  {gcRecord ? (
+                    <NetaGcNameEditor
+                      canRename={canRenameGc}
+                      onRenamed={async () => {
+                        await manifestResource.refresh();
+                        onReportsChanged?.();
+                      }}
+                      record={gcRecord}
+                    />
+                  ) : null}
                 </div>
                 <div className="flex flex-wrap items-center gap-1.5">
                   <span className={cn("inline-flex w-fit items-center gap-1.5 whitespace-nowrap rounded border px-2 py-0.5 text-[11px] font-medium", tone.container, tone.label)}>
@@ -270,6 +290,7 @@ export function EquipmentDetailDrawer({
   netaReviewsEditable = false,
   onClose,
   onNetaReportReviewUpdated,
+  onNetaReportsChanged,
 }: EquipmentDetailDrawerProps) {
   if (!equipment) {
     return null;
@@ -353,6 +374,7 @@ export function EquipmentDetailDrawer({
                     equipmentId={equipment.equipment_id}
                     editable={netaReviewsEditable}
                     onReviewUpdated={onNetaReportReviewUpdated}
+                    onReportsChanged={onNetaReportsChanged}
                     reviews={netaReportReviews}
                     value={equipment.neta_test_report}
                   />

@@ -1,3 +1,4 @@
+import { useNetaReportManifest } from "../../contexts/NetaReportManifestContext";
 import type { CxalloyReportFileStatus } from "../../types/data";
 import type { FlattenedEquipmentRow } from "../../utils/equipmentUtils";
 import { NetaReportChips } from "../common/NetaReportChips";
@@ -41,6 +42,10 @@ export function CxalloyReportUploadPanel({ equipment }: { equipment: FlattenedEq
   const equipmentReports = reports?.filter((report) => report.report_kind === "equipment") ?? [];
   const cableReports = reports?.filter((report) => report.report_kind === "cable") ?? [];
   const status = equipmentStatus(equipmentReports);
+  const manifest = useNetaReportManifest();
+  const equipmentKey = equipment.equipment_id?.trim().toLowerCase() ?? "";
+  const pendingRenames = (manifest?.records ?? []).filter((record) => record.source_key === "gc"
+    && record.pending_cxalloy_rename && record.equipment_id?.trim().toLowerCase() === equipmentKey);
   const lastAttemptSucceeded = ["uploaded", "skipped_existing_on_site", "skipped_manifest_uploaded"]
     .includes(equipment.cxalloy_last_attempt_status?.trim().toLowerCase() ?? "");
 
@@ -52,6 +57,12 @@ export function CxalloyReportUploadPanel({ equipment }: { equipment: FlattenedEq
           Upload status for downloaded reports. Equipment and cable reports are tracked separately.
         </p>
       </div>
+      {pendingRenames.length > 0 ? (
+        <p role="status" className="rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900">
+          {pendingRenames.length} renamed GC report(s) pending on CxAlloy. The next Upload CxAlloy Reports run
+          deletes the old attachment and uploads the renamed PDF.
+        </p>
+      ) : null}
       {reports == null ? (
         <p className="text-sm text-muted-foreground">Refresh report status data to show equipment and cable uploads separately.</p>
       ) : (

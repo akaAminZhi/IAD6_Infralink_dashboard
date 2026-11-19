@@ -66,6 +66,24 @@ export function getNetaReportLinks(
   manifest: NetaReportManifest | null,
   equipmentId?: string | null,
 ): NetaReportLink[] {
+  return resolveNetaReportLinks(reportName, manifest, equipmentId).map(({ link }) => link);
+}
+
+/** The GC copy behind a JC2 report name, using the same ownership rules as its link. */
+export function getGcReportRecord(
+  reportName: string,
+  manifest: NetaReportManifest | null,
+  equipmentId?: string | null,
+): NetaReportFileRecord | null {
+  return resolveNetaReportLinks(reportName, manifest, equipmentId)
+    .find(({ link }) => link.sourceKey === "gc")?.record ?? null;
+}
+
+function resolveNetaReportLinks(
+  reportName: string,
+  manifest: NetaReportManifest | null,
+  equipmentId?: string | null,
+): { link: NetaReportLink; record: NetaReportFileRecord }[] {
   const lookupKey = normalizeReportKey(reportName);
   if (!lookupKey || !manifest?.records?.length) {
     return [];
@@ -106,15 +124,16 @@ export function getNetaReportLinks(
       }
       seenUrls.add(url);
 
-      return [
-        {
+      return [{
+        record,
+        link: {
           sourceKey: String(record.source_key ?? "report"),
           sourceLabel: String(record.source_label ?? "Report"),
           url,
           fileName: String(record.report_name ?? reportName),
           reportStage: record.report_stage ?? "formal",
         },
-      ];
+      }];
     });
 
   return links;

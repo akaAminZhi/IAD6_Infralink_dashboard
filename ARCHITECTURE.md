@@ -27,6 +27,17 @@ decision or rescanning PDFs. React reloads this resource in place; loaded routes
 filters and drawers remain mounted. Static readers use the published snapshot;
 mutations require the existing operator API and both updated checkouts.
 
+GC report names are renamed from the Equipment drawer only by the loopback
+`local_operator` (Clerk sessions are read only). The drawer previews through
+`POST /neta-report-names/preview`, then `POST /neta-report-names` schedules the
+hidden `rename_neta_gc_report` job with the GC relative path, new name and the
+manifest `source_sha256`. Both the endpoint and `TaskManager.start_job` reject
+other identities. The worker calls Tracker `neta_report_rename.py`, which renames
+the PDF, manifest and lifecycle together and queues a CxAlloy replacement when
+the equipment was already uploaded; the next CxAlloy upload deletes the old
+attachment and uploads the renamed PDF. The worker then republishes the report
+manifest (with `pending_cxalloy_rename`) and the static review snapshot.
+
 ## Purpose
 
 The IAD6 Infralink Dashboard combines engineering exports and locally managed

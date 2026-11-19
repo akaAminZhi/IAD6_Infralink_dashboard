@@ -1,4 +1,4 @@
-import { useDeferredValue, useEffect, useMemo, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Database, ShieldCheck } from "lucide-react";
 
@@ -16,7 +16,8 @@ import { EquipmentTable } from "../components/equipment/EquipmentTable";
 import type { DashboardData, NetaReportManifest } from "../types/data";
 import { getEquipmentDuplicates } from "../utils/netaDuplicates";
 import type { NetaReportReview, NetaReportReviewsResponse } from "../types/automation";
-import { loadNetaReportReviews } from "../utils/loadNetaReportReviews";
+import { clearPublishedNetaReviewCache, loadNetaReportReviews } from "../utils/loadNetaReportReviews";
+import { clearNetaReportReviewCache } from "../utils/automationApi";
 import {
   flattenEquipmentFromPdms,
   getCasesMissingIssueImageCount,
@@ -321,6 +322,7 @@ export function EquipmentPage({ data }: EquipmentPageProps) {
   const [netaReportReviews, setNetaReportReviews] =
     useState<NetaReportReviewsResponse | null>(null);
   const [netaReviewsEditable, setNetaReviewsEditable] = useState(false);
+  const [netaReviewsReload, setNetaReviewsReload] = useState(0);
   const deferredFilters = useDeferredValue(filters);
   const cableIndex = useMemo(() => buildConnectedCableIndex(data.layoutPlanManifest, data.netaReportManifest), [data.layoutPlanManifest, data.netaReportManifest]);
 
@@ -339,6 +341,13 @@ export function EquipmentPage({ data }: EquipmentPageProps) {
     return () => {
       cancelled = true;
     };
+  }, [netaReviewsReload]);
+
+  const handleNetaReportsChanged = useCallback(() => {
+    // A GC rename moves review results to the new file path.
+    clearNetaReportReviewCache();
+    clearPublishedNetaReviewCache();
+    setNetaReviewsReload((value) => value + 1);
   }, []);
 
   const equipmentRows = useMemo(
@@ -547,6 +556,7 @@ export function EquipmentPage({ data }: EquipmentPageProps) {
         netaReviewsEditable={netaReviewsEditable}
         onClose={() => setSelectedEquipment(null)}
         onNetaReportReviewUpdated={handleNetaReportReviewUpdated}
+        onNetaReportsChanged={handleNetaReportsChanged}
       />
     </div>
   );

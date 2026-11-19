@@ -34,6 +34,8 @@ from scripts.automation.neta_report_reviews import (
 )
 from scripts.automation.runner import AutomationConfig, TaskManager
 from scripts.automation.auth import require_operator
+from scripts.automation import neta_report_rename
+from scripts.automation.neta_report_rename import LOCAL_OPERATOR
 from scripts.automation.browser_login import BrowserLoginManager, KEYS, WIDTH, HEIGHT
 
 
@@ -101,6 +103,14 @@ class NetaReportReviewRequest(BaseModel):
 
     file: str = Field(min_length=1, max_length=500)
     status: str = Field(pattern=r"^(PASSED|FAILED)$")
+
+
+class NetaReportRenameRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    report_file: str = Field(min_length=5, max_length=300)
+    new_name: str = Field(min_length=1, max_length=154)
+    expected_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    confirmed: bool = False
 
 
 class NetaDuplicateDecisionRequest(BaseModel):
@@ -501,6 +511,38 @@ def create_app(
                 owner_user_id=user_id)
         except PermissionError as exc:
             raise HTTPException(status_code=403, detail=str(exc)) from exc
+        except (OSError, ValueError, RuntimeError) as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    def require_local_operator(user_id: str | None) -> None:
+        if user_id != LOCAL_OPERATOR:
+            raise HTTPException(status_code=403,
+                                detail="GC report renaming is only available to the local operator.")
+
+    @app.post("/api/automation/neta-report-names/preview")
+    def preview_neta_report_rename(request: NetaReportRenameRequest,
+                                   user_id: str = Depends(require_operator)) -> dict[str, Any]:
+        require_local_operator(user_id)
+        try:
+            return neta_report_rename.validate_rename(resolved_config.eps_root, request.report_file,
+                                               request.new_name, request.expected_sha256)
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (OSError, ValueError) as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    @app.post("/api/automation/neta-report-names", status_code=202)
+    def rename_neta_report(request: NetaReportRenameRequest,
+                           user_id: str = Depends(require_operator)) -> dict[str, Any]:
+        require_local_operator(user_id)
+        try:
+            return task_manager.start_job("rename_neta_gc_report",
+                request.model_dump(exclude={"confirmed"}), confirmed=request.confirmed,
+                owner_user_id=user_id)
+        except PermissionError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
         except (OSError, ValueError, RuntimeError) as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
 

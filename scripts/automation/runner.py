@@ -103,6 +103,12 @@ JOB_DEFINITIONS: dict[str, JobDefinition] = {
         "dashboard", "scripts/automation/neta_duplicates.py",
         ("match_id", "expected_revision", "action"),
     ),
+    "rename_neta_gc_report": JobDefinition(
+        "rename_neta_gc_report", "Rename GC NETA Report",
+        "Rename one GC report PDF in the Tracker; queue the CxAlloy name fix for the next upload.",
+        "dashboard", "scripts/automation/neta_report_rename.py",
+        ("report_file", "new_name", "expected_sha256"),
+    ),
     "refresh_neta_duplicate_evidence": JobDefinition(
         "refresh_neta_duplicate_evidence", "Refresh NETA Duplicate Evidence",
         "Rebuild report links and duplicate evidence without changing decisions.",
@@ -174,6 +180,9 @@ JOB_DEFINITIONS: dict[str, JobDefinition] = {
     ),
 }
 
+# Parameterized write-back jobs run only through their dedicated, validated endpoints.
+HIDDEN_JOBS = {"update_neta_duplicate_decision", "rename_neta_gc_report"}
+
 DAILY_PIPELINE = (
     "preflight",
     "refresh_jc2_exports",
@@ -207,7 +216,7 @@ class TaskManager:
                 "dangerous": definition.dangerous,
             }
             for definition in JOB_DEFINITIONS.values()
-            if definition.job_id != "update_neta_duplicate_decision"
+            if definition.job_id not in HIDDEN_JOBS
         ]
 
     def has_active_run(self) -> bool:
@@ -250,6 +259,16 @@ class TaskManager:
                 raise ValueError("Duplicate match, revision and action are required.")
             validate_decision(self.config.eps_root, normalized_options['match_id'],
                               normalized_options['expected_revision'], normalized_options['action'])
+        if job_id == "rename_neta_gc_report":
+            from scripts.automation.neta_report_rename import LOCAL_OPERATOR, validate_rename
+            if owner_user_id != LOCAL_OPERATOR:
+                raise PermissionError("GC report renaming is only available to the local operator.")
+            if not confirmed:
+                raise PermissionError("GC report renaming requires explicit operator confirmation.")
+            if set(normalized_options) != {"report_file", "new_name", "expected_sha256"}:
+                raise ValueError("Report file, new name and expected SHA-256 are required.")
+            validate_rename(self.config.eps_root, normalized_options["report_file"],
+                            normalized_options["new_name"], normalized_options["expected_sha256"])
         if definition.dangerous and not normalized_options.get("dry_run") and not confirmed:
             raise PermissionError("CxAlloy upload requires explicit confirmation.")
         run = self._new_run(
@@ -657,6 +676,11 @@ class TaskManager:
                 command.extend(["--" + key.replace('_', '-'), normalized[key]])
             command.extend(["--tracker-root", str(self.config.eps_root), "--actor", owner_user_id or "local_operator"])
             return command, cwd
+        if job_id == "rename_neta_gc_report":
+            for key in ("report_file", "new_name", "expected_sha256"):
+                command.extend(["--" + key.replace('_', '-'), normalized[key]])
+            command.extend(["--tracker-root", str(self.config.eps_root), "--actor", owner_user_id or ""])
+            return command, cwd
         if job_id == "refresh_jc2_exports":
             selected = normalized.get("only") or ["all"]
             command.extend(["--only", selected[0]])
@@ -706,6 +730,26 @@ class TaskManager:
                 if not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{64}", value):
                     raise ValueError("Invalid duplicate identity or revision.")
                 normalized[key] = value
+            elif key == "expected_sha256":
+                import re
+                if not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{64}", value):
+                    raise ValueError("Invalid report SHA-256.")
+                normalized[key] = value
+            elif key == "report_file":
+                import re
+                text = value.replace("\\", "/") if isinstance(value, str) else ""
+                if (not text or len(text) > 300 or not text.lower().endswith(".pdf")
+                        or text.startswith("/") or re.match(r"^[A-Za-z]:", text)
+                        or any(part in {"", ".", ".."} for part in text.split("/"))
+                        or re.search(r"[\x00-\x1f]", text)):
+                    raise ValueError("Invalid GC report path.")
+                normalized[key] = text
+            elif key == "new_name":
+                import re
+                text = value.strip() if isinstance(value, str) else ""
+                if not text or len(text) > 154 or re.search(r'[\\/:*?"<>|\x00-\x1f]', text):
+                    raise ValueError('Report name must be 1-150 characters without \\ / : * ? " < > |.')
+                normalized[key] = text
             elif key == "action":
                 if value not in {"confirm", "revoke"}:
                     raise ValueError("Invalid duplicate decision action.")

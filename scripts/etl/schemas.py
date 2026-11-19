@@ -198,6 +198,12 @@ class NetaReportFileRecord(SchemaRecord):
     bytes: int
     modified_at: str
     report_stage: Literal["temporary", "formal"] = "formal"
+    # GC-only provenance from the Tracker rename manifest; source_sha256 doubles
+    # as the optimistic-concurrency token for operator renames.
+    source_sha256: str | None = None
+    parsed_source: str | None = None
+    identifier_version: str | None = None
+    pending_cxalloy_rename: dict[str, Any] | None = None
 
 
 @dataclass(slots=True)
