@@ -1,5 +1,20 @@
 ﻿# Codex Handoff
 
+## Current update (2026-11-19): Daily Data Refresh runs NETA post-processing once
+
+- `scripts/automation/runner.py` adds `PIPELINE_STEP_ARGS`. In the Daily Data
+  Refresh only, `download_neta_reports` gets `--skip-post` and
+  `organize_gc_reports` gets `--after-download`, so the Tracker runs NETA
+  organize/cable/formal/result/duplicate processing once, after the Feeder Cable
+  ATP and issue downloads. Standalone jobs are unchanged. Requires the matching
+  Tracker change; see its `CODEX_HANDOFF.md` (2026-11-19) for the persisted
+  hash cache (`--rehash` / `IAD6_NETA_REHASH=1`).
+- Real-data result on a no-change day: NETA post 24.6s, 0 MiB hashed, outputs
+  identical to the pre-change snapshot. Dashboard ETL optimizations (workbook
+  cache stat pre-check, duplicate `rebuild_summary`, snapshots) are deferred.
+- Tests: `python -m pytest scripts/tests/test_automation_runner.py
+  scripts/tests/test_personal_sessions.py` 22 passed (+1 new).
+
 ## Current update (2026-11-17): Equipment connected cables / energization ready
 
 - Replaced Equipment's EPS Test Items column/detail panel with connected cables

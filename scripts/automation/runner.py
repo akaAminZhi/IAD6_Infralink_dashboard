@@ -194,6 +194,13 @@ DAILY_PIPELINE = (
     "run_dashboard_etl",
 )
 
+# Pipeline-only flags: NETA post-processing runs once, after the Feeder Cable ATP
+# and issue downloads, instead of in both the NETA download and organize steps.
+PIPELINE_STEP_ARGS: dict[str, tuple[str, ...]] = {
+    "download_neta_reports": ("--skip-post",),
+    "organize_gc_reports": ("--after-download",),
+}
+
 
 class TaskManager:
     def __init__(self, config: AutomationConfig | None = None) -> None:
@@ -483,6 +490,7 @@ class TaskManager:
                         step["job_id"],
                         options,
                         login=run["kind"] == "login",
+                        pipeline=run["kind"] == "pipeline",
                     )
 
                 with self._lock:
@@ -553,6 +561,7 @@ class TaskManager:
         options: dict[str, Any],
         *,
         login: bool,
+        pipeline: bool = False,
     ) -> tuple[int, str | None, bool]:
         owner = self.get_run(run_id).get("owner_user_id")
         provider = AUTH_PROVIDERS.get(job_id)
@@ -560,7 +569,7 @@ class TaskManager:
             message = f"Your {provider.upper()} session is missing. Use Refresh login."
             self._append_log(run_id, message + "\n")
             return 2, message, True
-        command, cwd = self.build_command(job_id, options, owner_user_id=owner)
+        command, cwd = self.build_command(job_id, options, owner_user_id=owner, pipeline=pipeline)
         self._append_log(run_id, f"Working directory: {cwd}\n")
         self._append_log(run_id, f"Command: {' '.join(command)}\n")
         process = subprocess.Popen(
@@ -645,7 +654,8 @@ class TaskManager:
         return 0, None, False
 
     def build_command(
-        self, job_id: str, options: dict[str, Any] | None = None, *, owner_user_id: str | None = None
+        self, job_id: str, options: dict[str, Any] | None = None, *, owner_user_id: str | None = None,
+        pipeline: bool = False,
     ) -> tuple[list[str], Path]:
         options = options or {}
         if job_id == "login_jc2":
@@ -697,6 +707,8 @@ class TaskManager:
             command.extend(["--limit", str(normalized["limit"])])
         if normalized.get("no_excel_update"):
             command.append("--no-excel-update")
+        if pipeline:
+            command.extend(PIPELINE_STEP_ARGS.get(job_id, ()))
         provider = AUTH_PROVIDERS.get(job_id)
         if owner_user_id and provider:
             command.extend(["--auth-state", str(self.config.session_path(owner_user_id, provider))])

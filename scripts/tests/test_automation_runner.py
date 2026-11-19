@@ -183,3 +183,16 @@ def test_cxalloy_runs_tracker_directly_with_force_and_personal_session(tmp_path:
         "--auth-state", str(manager.config.session_path("user_operator", "cxalloy")),
     ]
     assert cwd == manager.config.eps_root
+
+
+def test_daily_pipeline_runs_neta_post_processing_once_after_downloads(tmp_path: Path) -> None:
+    manager = TaskManager(make_config(tmp_path))
+    download, _ = manager.build_command("download_neta_reports", {"force": True}, pipeline=True)
+    organize, _ = manager.build_command("organize_gc_reports", {"force": True}, pipeline=True)
+    assert download[3:] == ["--force", "--skip-post"]
+    assert organize[3:] == ["--force", "--after-download"]
+
+    standalone, _ = manager.build_command("download_neta_reports", {})
+    standalone_organize, _ = manager.build_command("organize_gc_reports", {})
+    assert "--skip-post" not in standalone
+    assert "--after-download" not in standalone_organize
