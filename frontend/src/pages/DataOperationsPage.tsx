@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { AutoSyncBadge, AutoSyncPanel } from "../components/dataOperations/AutoSyncStatus";
 import { DailyReportDialog } from "../components/dataOperations/DailyReportDialog";
 import { BrowserLoginDialog } from "../components/dataOperations/BrowserLoginDialog";
 import { Button } from "../components/ui/button";
@@ -48,6 +49,7 @@ import {
   runAutomationJob,
   disconnectProvider,
   startDailyPipeline,
+  updateAutoSyncSettings,
 } from "../utils/automationApi";
 import { usePolling } from "../hooks/usePolling";
 import { cn } from "../utils/cn";
@@ -444,9 +446,12 @@ export function DataOperationsPage({ onDashboardReload }: DataOperationsPageProp
             Local data refresh, report entry, and controlled external operations.
           </p>
         </div>
-        <div className="inline-flex items-center gap-2 text-sm text-emerald-700">
-          <span className="h-2 w-2 rounded-full bg-emerald-500" />
-          Local service connected
+        <div className="flex flex-wrap items-center gap-4">
+          <AutoSyncBadge status={health.auto_sync} />
+          <div className="inline-flex items-center gap-2 text-sm text-emerald-700">
+            <span className="h-2 w-2 rounded-full bg-emerald-500" />
+            Local service connected
+          </div>
         </div>
       </div>
 
@@ -647,7 +652,7 @@ export function DataOperationsPage({ onDashboardReload }: DataOperationsPageProp
           <div>
             <h2 className="text-lg font-semibold tracking-normal">Daily Data Refresh</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Stops on the first failed step and resumes from that point.
+              Stops on the first failed step and resumes from that point. A successful run turns on auto-sync.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -660,12 +665,13 @@ export function DataOperationsPage({ onDashboardReload }: DataOperationsPageProp
                 <RotateCcw className="mr-2 h-4 w-4" /> Resume Failed Run
               </Button>
             ) : null}
-            {activeRun?.kind === "pipeline" ? (
+            {activeRun?.kind === "pipeline" || activeRun?.kind === "auto_sync" ? (
               <Button
                 onClick={() => void perform(() => cancelAutomationRun(activeRun.run_id))}
                 variant="outline"
               >
-                <CircleStop className="mr-2 h-4 w-4" /> Cancel
+                <CircleStop className="mr-2 h-4 w-4" />
+                {activeRun.kind === "auto_sync" ? "Cancel & Stop Auto-sync" : "Cancel"}
               </Button>
             ) : (
               <Button
@@ -681,6 +687,14 @@ export function DataOperationsPage({ onDashboardReload }: DataOperationsPageProp
             )}
           </div>
         </div>
+        <AutoSyncPanel
+          status={health.auto_sync}
+          onShowRun={setSelectedRunId}
+          onSaveIntervals={async (lightMinutes, fullMinutes) => {
+            await updateAutoSyncSettings({ light_minutes: lightMinutes, full_minutes: fullMinutes });
+            await refreshService();
+          }}
+        />
         <div className="grid divide-y md:grid-cols-7 md:divide-x md:divide-y-0">
           {pipelineSteps.map((step, index) => (
             <div className="min-w-0 p-4" key={`${step.job_id}-${index}`}>

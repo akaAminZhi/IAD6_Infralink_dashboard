@@ -1,5 +1,6 @@
 import type {
   AutomationHealth,
+  AutoSyncStatus,
   BrowserLoginSession,
   BrowserLoginAction,
   AutomationJob,
@@ -144,6 +145,13 @@ export function startDailyPipeline(options: { headed: boolean; force: boolean })
   return request<AutomationRun>("/pipelines/daily/runs", {
     method: "POST",
     body: JSON.stringify(options),
+  });
+}
+
+export function updateAutoSyncSettings(settings: { light_minutes: number; full_minutes: number }) {
+  return request<AutoSyncStatus>("/auto-sync/settings", {
+    method: "PUT",
+    body: JSON.stringify(settings),
   });
 }
 

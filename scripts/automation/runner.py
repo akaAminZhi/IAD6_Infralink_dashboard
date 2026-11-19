@@ -201,9 +201,42 @@ PIPELINE_STEP_ARGS: dict[str, tuple[str, ...]] = {
     "organize_gc_reports": ("--after-download",),
 }
 
+# Auto-sync: after a successful manual Daily Data Refresh, keep local data and the
+# saved JC2 session fresh until the service stops. Light syncs run every
+# interval (measured from the previous run's end); the full pipeline replaces a
+# light sync at most once per full interval. State lives only in memory.
+LIGHT_SYNC_PIPELINE = (
+    "preflight",
+    "refresh_jc2_exports",
+    "wash_daily_reports",
+    "run_dashboard_etl",
+)
+PIPELINE_KINDS = {"pipeline", "auto_sync"}
+AUTO_SYNC_HISTORY_LIMIT = 20
+RUN_HISTORY_LIMIT = 50
+AUTO_SYNC_POLL_S = 15.0
+AUTO_SYNC_SETTINGS_FILE = "auto_sync_settings.json"
+AUTO_SYNC_MAX_MINUTES = 24 * 60
+
+
+def _env_seconds(name: str, default: float) -> float:
+    try:
+        value = float(os.environ.get(name, default))
+    except ValueError:
+        return default
+    return value if value > 0 else default
+
+
+def _iso_from_epoch(value: float | None) -> str | None:
+    if value is None:
+        return None
+    return datetime.fromtimestamp(value, timezone.utc).isoformat()
+
 
 class TaskManager:
-    def __init__(self, config: AutomationConfig | None = None) -> None:
+    def __init__(
+        self, config: AutomationConfig | None = None, *, start_auto_sync: bool = True
+    ) -> None:
         self.config = config or AutomationConfig.discover()
         self.config.runtime_root.mkdir(parents=True, exist_ok=True)
         self._lock = threading.RLock()
@@ -211,7 +244,31 @@ class TaskManager:
         self._active_run_id: str | None = None
         self._process: subprocess.Popen[str] | None = None
         self._cancel_requested = False
+        self._clock = time.time
+        self.auto_sync_interval_s = _env_seconds("IAD6_AUTO_SYNC_INTERVAL_S", 600)
+        self.auto_full_interval_s = _env_seconds("IAD6_AUTO_FULL_INTERVAL_S", 3600)
+        self._auto: dict[str, Any] = {
+            "armed": False,
+            "owner_user_id": None,
+            "armed_at": None,
+            "next_run_at": None,
+            "last_full_at": None,
+            "last_success_at": None,
+            "stopped_reason": None,
+            "stopped_at": None,
+            "waiting_for_idle": False,
+            "active_run_id": None,
+            "active_mode": None,
+            "exports": None,
+            "last_finished_at": None,
+        }
+        self._auto_shutdown = threading.Event()
+        self._load_auto_sync_settings()
         self._load_runs()
+        if start_auto_sync:
+            threading.Thread(
+                target=self._auto_sync_loop, name="automation-auto-sync", daemon=True
+            ).start()
 
     def jobs_public(self) -> list[dict[str, Any]]:
         return [
@@ -240,7 +297,7 @@ class TaskManager:
                 (self._copy_run(run) for run in self._runs.values()),
                 key=lambda run: run["created_at"],
                 reverse=True,
-            )[:50]
+            )[: RUN_HISTORY_LIMIT + AUTO_SYNC_HISTORY_LIMIT]
 
     def get_run(self, run_id: str) -> dict[str, Any]:
         with self._lock:
@@ -481,6 +538,10 @@ class TaskManager:
                     self._persist(run)
                 self._append_log(run_id, f"\n--- {step['label']} ---\n")
 
+                track_exports = (
+                    run["kind"] == "auto_sync" and step["job_id"] == "refresh_jc2_exports"
+                )
+                exports_before = self._export_snapshot() if track_exports else set()
                 if step["job_id"] == "preflight":
                     exit_code, error, auth_required = self._run_preflight(run_id)
                 else:
@@ -490,8 +551,10 @@ class TaskManager:
                         step["job_id"],
                         options,
                         login=run["kind"] == "login",
-                        pipeline=run["kind"] == "pipeline",
+                        pipeline=run["kind"] in PIPELINE_KINDS,
                     )
+                if track_exports and exit_code == 0 and not self._cancel_requested:
+                    self._prune_superseded_auto_exports(run_id, exports_before)
 
                 with self._lock:
                     run = self._require_run(run_id)
@@ -553,6 +616,8 @@ class TaskManager:
                 self._process = None
                 self._active_run_id = None
                 self._cancel_requested = False
+                if run is not None:
+                    self._on_run_finished(run)
 
     def _run_process(
         self,
@@ -715,7 +780,7 @@ class TaskManager:
         return command, cwd
 
     def _options_for_step(self, run: dict[str, Any], job_id: str) -> dict[str, Any]:
-        if run["kind"] != "pipeline":
+        if run["kind"] not in PIPELINE_KINDS:
             return dict(run["options"])
         definition = self._job(job_id)
         options: dict[str, Any] = {}
@@ -784,6 +849,237 @@ class TaskManager:
                         raise ValueError("JC2 export filter must be all, system, system_elements, or case.")
                 normalized[key] = cleaned
         return normalized
+
+    # ----- Auto-sync -------------------------------------------------------
+
+    def auto_sync_status(self) -> dict[str, Any]:
+        with self._lock:
+            auto = dict(self._auto)
+            active = self._runs.get(auto["active_run_id"]) if auto["active_run_id"] else None
+            current_step = None
+            if active is not None and active.get("current_step"):
+                current_step = self._step_label(active["current_step"])
+            if active is not None and active.get("status") in ACTIVE_STATUSES:
+                state = "running"
+            elif auto["armed"] and auto["waiting_for_idle"]:
+                state = "waiting_for_idle"
+            elif auto["armed"]:
+                state = "on"
+            elif auto["stopped_reason"]:
+                state = "stopped"
+            else:
+                state = "off"
+            next_full_at = None
+            if auto["armed"] and auto["last_full_at"] is not None:
+                next_full_at = max(
+                    auto["last_full_at"] + self.auto_full_interval_s,
+                    auto["next_run_at"] or 0,
+                )
+            running = state == "running"
+            return {
+                "state": state,
+                "armed": bool(auto["armed"]),
+                "interval_minutes": round(self.auto_sync_interval_s / 60),
+                "full_interval_minutes": round(self.auto_full_interval_s / 60),
+                "owner_user_id": auto["owner_user_id"],
+                "interval_seconds": int(self.auto_sync_interval_s),
+                "full_interval_seconds": int(self.auto_full_interval_s),
+                "armed_at": _iso_from_epoch(auto["armed_at"]),
+                "next_run_at": _iso_from_epoch(auto["next_run_at"]) if auto["armed"] else None,
+                "next_full_at": _iso_from_epoch(next_full_at),
+                "last_full_at": _iso_from_epoch(auto["last_full_at"]),
+                "last_success_at": _iso_from_epoch(auto["last_success_at"]),
+                "stopped_reason": auto["stopped_reason"],
+                "stopped_at": _iso_from_epoch(auto["stopped_at"]),
+                "waiting_for_idle": bool(auto["armed"] and auto["waiting_for_idle"]),
+                "active_run_id": auto["active_run_id"] if running else None,
+                "active_mode": auto["active_mode"] if running else None,
+                "current_step": current_step if running else None,
+            }
+
+    def update_auto_sync_settings(self, light_minutes: int, full_minutes: int) -> dict[str, Any]:
+        """Change the light/full intervals; reschedules a waiting auto-sync."""
+        for value in (light_minutes, full_minutes):
+            if isinstance(value, bool) or not isinstance(value, int):
+                raise ValueError("Intervals must be whole minutes.")
+        if not 1 <= light_minutes <= AUTO_SYNC_MAX_MINUTES:
+            raise ValueError(f"Light sync interval must be 1-{AUTO_SYNC_MAX_MINUTES} minutes.")
+        if not light_minutes <= full_minutes <= AUTO_SYNC_MAX_MINUTES:
+            raise ValueError(
+                f"Full sync interval must be between the light interval and {AUTO_SYNC_MAX_MINUTES} minutes."
+            )
+        with self._lock:
+            self.auto_sync_interval_s = float(light_minutes * 60)
+            self.auto_full_interval_s = float(full_minutes * 60)
+            auto = self._auto
+            if auto["armed"] and auto["active_run_id"] is None:
+                base = auto["last_finished_at"] or self._clock()
+                auto["next_run_at"] = base + self.auto_sync_interval_s
+            payload = json.dumps(
+                {"light_minutes": light_minutes, "full_minutes": full_minutes}, indent=2
+            )
+        path = self.config.runtime_root / AUTO_SYNC_SETTINGS_FILE
+        temporary = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
+        try:
+            temporary.write_text(payload, encoding="utf-8")
+            os.replace(temporary, path)
+        except OSError:
+            temporary.unlink(missing_ok=True)
+            path.write_text(payload, encoding="utf-8")
+        return self.auto_sync_status()
+
+    def _load_auto_sync_settings(self) -> None:
+        path = self.config.runtime_root / AUTO_SYNC_SETTINGS_FILE
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            light = int(data["light_minutes"])
+            full = int(data["full_minutes"])
+        except (OSError, ValueError, KeyError, TypeError, json.JSONDecodeError):
+            return
+        if 1 <= light <= AUTO_SYNC_MAX_MINUTES and light <= full <= AUTO_SYNC_MAX_MINUTES:
+            self.auto_sync_interval_s = float(light * 60)
+            self.auto_full_interval_s = float(full * 60)
+
+    def stop_auto_sync(self, reason: str) -> None:
+        with self._lock:
+            self._auto.update(
+                {
+                    "armed": False,
+                    "next_run_at": None,
+                    "waiting_for_idle": False,
+                    "stopped_reason": reason,
+                    "stopped_at": self._clock(),
+                }
+            )
+
+    def shutdown_auto_sync(self) -> None:
+        self._auto_shutdown.set()
+
+    def _auto_sync_loop(self) -> None:
+        while not self._auto_shutdown.wait(AUTO_SYNC_POLL_S):
+            try:
+                self._auto_sync_tick()
+            except Exception:  # pragma: no cover - keep the scheduler alive
+                continue
+
+    def _auto_sync_tick(self) -> str | None:
+        """Start an auto-sync run when one is due and the service is idle."""
+        now = self._clock()
+        with self._lock:
+            auto = self._auto
+            if not auto["armed"] or auto["next_run_at"] is None or now < auto["next_run_at"]:
+                auto["waiting_for_idle"] = False
+                return None
+            if self._active_run_id is not None:
+                auto["waiting_for_idle"] = True
+                return None
+            full = (
+                auto["last_full_at"] is None
+                or now - auto["last_full_at"] >= self.auto_full_interval_s
+            )
+            mode = "full" if full else "light"
+            run = self._new_run(
+                kind="auto_sync",
+                label="Auto Sync (full)" if full else "Auto Sync (light)",
+                steps=list(DAILY_PIPELINE if full else LIGHT_SYNC_PIPELINE),
+                options={"headed": False, "force": False},
+                owner_user_id=auto["owner_user_id"],
+            )
+            run["auto_mode"] = mode
+            self._persist(run)
+            auto.update(
+                {"waiting_for_idle": False, "active_run_id": run["run_id"], "active_mode": mode}
+            )
+            run_id = run["run_id"]
+        self._start_worker(run_id, 0)
+        return run_id
+
+    def _on_run_finished(self, run: dict[str, Any]) -> None:
+        now = self._clock()
+        kind = run.get("kind")
+        status = run.get("status")
+        with self._lock:
+            auto = self._auto
+            if kind in PIPELINE_KINDS:
+                auto["last_finished_at"] = now
+            if kind == "pipeline" and status == "succeeded":
+                auto.update(
+                    {
+                        "armed": True,
+                        "owner_user_id": run.get("owner_user_id"),
+                        "armed_at": now,
+                        "next_run_at": now + self.auto_sync_interval_s,
+                        "last_full_at": now,
+                        "last_success_at": now,
+                        "stopped_reason": None,
+                        "stopped_at": None,
+                        "waiting_for_idle": False,
+                    }
+                )
+            elif kind == "auto_sync":
+                auto.update({"active_run_id": None, "active_mode": None})
+                if status == "succeeded":
+                    auto["last_success_at"] = now
+                    if run.get("auto_mode") == "full":
+                        auto["last_full_at"] = now
+                    if auto["armed"]:
+                        auto["next_run_at"] = now + self.auto_sync_interval_s
+                else:
+                    self.stop_auto_sync(
+                        run.get("error") or f"Auto sync ended with status {status}."
+                    )
+
+    def _export_dirs(self) -> list[Path]:
+        return [
+            self.config.eps_root / "Excel" / "system_elements",
+            self.config.eps_root / "Excel" / "case",
+            self.config.dashboard_root / "raw_data" / "system_elements",
+            self.config.dashboard_root / "raw_data" / "cases",
+        ]
+
+    def _export_snapshot(self) -> set[Path]:
+        files: set[Path] = set()
+        for folder in self._export_dirs():
+            if folder.is_dir():
+                files.update(path for path in folder.glob("*.xlsx") if path.is_file())
+        return files
+
+    @staticmethod
+    def _export_family(path: Path) -> tuple[Path, str]:
+        return path.parent, path.name.split("_", 1)[0].casefold()
+
+    def _prune_superseded_auto_exports(self, run_id: str, before: set[Path]) -> None:
+        """Delete the previous same-day auto-sync export once a newer one exists.
+
+        Manual exports and earlier days are never touched. Every ETL selector picks
+        the newest export per date, so dashboard outputs are unchanged.
+        """
+        new_files = self._export_snapshot() - before
+        today = datetime.now().date().isoformat()
+        with self._lock:
+            previous = self._auto.get("exports") or {}
+            self._auto["exports"] = {
+                "date": today,
+                "files": sorted(str(path) for path in new_files),
+            }
+        if previous.get("date") != today:
+            return
+        replaced = {self._export_family(path) for path in new_files}
+        removed: list[str] = []
+        for value in previous.get("files", []):
+            path = Path(value)
+            if path in new_files or self._export_family(path) not in replaced:
+                continue
+            try:
+                path.unlink(missing_ok=True)
+                removed.append(path.name)
+            except OSError as exc:
+                self._append_log(run_id, f"WARNING: could not remove {path}: {exc}\n")
+        if removed:
+            self._append_log(
+                run_id,
+                "Removed superseded same-day auto-sync exports: " + ", ".join(removed) + "\n",
+            )
 
     def _job(self, job_id: str) -> JobDefinition:
         if job_id not in JOB_DEFINITIONS:
@@ -888,11 +1184,17 @@ class TaskManager:
         self._trim_history()
 
     def _trim_history(self) -> None:
+        # Auto-sync runs are trimmed separately so frequent background syncs
+        # never push manual runs and their logs out of the history window.
         ordered = sorted(
             self._runs.values(), key=lambda run: run.get("created_at", ""), reverse=True
         )
-        for run in ordered[50:]:
+        auto = [run for run in ordered if run.get("kind") == "auto_sync"]
+        manual = [run for run in ordered if run.get("kind") != "auto_sync"]
+        for run in [*manual[RUN_HISTORY_LIMIT:], *auto[AUTO_SYNC_HISTORY_LIMIT:]]:
             run_id = run["run_id"]
+            if run_id == self._active_run_id:
+                continue
             self._record_path(run_id).unlink(missing_ok=True)
             self._log_path(run_id).unlink(missing_ok=True)
             self._runs.pop(run_id, None)

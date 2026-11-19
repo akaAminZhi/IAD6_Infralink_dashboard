@@ -64,6 +64,13 @@ class PipelineRunRequest(BaseModel):
     force: bool = False
 
 
+class AutoSyncSettingsRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    light_minutes: int = Field(ge=1, le=1440)
+    full_minutes: int = Field(ge=1, le=1440)
+
+
 class DailyReportRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -178,6 +185,7 @@ def create_app(
     @asynccontextmanager
     async def lifespan(app):
         yield
+        task_manager.shutdown_auto_sync()
         login_manager.shutdown()
     app = FastAPI(title="IAD6 Dashboard Automation", version="1.0.0",
                   dependencies=[Depends(require_operator)], lifespan=lifespan)
@@ -211,6 +219,13 @@ def create_app(
         allow_headers=["Content-Type", "Authorization"],
     )
 
+    def auto_sync_for(user_id: str) -> dict[str, Any]:
+        status = task_manager.auto_sync_status()
+        owner = status.pop("owner_user_id", None)
+        if status["state"] != "off" and not visible({"owner_user_id": owner}, user_id):
+            return {"state": "off", "armed": False}
+        return status
+
     @app.get("/api/automation/access")
     def access(user_id: str = Depends(require_operator)) -> dict[str, str]:
         return {"user_id": user_id}
@@ -234,6 +249,7 @@ def create_app(
             },
             "active_run_id": own_active_id,
             "busy": bool(active_id),
+            "auto_sync": auto_sync_for(user_id),
             "session_scope": "personal",
             "last_etl": _last_etl_status(resolved_config),
         }
@@ -287,6 +303,19 @@ def create_app(
             return task_manager.start_daily_pipeline(request.model_dump(), owner_user_id=user_id)
         except (RuntimeError, ValueError) as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    @app.put("/api/automation/auto-sync/settings")
+    def update_auto_sync_settings(
+        request: AutoSyncSettingsRequest, user_id: str = Depends(require_operator)
+    ) -> dict[str, Any]:
+        current = task_manager.auto_sync_status()
+        if current["state"] != "off" and not visible({"owner_user_id": current["owner_user_id"]}, user_id):
+            raise HTTPException(403, "Auto-sync belongs to another operator.")
+        try:
+            task_manager.update_auto_sync_settings(request.light_minutes, request.full_minutes)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return auto_sync_for(user_id)
 
     @app.post("/api/automation/runs/{run_id}/resume", status_code=202)
     def resume_run(run_id: str, user_id: str = Depends(require_operator)) -> dict[str, Any]:

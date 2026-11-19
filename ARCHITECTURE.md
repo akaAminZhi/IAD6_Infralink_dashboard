@@ -462,6 +462,20 @@ API groups:
 The daily pipeline runs preflight, JC2 workbook refresh, daily report wash,
 NETA/Feeder ATP/issue downloads, GC organization, and dashboard ETL. It stops at
 the first failure and can resume from a failed/auth-required/interrupted step.
+A successful manual daily pipeline turns on in-memory auto-sync. `TaskManager`
+then starts an `auto_sync` run 10 minutes after the previous run finishes
+(`IAD6_AUTO_SYNC_INTERVAL_S`). Each run is a light sync (preflight, JC2 export,
+wash, ETL), except at most once per hour (`IAD6_AUTO_FULL_INTERVAL_S`), when the
+full pipeline runs instead. If another task is active, the due run waits. Any
+auto run that fails, needs auth, or is cancelled turns auto-sync off until the
+next successful manual refresh. A service restart also turns it off. A new
+auto-sync export deletes the previous auto-sync export from the same day; manual
+exports and exports from earlier days are kept. Auto runs keep their own
+20-run history. `/api/automation/health` reports the state as `auto_sync`.
+Operators can edit the light and full intervals (whole minutes, 1-1440, full >=
+light) on the Auto-sync panel. Edits go to `PUT /api/automation/auto-sync/settings`,
+are saved to `runtime/automation/auto_sync_settings.json`, override the environment
+defaults, and reschedule a waiting sync from the previous run's finish time.
 Onsite/Offsite daily-report endpoints accept a fixed site enum and ISO date
 filenames. Their three-section editor preserves duplicate evidence. Saves are
 atomic and schedule the allowlisted wash job; saved evidence remains recoverable

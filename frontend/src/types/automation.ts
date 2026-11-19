@@ -21,7 +21,8 @@ export interface AutomationRunStep {
 export interface AutomationRun {
   owner_user_id?: string | null;
   run_id: string;
-  kind: "job" | "pipeline" | "login";
+  kind: "job" | "pipeline" | "login" | "auto_sync";
+  auto_mode?: AutoSyncMode;
   label: string;
   status: AutomationRunStatus;
   created_at: string;
@@ -40,6 +41,29 @@ export interface AutomationJob {
   description: string;
   supported_options: string[];
   dangerous: boolean;
+}
+
+export type AutoSyncMode = "light" | "full";
+export type AutoSyncState = "off" | "on" | "running" | "waiting_for_idle" | "stopped";
+
+export interface AutoSyncStatus {
+  state: AutoSyncState;
+  armed: boolean;
+  interval_seconds?: number;
+  interval_minutes?: number;
+  full_interval_minutes?: number;
+  full_interval_seconds?: number;
+  armed_at?: string | null;
+  next_run_at?: string | null;
+  next_full_at?: string | null;
+  last_full_at?: string | null;
+  last_success_at?: string | null;
+  stopped_reason?: string | null;
+  stopped_at?: string | null;
+  waiting_for_idle?: boolean;
+  active_run_id?: string | null;
+  active_mode?: AutoSyncMode | null;
+  current_step?: string | null;
 }
 
 export interface SessionStatus {
@@ -62,6 +86,7 @@ export interface AutomationHealth {
     cxalloy: SessionStatus;
   };
   active_run_id: string | null;
+  auto_sync?: AutoSyncStatus;
   last_etl: {
     path: string;
     generated_at: string | null;

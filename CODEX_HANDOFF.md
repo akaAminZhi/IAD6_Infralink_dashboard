@@ -1,5 +1,28 @@
 ﻿# Codex Handoff
 
+## Current update (2026-11-19): Auto-sync after a manual Daily Data Refresh
+
+- When a manual Daily Data Refresh succeeds, `TaskManager` (`scripts/automation/runner.py`)
+  turns on in-memory auto-sync. It runs an `auto_sync` light sync (preflight, JC2
+  export, wash, ETL) 10 minutes after the previous run ends. At most once per
+  hour it runs the full `DAILY_PIPELINE` instead. Override the intervals with
+  `IAD6_AUTO_SYNC_INTERVAL_S` / `IAD6_AUTO_FULL_INTERVAL_S`.
+- When a due run finds another task active, it waits until that task finishes.
+  A failed, auth-required or cancelled auto run turns auto-sync off until the
+  next successful manual refresh. A service restart also turns it off.
+- Each new auto-sync export deletes the previous auto-sync export from the same
+  day in `Excel/` and `raw_data/`. Manual exports and earlier days are never
+  deleted.
+- Auto runs keep a separate 20-run history. `/api/automation/health` returns
+  `auto_sync`. The UI is `components/dataOperations/AutoSyncStatus.tsx`: a
+  header badge plus a panel in the Daily Data Refresh card.
+- The Auto-sync panel has inline Light/Full minute inputs that call
+  `PUT /api/automation/auto-sync/settings`. The values persist in
+  `runtime/automation/auto_sync_settings.json` (gitignored) and reschedule a
+  waiting sync immediately.
+- Tests: `scripts/tests/test_automation_auto_sync.py`, `AutoSyncStatus.test.tsx`.
+  JC2 has not been tested live yet.
+
 ## Current update (2026-11-19): Daily Data Refresh runs NETA post-processing once
 
 - `scripts/automation/runner.py` adds `PIPELINE_STEP_ARGS`. In the Daily Data
