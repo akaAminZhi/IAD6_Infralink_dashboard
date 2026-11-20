@@ -99,6 +99,21 @@ describe("NetaGcNameEditor", () => {
     expect(rename).not.toHaveBeenCalled();
   });
 
+  it("offers the PDF-derived name as a pre-filled rename without submitting it", async () => {
+    const user = userEvent.setup();
+    const preview = vi.spyOn(api, "previewNetaGcRename");
+    render(<NetaGcNameEditor canRename onRenamed={vi.fn()} record={record} suggestedName="EQ-1-RIGHT.pdf" />);
+    expect(screen.getByText("EQ-1-RIGHT.pdf")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Use suggested GC name for EQ-1-WRONG.pdf" }));
+    expect(screen.getByRole("textbox", { name: "New GC report name" })).toHaveValue("EQ-1-RIGHT");
+    expect(preview).not.toHaveBeenCalled();
+  });
+
+  it("hides a suggestion that equals the current name", () => {
+    render(<NetaGcNameEditor canRename onRenamed={vi.fn()} record={record} suggestedName="EQ-1-WRONG.pdf" />);
+    expect(screen.queryByText(/PDF header suggests/)).not.toBeInTheDocument();
+  });
+
   it("requires a Tracker hash before offering rename", () => {
     render(<NetaGcNameEditor canRename onRenamed={vi.fn()} record={{ ...record, source_sha256: null }} />);
     expect(screen.queryByRole("button", { name: /Rename GC report/ })).not.toBeInTheDocument();

@@ -5,7 +5,9 @@ import { Database, ShieldCheck } from "lucide-react";
 import { EmptyState } from "../components/common/EmptyState";
 import { EquipmentDetailDrawer } from "../components/equipment/EquipmentDetailDrawer";
 import {
+  baselineFilterLabels,
   EquipmentFilters,
+  type EquipmentBaselineFilter,
   type EquipmentFiltersState,
 } from "../components/equipment/EquipmentFilters";
 import {
@@ -36,6 +38,14 @@ import { matchesSearchQuery } from "../utils/searchUtils";
 import { getEquipmentNetaReviewState, type EquipmentNetaReviewState } from "../utils/netaReportReviews";
 import { formatNumber } from "../utils/formatters";
 import { buildConnectedCableIndex, equipmentEnergizationReadiness, type ConnectedCableIndex } from "../utils/connectedCables";
+import type { NetaPositionCheck } from "../types/netaPositions";
+import { loadNetaPositionCheck } from "../utils/loadNetaPositionCheck";
+import {
+  buildNetaPositionIndex,
+  findNetaPositionEntry,
+  matchesBaselineFilter,
+  type NetaPositionIndex,
+} from "../utils/netaPositions";
 import "./EquipmentPage.css";
 
 interface EquipmentPageProps {
@@ -60,6 +70,7 @@ const defaultFilters: EquipmentFiltersState = {
   netaReportReviewRequiredOnly: false,
   duplicateReports: "",
   energizationReady: "",
+  baselineIssue: "",
 };
 
 function normalizeFilterValue(value: unknown): string {
@@ -73,11 +84,15 @@ function filterEquipmentRows(
   reviewStates: Map<string, EquipmentNetaReviewState | null>,
   manifest: NetaReportManifest | null,
   cableIndex: ConnectedCableIndex | null,
+  positionIndex: NetaPositionIndex = new Map(),
 ): FlattenedEquipmentRow[] {
   const equipmentSearch = filters.equipmentSearch.trim();
   const pdmSearch = filters.pdmSearch.trim();
 
   return rows.filter((row) => {
+    if (filters.baselineIssue && !matchesBaselineFilter(
+      findNetaPositionEntry(positionIndex, row.equipment_id, row.display_equipment_id), filters.baselineIssue,
+    )) return false;
     if (filters.energizationReady && equipmentEnergizationReadiness(row, cableIndex).status !== filters.energizationReady) return false;
     if (filters.duplicateReports) {
       const duplicates = getEquipmentDuplicates(manifest, row.equipment_id);
@@ -313,11 +328,18 @@ export function EquipmentPage({ data }: EquipmentPageProps) {
   const lifecycleStageParam = searchParams.get("lifecycleStage")?.trim() ?? "";
   const lifecycleTransitionParam =
     searchParams.get("lifecycleTransition")?.trim() ?? "";
-  const [filters, setFilters] = useState<EquipmentFiltersState>(() =>
-    statusParam
+  const baselineIssueRaw = searchParams.get("baselineIssue")?.trim() ?? "";
+  const baselineIssueParam = (Object.prototype.hasOwnProperty.call(baselineFilterLabels, baselineIssueRaw)
+    ? baselineIssueRaw : "") as EquipmentBaselineFilter;
+  const equipmentParam = searchParams.get("equipment")?.trim() ?? "";
+  const initialFilters = () => {
+    const base = statusParam
       ? { ...getFiltersForQuickFilter(quickFilterParam), status: statusParam }
-      : getFiltersForQuickFilter(quickFilterParam),
-  );
+      : getFiltersForQuickFilter(quickFilterParam);
+    return { ...base, baselineIssue: baselineIssueParam, equipmentSearch: equipmentParam || base.equipmentSearch };
+  };
+  const [filters, setFilters] = useState<EquipmentFiltersState>(initialFilters);
+  const [positionCheck, setPositionCheck] = useState<NetaPositionCheck | null>(null);
   const [selectedEquipment, setSelectedEquipment] = useState<FlattenedEquipmentRow | null>(null);
   const [netaReportReviews, setNetaReportReviews] =
     useState<NetaReportReviewsResponse | null>(null);
@@ -342,6 +364,19 @@ export function EquipmentPage({ data }: EquipmentPageProps) {
       cancelled = true;
     };
   }, [netaReviewsReload]);
+
+  useEffect(() => {
+    let cancelled = false;
+    loadNetaPositionCheck()
+      .then((check) => { if (!cancelled && check.available) setPositionCheck(check); })
+      .catch(() => {
+        // Optional dataset; the baseline filter stays disabled when it is missing.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const positionIndex = useMemo(() => buildNetaPositionIndex(positionCheck), [positionCheck]);
 
   const handleNetaReportsChanged = useCallback(() => {
     // A GC rename moves review results to the new file path.
@@ -413,6 +448,7 @@ export function EquipmentPage({ data }: EquipmentPageProps) {
       reviewStates,
       data.netaReportManifest,
       cableIndex,
+      positionIndex,
     );
     return sortEquipmentRows(
       kprEquipmentFilterIds === null
@@ -427,6 +463,7 @@ export function EquipmentPage({ data }: EquipmentPageProps) {
     newNetaCompleteIds,
     data.netaReportManifest,
     cableIndex,
+    positionIndex,
   ]);
   const selectedGroup = useMemo(() => {
     if (!selectedEquipment) {
@@ -441,12 +478,8 @@ export function EquipmentPage({ data }: EquipmentPageProps) {
   const activeQuickFilter = getActiveQuickFilter(filters);
 
   useEffect(() => {
-    setFilters(
-      statusParam
-        ? { ...getFiltersForQuickFilter(quickFilterParam), status: statusParam }
-        : getFiltersForQuickFilter(quickFilterParam),
-    );
-  }, [quickFilterParam, statusParam]);
+    setFilters(initialFilters());
+  }, [quickFilterParam, statusParam, baselineIssueParam, equipmentParam]);
 
   function handleQuickFilter(filter: EquipmentQuickFilter) {
     if (activeQuickFilter === filter) {
@@ -526,6 +559,7 @@ export function EquipmentPage({ data }: EquipmentPageProps) {
       ) : null}
 
       <EquipmentFilters
+        baselineAvailable={positionCheck !== null}
         duplicateReportsAvailable={data.netaReportManifest?.duplicate_audit?.available === true}
         equipmentTypes={filterOptions.equipmentTypes}
         filters={filters}
@@ -554,6 +588,9 @@ export function EquipmentPage({ data }: EquipmentPageProps) {
         equipment={selectedEquipment}
         netaReportReviews={netaReportReviews}
         netaReviewsEditable={netaReviewsEditable}
+        positionEntry={selectedEquipment
+          ? findNetaPositionEntry(positionIndex, selectedEquipment.equipment_id, selectedEquipment.display_equipment_id)
+          : null}
         onClose={() => setSelectedEquipment(null)}
         onNetaReportReviewUpdated={handleNetaReportReviewUpdated}
         onNetaReportsChanged={handleNetaReportsChanged}

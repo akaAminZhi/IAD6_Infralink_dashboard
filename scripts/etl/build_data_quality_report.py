@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections import Counter, defaultdict
 from datetime import datetime
+import json
 from pathlib import Path
 from typing import Any
 
@@ -33,6 +34,7 @@ MODULE_LINKS_PATH = DATA_DIR / "module_equipment_links.json"
 CASES_PATH = DATA_DIR / "cases.json"
 PDMS_PATH = DATA_DIR / "pdms.json"
 REPORT_OUTPUT_PATH = DATA_DIR / "data_quality_report.json"
+NETA_POSITION_CHECK_PATH = DATA_DIR / "neta_position_check.json"
 
 EQUIPMENT_REQUIRED_FIELDS = ["equipment_id"]
 MODULE_LINK_REQUIRED_FIELDS = ["pdm_name", "source_equipment_label"]
@@ -316,11 +318,40 @@ def build_blank_required_fields(
     return findings
 
 
+def build_neta_complete_but_nonconforming(position_check: dict[str, Any] | None) -> list[dict[str, Any]]:
+    """NETA complete equipment missing (or only FAILing) a confirmed baseline position.
+
+    Draft baselines are previews only and stay out of the data-quality report.
+    """
+    findings: list[dict[str, Any]] = []
+    for entry in (position_check or {}).get("equipment") or []:
+        if not entry.get("complete_but_nonconforming") or entry.get("baseline_basis") != "confirmed":
+            continue
+        positions = entry.get("positions") or []
+        findings.append({
+            "equipment_id": entry.get("equipment_id"),
+            "family": entry.get("family"),
+            "missing_positions": [p["key"] for p in positions if p.get("result") == "missing"],
+            "failed_positions": [p["key"] for p in positions if p.get("result") == "failed_only"],
+            "message": "NETA complete, but reports do not match the confirmed test-position baseline.",
+        })
+    return sorted(findings, key=lambda item: str(item["equipment_id"]))
+
+
+def read_position_check(path: Path = NETA_POSITION_CHECK_PATH) -> dict[str, Any] | None:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (FileNotFoundError, ValueError):
+        return None
+    return payload if isinstance(payload, dict) and payload.get("available") else None
+
+
 def build_data_quality_report(
     equipment_records: list[dict[str, Any]],
     module_links: list[dict[str, Any]],
     cases: list[dict[str, Any]],
     pdms: list[dict[str, Any]],
+    position_check: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     pdm_lookup = make_pdm_lookup(pdms)
 
@@ -341,6 +372,7 @@ def build_data_quality_report(
         "neta_test_report_present_but_not_complete": (
             build_neta_test_report_present_but_not_complete(pdms)
         ),
+        "neta_complete_but_nonconforming": build_neta_complete_but_nonconforming(position_check),
         "open_issue_count_mismatches": build_open_issue_count_mismatches(pdms),
         "duplicate_equipment_ids": build_duplicate_equipment_ids(equipment_records),
         "blank_required_fields": build_blank_required_fields(
@@ -359,7 +391,8 @@ def run_build(input_files: dict[str, str] | None = None) -> dict[str, Any]:
     cases = load_records_json(CASES_PATH)
     pdms = load_records_json(PDMS_PATH)
 
-    report = build_data_quality_report(equipment_records, module_links, cases, pdms)
+    report = build_data_quality_report(
+        equipment_records, module_links, cases, pdms, read_position_check())
     write_json_payload(
         REPORT_OUTPUT_PATH,
         {

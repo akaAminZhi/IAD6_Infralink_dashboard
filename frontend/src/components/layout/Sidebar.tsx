@@ -5,6 +5,7 @@ import {
   ClipboardCheck,
   Cpu,
   LayoutDashboard,
+  ListChecks,
   Map,
   Presentation,
   ShieldCheck,
@@ -24,6 +25,7 @@ const navigationItems = [
   { label: "Power Plan", path: "/power-plan", icon: Map },
   { label: "Layout", path: "/layout", icon: Map },
   { label: "MV Equipment", path: "/mv-equipment", icon: Cable },
+  { label: "NETA Baselines", path: "/neta-baselines", icon: ListChecks },
   { label: "Data Quality", path: "/data-quality", icon: ShieldCheck },
   { label: "Data Operations", path: "/data-operations", icon: Workflow },
 ];

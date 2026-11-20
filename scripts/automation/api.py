@@ -34,7 +34,7 @@ from scripts.automation.neta_report_reviews import (
 )
 from scripts.automation.runner import AutomationConfig, TaskManager
 from scripts.automation.auth import require_operator
-from scripts.automation import neta_report_rename
+from scripts.automation import neta_position_baselines, neta_report_rename
 from scripts.automation.neta_report_rename import LOCAL_OPERATOR
 from scripts.automation.browser_login import BrowserLoginManager, KEYS, WIDTH, HEIGHT
 
@@ -118,6 +118,13 @@ class NetaReportRenameRequest(BaseModel):
     new_name: str = Field(min_length=1, max_length=154)
     expected_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     confirmed: bool = False
+
+
+class NetaPositionBaselineRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    expected_revision: int = Field(ge=0)
+    positions: list[dict[str, Any]] = Field(min_length=1, max_length=200)
+    exceptions: dict[str, dict[str, Any]] = Field(default_factory=dict, max_length=500)
 
 
 class NetaDuplicateDecisionRequest(BaseModel):
@@ -577,6 +584,48 @@ def create_app(
         except FileNotFoundError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         except (OSError, ValueError, RuntimeError) as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    @app.get("/api/automation/neta-position-baselines")
+    def get_neta_position_baselines(user_id: str = Depends(require_operator)) -> dict[str, Any]:
+        try:
+            payload = neta_position_baselines.read_baselines(resolved_config.neta_position_baselines_path)
+        except (OSError, ValueError) as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+        return {**payload, "editable": user_id == LOCAL_OPERATOR}
+
+    def require_baseline_editor(user_id: str | None) -> None:
+        if user_id != LOCAL_OPERATOR:
+            raise HTTPException(status_code=403,
+                                detail="Only the local operator can confirm NETA position baselines.")
+
+    @app.put("/api/automation/neta-position-baselines/{family:path}")
+    def save_neta_position_baseline(family: str, request: NetaPositionBaselineRequest,
+                                    user_id: str = Depends(require_operator)) -> dict[str, Any]:
+        require_baseline_editor(user_id)
+        try:
+            return neta_position_baselines.save_family(
+                resolved_config.neta_position_baselines_path, family,
+                request.model_dump(exclude={"expected_revision"}), request.expected_revision, user_id)
+        except neta_position_baselines.RevisionConflict as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except OSError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    @app.delete("/api/automation/neta-position-baselines/{family:path}")
+    def delete_neta_position_baseline(family: str, expected_revision: int = Query(ge=0),
+                                      user_id: str = Depends(require_operator)) -> dict[str, Any]:
+        require_baseline_editor(user_id)
+        try:
+            return neta_position_baselines.delete_family(
+                resolved_config.neta_position_baselines_path, family, expected_revision)
+        except neta_position_baselines.RevisionConflict as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (OSError, ValueError) as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     @app.get("/api/automation/neta-report-reviews")

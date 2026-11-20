@@ -42,6 +42,7 @@ export function getRouteResources(pathname: string, search = ""): DashboardResou
     case "/power-plan": resources = power; break;
     case "/mv-equipment": resources = [...power, "powerPlanManifest"]; break;
     case "/layout":
+    case "/neta-baselines":
     case "/data-operations": resources = []; break;
     case "/issues": resources = ["pdms", "equipment", "cases", "historyComparison"]; break;
     case "/data-quality": resources = ["cases", "epsTestItems", "dataQualityReport"]; break;

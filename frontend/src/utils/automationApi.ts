@@ -17,6 +17,7 @@ import type {
   SavedMvDailyReport,
   SiteDailyReport, SavedSiteDailyReport, TestSite,
 } from "../types/automation";
+import type { NetaPositionBaselineInput, NetaPositionBaselines } from "../types/netaPositions";
 import { isLocalOperationsMode } from "./localOperations";
 
 const API_BASE =
@@ -62,6 +63,24 @@ export function renameNetaGcReport(reportFile: string, newName: string, expected
   return request<AutomationRun>("/neta-report-names", {
     method: "POST", body: gcRenameBody(reportFile, newName, expectedSha256),
   });
+}
+
+export function getNetaPositionBaselines() {
+  return request<NetaPositionBaselines & { editable: boolean }>("/neta-position-baselines");
+}
+
+/** Saves one family; 409 when another operator saved since `expectedRevision`. */
+export function saveNetaPositionBaseline(family: string, baseline: NetaPositionBaselineInput, expectedRevision: number) {
+  return request<NetaPositionBaselines>(`/neta-position-baselines/${encodeURIComponent(family)}`, {
+    method: "PUT", body: JSON.stringify({ ...baseline, expected_revision: expectedRevision }),
+  });
+}
+
+export function deleteNetaPositionBaseline(family: string, expectedRevision: number) {
+  return request<NetaPositionBaselines>(
+    `/neta-position-baselines/${encodeURIComponent(family)}?expected_revision=${expectedRevision}`,
+    { method: "DELETE" },
+  );
 }
 
 export function getAutomationRun(runId: string) {

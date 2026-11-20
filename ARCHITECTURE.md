@@ -38,6 +38,45 @@ the equipment was already uploaded; the next CxAlloy upload deletes the old
 attachment and uploads the renamed PDF. The worker then republishes the report
 manifest (with `pending_cxalloy_rename`) and the static review snapshot.
 
+## NETA test-position baselines
+
+Equipment of one family should carry the same set of NETA reports. The Tracker's
+`neta_report_fields.py` (NETA post-processing, after result checking) reads the
+header of every GC device report by word coordinates (PyMuPDF), OCRs only the
+header band of pages without a text layer, and writes
+`NETA_eport_To_GC/report_fields.json` keyed by SHA-256 (reused while the bytes and
+parser version are unchanged). The dashboard never opens PDFs for this.
+
+`scripts/etl/neta_positions.py` (pure) reduces the PDF ASSET / CT FILENAME /
+DESIGNATION (falling back to the GC name) to a canonical position key, votes the
+owning equipment from ASSET/SUBSTATION/EQUIPMENT ID/STATION, groups equipment
+into families (`MDS6|A-F`, `PDU6|A-F|sub`, `RP6|H1`), drafts a baseline from
+positions present in more than half of the NETA-complete members, and compares
+each equipment per position. Same-day FAIL beats PASS; otherwise the newest
+result wins; FAIL+PASS without dates needs review. Two PASS reports with
+different SN are flagged. `build_neta_position_check.py` writes
+`neta_position_check.json`; cable (`FDR`/`ATR`/`CB`) reports are excluded.
+A Tracker form classified as `oil_analysis` maps to the separate
+`OIL-SAMPLE` position. For TX6, the transformer test occupies `EQUIPMENT`,
+even when both PDF headers carry the same equipment designation. Tracker uses
+these forms to name verified oil samples and recover ambiguous CT phase names.
+
+Confirmed baselines live in `config/neta_position_baselines.json` (committed).
+`GET/PUT/DELETE /api/automation/neta-position-baselines[/{family}]` validate keys
+and aliases, require the loaded `revision` (409 on a stale save), write
+atomically, and allow edits only by the loopback `local_operator`. Families
+without a confirmed baseline are compared with the draft and labelled as such;
+only confirmed families feed `neta_complete_but_nonconforming` in the
+data-quality report. The `/neta-baselines` page edits baselines; Equipment adds
+a Report baseline filter (`?baselineIssue=`), a drawer Test positions section,
+and PDF-derived GC name suggestions that only pre-fill the existing rename flow.
+When the OCR header and GC name show the same position typo, the Tracker can
+use the dashboard's confirmed positions and aliases to suggest a unique
+correction. It projects suggestions by GC path from the cached fields. The ETL
+reuses the same rules with the current configuration, so a baseline edit takes
+effect on the next ETL without rerunning OCR. Suggestions preserve existing
+filename annotations and require the operator to confirm the rename.
+
 ## Purpose
 
 The IAD6 Infralink Dashboard combines engineering exports and locally managed
@@ -393,14 +432,16 @@ when a deployment does not have the local cache.
 
 1. Workbook inspection and normalization of equipment, modules, and cases.
 2. Equipment matching for module links and cases.
-3. PDM dataset, summary, and data-quality report construction.
+3. PDM dataset and summary construction.
 4. Seven-day/history, EPS execution, and monthly KPR datasets.
    EPS execution additionally publishes `eps_daily_report_audit.json`, combining
    raw EPS/MV Tested/Passed, Failed and Retested And Passed evidence (ignoring
    Partially Tested). Complete normalized IDs identify repeat candidates; source
    lines and conflicting/same-day records remain intact. This route-specific
    evidence does not change tracker completion or KPR totals.
-5. NETA, CxAlloy, issue-attachment, and power-plan/MV manifests.
+5. NETA report manifest and reviews, then the NETA test-position check, then the
+   data-quality report (it reads `neta_position_check.json`), then CxAlloy,
+   issue-attachment, and power-plan/MV manifests.
 6. ETL metadata and record-count reporting.
 
 Each step writes under `frontend/public/data/`. The directory is generated and

@@ -42,6 +42,8 @@ import { EquipmentNetaBadge } from "./EquipmentNetaBadge";
 import { EquipmentCableAtpEvidence } from "./EquipmentCableAtpEvidence";
 import { EquipmentPdmAssociations } from "./EquipmentPdmAssociations";
 import { NetaGcNameEditor, useLocalGcRenameAccess } from "./NetaGcNameEditor";
+import { NetaTestPositionsPanel } from "./NetaTestPositionsPanel";
+import type { NetaPositionEquipment } from "../../types/netaPositions";
 
 interface EquipmentDetailDrawerProps {
   cableIndex?: ConnectedCableIndex | null;
@@ -53,6 +55,8 @@ interface EquipmentDetailDrawerProps {
   onNetaReportReviewUpdated: (review: NetaReportReview) => void;
   /** Called after a GC report rename so review results can be reloaded. */
   onNetaReportsChanged?: () => void;
+  /** Test-position comparison for this equipment (neta_position_check.json). */
+  positionEntry?: NetaPositionEquipment | null;
 }
 
 function valueOrDash(value: string | number | boolean | null | undefined): string {
@@ -122,6 +126,7 @@ function NetaReportNames({
   onReviewUpdated,
   onReportsChanged,
   editable,
+  positionEntry = null,
 }: {
   value: string | null;
   equipmentId: string | null;
@@ -129,6 +134,7 @@ function NetaReportNames({
   onReviewUpdated: (review: NetaReportReview) => void;
   onReportsChanged?: () => void;
   editable: boolean;
+  positionEntry?: NetaPositionEquipment | null;
 }) {
   const manifest = useNetaReportManifest();
   const manifestResource = useDashboardResources(["netaReportManifest"]);
@@ -214,6 +220,8 @@ function NetaReportNames({
                     reports={[reportName]} showLinkedFileNames listAppearance showDuplicateBadge={false} className="grid-cols-1 lg:grid-cols-1" />
                   {gcRecord ? (
                     <NetaGcNameEditor
+                      suggestedName={positionEntry?.reports.find((report) =>
+                        report.file.toLowerCase() === String(gcRecord.relative_path ?? "").toLowerCase())?.suggested_gc_name ?? null}
                       canRename={canRenameGc}
                       onRenamed={async () => {
                         await manifestResource.refresh();
@@ -291,6 +299,7 @@ export function EquipmentDetailDrawer({
   onClose,
   onNetaReportReviewUpdated,
   onNetaReportsChanged,
+  positionEntry = null,
 }: EquipmentDetailDrawerProps) {
   if (!equipment) {
     return null;
@@ -377,7 +386,9 @@ export function EquipmentDetailDrawer({
                     onReportsChanged={onNetaReportsChanged}
                     reviews={netaReportReviews}
                     value={equipment.neta_test_report}
+                    positionEntry={positionEntry}
                   />
+                  <NetaTestPositionsPanel entry={positionEntry} />
                   <EquipmentCableAtpEvidence equipment={equipment} />
                   <NetaDuplicatePanel key={equipment.equipment_id} equipmentId={equipment.equipment_id} />
                   {equipment.cxalloy_upload_status ? <CxalloyReportUploadPanel equipment={equipment} /> : null}

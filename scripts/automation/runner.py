@@ -84,6 +84,10 @@ class AutomationConfig:
     def neta_report_results_path(self) -> Path:
         return self.eps_root / "NETA_eport_To_GC" / "test_reports_result.json"
 
+    @property
+    def neta_position_baselines_path(self) -> Path:
+        return self.dashboard_root / "config" / "neta_position_baselines.json"
+
 
 @dataclass(frozen=True)
 class JobDefinition:

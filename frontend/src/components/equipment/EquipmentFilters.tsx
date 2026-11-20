@@ -32,6 +32,22 @@ const energizationFilterLabels = {
   unknown: "Not confirmed",
 };
 
+export type EquipmentBaselineFilter =
+  | "" | "nonconforming" | "missing" | "failed_only" | "duplicate" | "extra"
+  | "needs_review" | "gc_name_mismatch" | "no_baseline";
+
+export const baselineFilterLabels: Record<EquipmentBaselineFilter, string> = {
+  "": "All",
+  nonconforming: "Not matching baseline",
+  missing: "Missing position",
+  failed_only: "FAIL only",
+  duplicate: "Duplicate",
+  extra: "Not in baseline",
+  needs_review: "Needs review",
+  gc_name_mismatch: "GC name mismatch",
+  no_baseline: "No baseline",
+};
+
 const netaFilterLabels: Record<EquipmentNetaFilter, string> = {
   "": "All",
   complete: "Complete with report",
@@ -57,10 +73,12 @@ export interface EquipmentFiltersState {
   netaReportFailedOnly: boolean;
   netaReportReviewRequiredOnly: boolean;
   duplicateReports?: "" | "all" | "possible" | "confirmed";
+  baselineIssue?: EquipmentBaselineFilter;
 }
 
 interface EquipmentFiltersProps {
   duplicateReportsAvailable?: boolean;
+  baselineAvailable?: boolean;
   filters: EquipmentFiltersState;
   equipmentTypes: string[];
   statuses: string[];
@@ -126,6 +144,7 @@ function SelectFilter({
 
 export function EquipmentFilters({
   duplicateReportsAvailable,
+  baselineAvailable,
   filters,
   equipmentTypes,
   statuses,
@@ -156,6 +175,7 @@ export function EquipmentFilters({
     filters.netaReportReviewRequiredOnly,
     filters.duplicateReports,
     filters.energizationReady,
+    filters.baselineIssue,
   ].filter(Boolean).length;
   const filterLabels: Record<keyof EquipmentFiltersState, string> = {
     energizationReady: "Energization readiness",
@@ -175,6 +195,7 @@ export function EquipmentFilters({
     netaReportFailedOnly: "Failed NETA reports",
     netaReportReviewRequiredOnly: "NETA review required",
     duplicateReports: "Duplicate reports",
+    baselineIssue: "Report baseline",
   };
 
   return (
@@ -318,6 +339,20 @@ export function EquipmentFilters({
                   <option value="confirmed">Confirmed duplicates</option>
                 </select>
               </label>
+              <label className="flex min-w-0 flex-col gap-1 text-sm font-medium">
+                Report baseline
+                <select
+                  aria-label="Report baseline"
+                  disabled={baselineAvailable === false}
+                  className="h-9 rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                  value={filters.baselineIssue ?? ""}
+                  onChange={(event) => update({ baselineIssue: event.target.value as EquipmentBaselineFilter })}
+                >
+                  {(Object.keys(baselineFilterLabels) as EquipmentBaselineFilter[]).map((key) => (
+                    <option key={key} value={key}>{baselineFilterLabels[key]}</option>
+                  ))}
+                </select>
+              </label>
             </div>
 
             <div className="flex flex-wrap gap-2">
@@ -383,6 +418,8 @@ export function EquipmentFilters({
                     ? `: ${cableFilterLabels[filters.cable ?? ""]}`
                     : key === "energizationReady"
                     ? `: ${energizationFilterLabels[filters.energizationReady ?? ""]}`
+                    : key === "baselineIssue"
+                    ? `: ${baselineFilterLabels[filters.baselineIssue ?? ""]}`
                     : typeof filters[key] === "string" ? `: ${filters[key]}` : ""}
                 </span>
                 <X className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />

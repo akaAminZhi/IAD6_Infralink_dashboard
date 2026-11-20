@@ -173,6 +173,14 @@ export interface DataQualityReport {
   closed_cases_missing_corrective_images?: Array<Record<string, unknown>>;
   neta_completed_but_missing_test_report?: Array<Record<string, unknown>>;
   neta_test_report_present_but_not_complete?: Array<Record<string, unknown>>;
+  /** NETA complete equipment whose reports miss a confirmed test-position baseline. */
+  neta_complete_but_nonconforming?: Array<{
+    equipment_id: string;
+    family: string;
+    missing_positions: string[];
+    failed_positions: string[];
+    message: string;
+  }>;
   open_issue_count_mismatches?: Array<Record<string, unknown>>;
   duplicate_equipment_ids?: Array<Record<string, unknown>>;
   blank_required_fields?: Array<Record<string, unknown>>;

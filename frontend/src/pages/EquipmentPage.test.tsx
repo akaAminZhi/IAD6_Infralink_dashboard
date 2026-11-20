@@ -11,9 +11,37 @@ import { CxalloyEquipmentLinksProvider } from "../contexts/CxalloyEquipmentLinks
 import { makeDashboardData, makeLayoutCable, makeLayoutManifest } from "../test/fixtures";
 import { duplicateManifest, makeDuplicate } from "../test/netaDuplicateFixtures";
 import type { KprSummary } from "../types/data";
+import type { NetaPositionEquipment } from "../types/netaPositions";
+import * as positionCheck from "../utils/loadNetaPositionCheck";
 import { EquipmentPage } from "./EquipmentPage";
 
 describe("EquipmentPage", () => {
+  it("applies the baseline issue from a shared Equipment link when position data loads", async () => {
+    const user = userEvent.setup();
+    const equipment = ["EQ-MISSING", "EQ-FAIL", "EQ-PASS"].map((equipment_id) => ({ equipment_id }));
+    const issueCounts: Record<string, number>[] = [{ missing: 1 }, { failed_only: 1 }, {}];
+    const entries: NetaPositionEquipment[] = equipment.map(({ equipment_id }, index) => ({
+      equipment_id, family: "EQ|-", equipment_type: null, neta_complete: true,
+      baseline_basis: "confirmed", report_stage: "formal", report_count: 1,
+      nonconforming: index < 2, complete_but_nonconforming: index < 2, issue_counts: issueCounts[index],
+      positions: [], reports: [], extra_reports: [], needs_review_reports: [], exception_note: null,
+    }));
+    vi.spyOn(positionCheck, "loadNetaPositionCheck").mockResolvedValue({
+      available: true, baseline_revision: 1, generated_at: "2026-11-20", summary: {}, families: [], equipment: entries,
+    });
+    render(<MemoryRouter initialEntries={["/equipment?baselineIssue=missing"]}>
+      <EquipmentPage data={makeDashboardData({ equipment, pdms: [] })} />
+    </MemoryRouter>);
+
+    expect(await screen.findByRole("cell", { name: "EQ-MISSING" })).toBeInTheDocument();
+    expect(screen.queryByRole("cell", { name: "EQ-FAIL" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("cell", { name: "EQ-PASS" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /More filters/ }));
+    expect(screen.getByRole("combobox", { name: "Report baseline" })).toHaveValue("missing");
+    await user.click(screen.getByRole("button", { name: "Reset" }));
+    expect(screen.getByRole("cell", { name: "EQ-PASS" })).toBeInTheDocument();
+  });
+
   it("shows connected cable evidence in the table and details, previews ATP and filters energization readiness", async () => {
     const user = userEvent.setup();
     const cable = makeLayoutCable({ feeder_cable_atp_names: ["ATP.pdf"], feeder_cable_atp_files: [

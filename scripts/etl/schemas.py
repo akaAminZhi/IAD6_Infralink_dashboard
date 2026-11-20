@@ -216,6 +216,50 @@ class NetaDuplicateAudit(SchemaRecord):
 
 
 @dataclass(slots=True)
+class NetaPositionReport(SchemaRecord):
+    """One GC device report reduced to a canonical test-position key."""
+    equipment_id: str
+    file: str
+    url: str
+    report_stage: Literal["temporary", "formal"]
+    status: str
+    key: str
+    confidence: str
+    form: str
+    source_report_name: str | None = None
+    flags: list[str] = field(default_factory=list)
+    referenced_equipment: str | None = None
+    name_source: str = "gc_name"
+    gc_name_key: str | None = None
+    test_date: str | None = None
+    serial_number: str | None = None
+    text_source: str | None = None
+    pdf_fields: dict[str, str] = field(default_factory=dict)
+    field_votes: dict[str, str] = field(default_factory=dict)
+    suggested_gc_name: str | None = None
+
+
+@dataclass(slots=True)
+class NetaPositionEquipment(SchemaRecord):
+    """Per-equipment comparison against its family's position baseline."""
+    equipment_id: str
+    family: str
+    neta_complete: bool
+    baseline_basis: Literal["confirmed", "draft", "none"]
+    report_count: int
+    nonconforming: bool
+    complete_but_nonconforming: bool
+    equipment_type: str | None = None
+    report_stage: str | None = None
+    issue_counts: dict[str, int] = field(default_factory=dict)
+    positions: list[dict[str, Any]] = field(default_factory=list)
+    extra_reports: list[dict[str, Any]] = field(default_factory=list)
+    needs_review_reports: list[dict[str, Any]] = field(default_factory=list)
+    reports: list[dict[str, Any]] = field(default_factory=list)
+    exception_note: str | None = None
+
+
+@dataclass(slots=True)
 class NetaValidationRecord(SchemaRecord):
     """NETA validation finding.
 
@@ -247,6 +291,7 @@ class DataQualityReport(SchemaRecord):
     neta_test_report_present_but_not_complete: list[NetaValidationRecord] = field(
         default_factory=list
     )
+    neta_complete_but_nonconforming: list[dict[str, Any]] = field(default_factory=list)
     open_issue_count_mismatches: list[dict[str, Any]] = field(default_factory=list)
     duplicate_equipment_ids: list[str] = field(default_factory=list)
     blank_required_fields: list[dict[str, Any]] = field(default_factory=list)

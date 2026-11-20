@@ -1,5 +1,68 @@
 ﻿# Codex Handoff
 
+## Current update (2026-11-20): NETA test-position baselines, phases 1-5
+
+- Plan: `docs/NETA_POSITION_BASELINE_PLAN.md`; design summary in `ARCHITECTURE.md`
+  ("NETA test-position baselines"). Requires the matching Tracker change
+  (`neta_report_fields.py`, hooked after result checking in NETA post).
+- Tracker `report_fields.json`: header fields by word coordinates, header-band
+  OCR for scanned pages, SHA-256 cache. First full run 26 min (3117 PDFs, 154
+  OCR, mostly OCR time); no-change run 2.2 s. `OCR_PARSER_VERSION` re-reads only
+  scanned PDFs.
+- ETL: `build_neta_position_check.py` after reviews; `build_data_quality_report.py`
+  moved after it (adds `neta_complete_but_nonconforming`, confirmed baselines only).
+- API: `GET/PUT/DELETE /api/automation/neta-position-baselines[/{family}]`
+  (`scripts/automation/neta_position_baselines.py`), revision-checked, local
+  operator only. Config revision 1 confirms `MDS6|R` with 25 positions.
+- UI: `/neta-baselines` (matrix, anomaly list, `NetaBaselineEditor`); Equipment
+  Report baseline filter + `?baselineIssue=`/`?equipment=`; drawer
+  `NetaTestPositionsPanel`; `NetaGcNameEditor` "Use suggestion" only pre-fills.
+  Data Quality card lists confirmed-baseline nonconformance.
+- MDB6 row 03 uses FB5/FB6 where rows 01/02 use FB1/FB2. The baseline still
+  needs a family split or equipment exceptions. `CT-MG` maps to `CT-S-MG`.
+
+### Verification and follow-up
+
+- The Tracker has locally renamed 35 oil samples and six ambiguous PDU6
+  phase CT PDFs. All 41 review paths moved with their PDFs and are queued for
+  CxAlloy replacement. The uploader dry run listed all 41. Dashboard report
+  links, reviews, positions, quality and CxAlloy status datasets were rebuilt.
+- TX6 uses separate `EQUIPMENT` and `OIL-SAMPLE` positions. Existing Tracker
+  `oil_analysis` form evidence distinguishes the oil sample from the
+  transformer test. After rebuilding both position and quality datasets, 29
+  TX6 devices have both reports, 5 have just the transformer test, and 6 have
+  just the oil sample. TX6-01B is pending review for the transformer test and
+  has a FAIL on the oil sample. The TX6 A-F and R drafts show both positions.
+  TX6 H1 has both report records and insufficient members for a draft.
+- Full ETL completed with current local input files. The Anomaly list covers 52
+  families and 586 equipment. The draft comparison found 132 with missing or
+  failed positions, including 56 marked NETA Complete in the initial ETL.
+  Data Quality publishes findings from confirmed baselines.
+- Real PDF acceptance: both MDS6-01D MCB2-PRI reports date to 2026-11-10
+  and show serial 400150205010. The position is `failed_only` with
+  `same_day_fail`. `MSD6-02R-PQM1-CT01 A PHASE.pdf` maps to
+  `PQM1-CT01-A` with `normalized` confidence.
+- The Tracker reads confirmed Dashboard positions and aliases to suggest a
+  uniquely matching OCR correction. Its report fields snapshot lists the
+  suggestions by GC path. Dashboard ETL uses the same matcher with current
+  configuration, and the operator can prefill the existing rename form.
+  No production baseline or GC filename was edited during validation.
+- Added a regression for the Equipment `?baselineIssue=` link and corrected
+  the duplicate worker test fixture, which was missing the Tracker's existing
+  `neta_processing_runtime.py` dependency.
+- In the matrix and Equipment drawer, the first PDF link follows the report
+  that determines a resolved position's outcome. Drawer position IDs and
+  notes wrap. The browser smoke covered the matrix, editor, anomaly list,
+  Equipment filter and drawer, and the confirmed-baseline Data Quality link
+  using a browser fixture.
+- Dashboard validation passed with 430 Python tests, 593 frontend tests on
+  three Vitest thread workers, and the production preview build.
+- Tracker full suite passed with 653 tests. The 72 focused header extraction,
+  organizing, and rename tests also passed, including the cross-repo
+  confirmed-baseline suggestion test.
+- The existing Report baseline dropdown and Anomaly list provide filtering.
+  The plan's optional quick-filter card was left out.
+
 ## Current update (2026-11-19): Auto-sync after a manual Daily Data Refresh
 
 - When a manual Daily Data Refresh succeeds, `TaskManager` (`scripts/automation/runner.py`)

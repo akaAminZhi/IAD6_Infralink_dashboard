@@ -125,7 +125,8 @@ def test_real_worker_confirms_and_revokes_only_temporary_tracker_data(tmp_path, 
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(source, target)
     cfg.eps_root.mkdir(parents=True)
-    for name in ('neta_duplicate_decisions.py', 'neta_report_duplicates.py', 'neta_report_lifecycle.py', 'cxalloy_upload_runtime.py'):
+    for name in ('neta_duplicate_decisions.py', 'neta_report_duplicates.py', 'neta_report_lifecycle.py',
+                 'neta_processing_runtime.py', 'cxalloy_upload_runtime.py'):
         shutil.copyfile(sibling / name, cfg.eps_root / name)
     gc = cfg.eps_root / 'NETA_eport_To_GC'
     rows = []
@@ -155,7 +156,9 @@ def test_real_worker_confirms_and_revokes_only_temporary_tracker_data(tmp_path, 
     app.dependency_overrides[require_operator] = lambda: 'fixture_operator'
     client = TestClient(app)
     for action, expected in [('confirm', 'confirmed'), ('revoke', 'possible')]:
-        current = neta_duplicates.read_snapshot(cfg.eps_root)['matches'][0]
+        snapshot = neta_duplicates.read_snapshot(cfg.eps_root)
+        assert snapshot['matches'], snapshot['errors']
+        current = snapshot['matches'][0]
         response = client.post('/api/automation/neta-report-duplicates/decisions', json={
             'match_id': current['match_id'], 'expected_revision': current['revision'], 'action': action, 'confirmed': True})
         assert response.status_code == 202, response.text

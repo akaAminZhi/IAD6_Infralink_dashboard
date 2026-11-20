@@ -1,5 +1,6 @@
 import { AlertTriangle, CheckCircle2, CircleAlert, ClipboardCheck, FileWarning } from "lucide-react";
 import { useMemo } from "react";
+import { Link } from "react-router-dom";
 
 import { EmptyState } from "../components/common/EmptyState";
 import { StatusBadge } from "../components/common/StatusBadge";
@@ -203,6 +204,46 @@ function FailedItemList({ items }: { items: EpsTestItemRecord[] }) {
   );
 }
 
+function NetaBaselineQualityCard({
+  findings,
+}: {
+  findings: NonNullable<NonNullable<DashboardData["dataQualityReport"]>["neta_complete_but_nonconforming"]>;
+}) {
+  return (
+    <Card>
+      <CardHeader className="gap-2 md:flex-row md:items-start md:justify-between">
+        <div>
+          <CardTitle>NETA Complete but Reports Do Not Match Baseline</CardTitle>
+          <CardDescription>
+            Confirmed test-position baselines only. Draft comparisons are on the{" "}
+            <Link className="text-primary hover:underline" to="/neta-baselines">NETA Baselines</Link> page.
+          </CardDescription>
+        </div>
+        <StatusBadge tone={findings.length > 0 ? "danger" : "success"}>
+          {findings.length > 0 ? `${formatNumber(findings.length)} equipment` : "None"}
+        </StatusBadge>
+      </CardHeader>
+      {findings.length > 0 ? (
+        <CardContent>
+          <ul className="divide-y rounded-md border text-sm">
+            {findings.map((finding) => (
+              <li className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2" key={finding.equipment_id}>
+                <Link className="font-mono text-primary hover:underline"
+                  to={`/equipment?baselineIssue=nonconforming&equipment=${encodeURIComponent(finding.equipment_id)}`}>
+                  {finding.equipment_id}
+                </Link>
+                <span className="font-mono text-xs text-muted-foreground">{finding.family}</span>
+                {finding.missing_positions.length ? <span className="text-red-800">Missing: {finding.missing_positions.join(", ")}</span> : null}
+                {finding.failed_positions.length ? <span className="text-red-800">FAIL only: {finding.failed_positions.join(", ")}</span> : null}
+              </li>
+            ))}
+          </ul>
+        </CardContent>
+      ) : null}
+    </Card>
+  );
+}
+
 export function DataQualityPage({ data }: DataQualityPageProps) {
   const comparison = useMemo(() => {
     const groups = buildFailedIssueGroups(data.cases, data.epsTestItems);
@@ -289,6 +330,8 @@ export function DataQualityPage({ data }: DataQualityPageProps) {
           value={comparison.issueOnlyGroups.length}
         />
       </section>
+
+      <NetaBaselineQualityCard findings={data.dataQualityReport?.neta_complete_but_nonconforming ?? []} />
 
       <Card>
         <CardHeader className="gap-2 md:flex-row md:items-start md:justify-between">

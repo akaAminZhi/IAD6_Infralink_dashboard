@@ -1,0 +1,189 @@
+{
+  "version": 1,
+  "revision": 1,
+  "families": {
+    "MDS6|R": {
+      "status": "confirmed",
+      "positions": [
+        {
+          "key": "CDS-PRI",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "CDS-SEC",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "FB12-PRI",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "FB12-SEC",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "FB6-PRI",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "FB6-SEC",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "FB7-PRI",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "FB7-SEC",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "FB8-PRI",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "FB8-SEC",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "FB9-PRI",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "FB9-SEC",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "ISO-PRI",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "ISO-SEC",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "MAIN-SWBD",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "MBB-PRI",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "MBB-SEC",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "MCB1-PRI",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "MCB1-SEC",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "MCB2-PRI",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "MCB2-SEC",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "PQM1",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "PQM1-CT01-A",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "PQM1-CT01-B",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "PQM1-CT01-C",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        }
+      ],
+      "exceptions": {},
+      "confirmed_at": "2026-11-20T14:22:05-05:00",
+      "confirmed_by": "local_operator"
+    }
+  }
+}

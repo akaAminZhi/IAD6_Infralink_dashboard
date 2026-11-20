@@ -46,10 +46,13 @@ export function NetaGcNameEditor({
   record,
   canRename,
   onRenamed,
+  suggestedName = null,
 }: {
   record: NetaReportFileRecord;
   canRename: boolean;
   onRenamed: () => Promise<void> | void;
+  /** Name derived from the PDF header (position baseline check); only pre-fills the editor. */
+  suggestedName?: string | null;
 }) {
   const currentName = String(record.report_name ?? "");
   const currentStem = currentName.replace(/\.pdf$/i, "");
@@ -63,6 +66,8 @@ export function NetaGcNameEditor({
   renamed.current = onRenamed;
   const pending = record.pending_cxalloy_rename;
   const renameable = canRename && !!record.relative_path && !!record.source_sha256;
+  const suggestedStem = suggestedName?.replace(/\.pdf$/i, "").trim() || null;
+  const showSuggestion = !!suggestedStem && suggestedStem !== currentStem && !pending;
 
   useEffect(() => {
     if (!runId) return;
@@ -145,6 +150,22 @@ export function NetaGcNameEditor({
         >
           <Pencil className="h-3 w-3" aria-hidden="true" />Rename GC file
         </button>
+      ) : null}
+      {showSuggestion && !editing ? (
+        <p className="flex flex-wrap items-center gap-1 text-amber-800">
+          <span>PDF header suggests:</span>
+          <span className="break-all font-mono">{suggestedStem}.pdf</span>
+          {renameable ? (
+            <button
+              type="button"
+              aria-label={`Use suggested GC name for ${currentName}`}
+              className="rounded border border-amber-300 px-1.5 py-0.5 hover:bg-amber-50"
+              onClick={() => { setValue(suggestedStem!); setEditing(true); setError(null); setNotice(null); }}
+            >
+              Use suggestion
+            </button>
+          ) : null}
+        </p>
       ) : null}
       {renameable && editing ? (
         <form className="flex flex-wrap items-center gap-1.5" onSubmit={(event) => void submit(event)}>

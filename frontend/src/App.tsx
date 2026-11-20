@@ -44,6 +44,10 @@ const LayoutPlanPage = lazy(() =>
   import("./pages/LayoutPlanPage").then((module) => ({ default: module.LayoutPlanPage })),
 );
 
+const NetaBaselinesPage = lazy(() =>
+  import("./pages/NetaBaselinesPage").then((module) => ({ default: module.NetaBaselinesPage })),
+);
+
 const KprPage = lazy(() =>
   import("./pages/KprPage").then((module) => ({ default: module.KprPage })),
 );
@@ -110,6 +114,7 @@ function App() {
                   <Route element={<PowerPlanPage data={dashboardData} />} path="/power-plan" />
                   <Route element={<LayoutPlanPage refreshKey={dashboardData.reloadVersion} equipment={dashboardData.equipment} />} path="/layout" />
                   <Route element={<MvEquipmentPage data={dashboardData} />} path="/mv-equipment" />
+                  <Route element={<NetaBaselinesPage />} path="/neta-baselines" />
                   <Route element={<DataQualityPage data={dashboardData} />} path="/data-quality" />
                   <Route
                     element={<OperationsAuthGate><DataOperationsPage onDashboardReload={dashboardData.reload} /></OperationsAuthGate>}
