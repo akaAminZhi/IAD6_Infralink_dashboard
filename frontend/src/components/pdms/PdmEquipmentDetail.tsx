@@ -19,6 +19,7 @@ import { EpsTestItemsPanel } from "../common/EpsTestItemsPanel";
 import { EquipmentExternalLinks } from "../common/EquipmentExternalLinks";
 import { EquipmentUpdateInfo } from "../common/EquipmentUpdateInfo";
 import { NetaReportChips } from "../common/NetaReportChips";
+import { ResizableNetaReportList } from "../common/ResizableNetaReportList";
 import { NetaDuplicatePanel } from "../common/NetaDuplicatePanel";
 import { NetaStatusBadge } from "./NetaStatusBadge";
 import { PdmCaseList } from "./PdmCaseList";
@@ -113,13 +114,16 @@ export function PdmEquipmentDetail({ equipment, epsTestItems }: PdmEquipmentDeta
             </button>
           ) : null}
         </div>
-        <NetaReportChips
-          equipmentId={equipment.equipment_id}
-          className="mt-2"
-          compactNameMode={netaReportNameMode}
-          reports={reportNames}
-          showLinkedFileNames
-        />
+        {reportNames.length > 0 ? (
+          <ResizableNetaReportList className="mt-2" contentClassName="pr-1">
+            <NetaReportChips
+              equipmentId={equipment.equipment_id}
+              compactNameMode={netaReportNameMode}
+              reports={reportNames}
+              showLinkedFileNames
+            />
+          </ResizableNetaReportList>
+        ) : <span className="mt-2 block text-sm text-muted-foreground">--</span>}
         <NetaDuplicatePanel equipmentId={equipment.equipment_id} />
       </div> : null}
 

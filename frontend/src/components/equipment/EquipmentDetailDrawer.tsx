@@ -34,6 +34,7 @@ import { EnergizationReadinessPanel } from "./EnergizationReadinessPanel";
 import { EquipmentExternalLinks } from "../common/EquipmentExternalLinks";
 import { EquipmentUpdateInfo } from "../common/EquipmentUpdateInfo";
 import { NetaReportChips } from "../common/NetaReportChips";
+import { ResizableNetaReportList } from "../common/ResizableNetaReportList";
 import { Button } from "../ui/button";
 import { Card, CardContent } from "../ui/card";
 import { EquipmentCaseList } from "./EquipmentCaseList";
@@ -184,7 +185,7 @@ function NetaReportNames({
           </button>
         ) : null}
       </div>
-      <ul className="mt-3 divide-y rounded-md border bg-muted/10" aria-label="NETA report list">
+      {reportNames.length > 0 ? <ResizableNetaReportList as="ul" className="mt-3 bg-muted/10" contentClassName="divide-y">
         {reportNames.map((reportName, reportIndex) => {
           const duplicates = getReportDuplicates(manifest, equipmentId, reportName);
           const matchedReviews = getNetaReviewsForReport(reportName, reviews, manifest, equipmentId);
@@ -277,10 +278,9 @@ function NetaReportNames({
             </li>
           );
         })}
-      </ul>
-      {reportNames.length === 0 ? (
+      </ResizableNetaReportList> : (
         <div className="mt-2 text-sm text-muted-foreground">--</div>
-      ) : null}
+      )}
       {saveError ? (
         <div className="mt-2 rounded-md border border-red-200 bg-red-50 p-2 text-sm text-red-800">
           {saveError}
