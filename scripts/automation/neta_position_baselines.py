@@ -16,6 +16,8 @@ import time
 from typing import Any
 from uuid import uuid4
 
+from scripts.etl.neta_positions import find_linked_report
+
 
 FAMILY_RE = re.compile(r"^[A-Z0-9][A-Z0-9-]*\|[A-Z0-9-]+(?:\|sub)?$")
 KEY_RE = re.compile(r"^[A-Z0-9][A-Z0-9&().\-]{0,79}$")
@@ -138,7 +140,54 @@ def save_family(path: Path, family: str, body: dict[str, Any], expected_revision
     entry["confirmed_by"] = confirmed_by
 
     def change(payload: dict[str, Any]) -> None:
+        previous = payload["families"].get(family) or {}
+        if previous.get("report_position_links"):
+            entry["report_position_links"] = previous["report_position_links"]
         payload["families"][family] = entry
+
+    return _update(path, expected_revision, change)
+
+
+def set_report_position_link(
+    path: Path, check_path: Path, family: str, equipment_id: str, sha256: str,
+    position: str | None, expected_revision: int,
+) -> dict[str, Any]:
+    target = _key(position, "position key") if position is not None else None
+
+    def change(payload: dict[str, Any]) -> None:
+        entry = payload["families"].get(family)
+        if not entry or entry["status"] != "confirmed":
+            raise ValueError("Confirm the family baseline before linking a report.")
+        links = entry.setdefault("report_position_links", {})
+        if target is None:
+            equipment_links = links.get(equipment_id, {})
+            if sha256 not in equipment_links:
+                raise ValueError("This report has no manual position link.")
+            del equipment_links[sha256]
+            if not equipment_links:
+                del links[equipment_id]
+            if not links:
+                del entry["report_position_links"]
+            return
+
+        extra = entry.get("exceptions", {}).get(equipment_id, {}).get("extra_positions", [])
+        if target not in {item["key"] for item in [*entry["positions"], *extra]}:
+            raise ValueError("Choose a position from the confirmed baseline for this equipment.")
+        dataset = json.loads(check_path.read_text(encoding="utf-8"))
+        equipment = next((
+            item for item in dataset.get("equipment", [])
+            if item["family"] == family and item["equipment_id"] == equipment_id
+        ), None)
+        if equipment is None:
+            raise ValueError("The equipment is absent from this family's position check. Run the dashboard ETL.")
+        _, issue = find_linked_report(equipment["reports"], sha256)
+        if issue:
+            raise ValueError({
+                "report_missing": "The report is absent from the position check. Run the dashboard ETL.",
+                "report_ambiguous": "Multiple reports on this equipment have the same content.",
+                "other_equipment": "The report is flagged as belonging to another equipment.",
+            }[issue])
+        links.setdefault(equipment_id, {})[sha256] = target
 
     return _update(path, expected_revision, change)
 

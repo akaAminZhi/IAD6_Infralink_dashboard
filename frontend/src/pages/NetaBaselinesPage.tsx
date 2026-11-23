@@ -15,7 +15,7 @@ import type {
   NetaPositionEquipment,
   NetaPositionFamily,
 } from "../types/netaPositions";
-import { getNetaPositionBaselines } from "../utils/automationApi";
+import { getNetaPositionBaselines, runAutomationJob, setNetaReportPositionLink } from "../utils/automationApi";
 import { cn } from "../utils/cn";
 import { formatDateTime, formatNumber } from "../utils/formatters";
 import { issueLabel, loadNetaPositionCheck } from "../utils/loadNetaPositionCheck";
@@ -25,7 +25,7 @@ type View = "families" | "anomalies";
 const ISSUE_FILTERS = [
   "nonconforming", "complete_but_nonconforming", "missing", "failed_only", "retest_unordered",
   "duplicate", "duplicate_different_sn", "extra", "needs_review", "asset_equipment_conflict",
-  "report_belongs_elsewhere", "gc_name_mismatch", "result_pending",
+  "report_belongs_elsewhere", "gc_name_mismatch", "result_pending", "unresolved_position_link",
 ] as const;
 
 const cellStyles: Record<NetaPositionCell["result"], { label: string; className: string }> = {
@@ -60,12 +60,73 @@ function issueSummary(entry: NetaPositionEquipment) {
   const parts = bad.map((cell) => `${cell.key}: ${issueLabel(cell.result)}`);
   if (entry.extra_reports.length) parts.push(`extra: ${entry.extra_reports.map((item) => item.key).join(", ")}`);
   if (entry.needs_review_reports.length) parts.push(`unrecognized: ${entry.needs_review_reports.length}`);
+  if (entry.unresolved_position_links?.length) parts.push(issueLabel("unresolved_position_link"));
   const conflicts = entry.reports.filter((report) => report.flags.includes("asset_equipment_conflict"));
   if (conflicts.length) parts.push(`name refs ${[...new Set(conflicts.map((report) => report.referenced_equipment))].join(", ")}`);
   return parts.join(" · ");
 }
 
-function EquipmentReports({ entry }: { entry: NetaPositionEquipment }) {
+interface ReportLinkAccess {
+  baselines: NetaPositionBaselines | null;
+  editable: boolean;
+  onBaselinesSaved: (baselines: NetaPositionBaselines) => void;
+}
+
+const linkIssueLabels = {
+  report_missing: "The linked report was removed or replaced.",
+  report_ambiguous: "Multiple reports on this equipment have the same content.",
+  other_equipment: "The report is flagged as belonging to another equipment.",
+  position_removed: "The linked position is no longer in this equipment's baseline.",
+};
+
+function EquipmentReports({ entry, baselines, editable, onBaselinesSaved }: ReportLinkAccess & { entry: NetaPositionEquipment }) {
+  const [editor, setEditor] = useState<{ sha256: string; position: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<{ text: string; error?: boolean } | null>(null);
+  const family = baselines?.families[entry.family];
+  const configuredLinks = family?.report_position_links?.[entry.equipment_id] ?? {};
+  const positions = [...(family?.positions ?? []), ...(family?.exceptions[entry.equipment_id]?.extra_positions ?? [])];
+  const unresolved = entry.unresolved_position_links ?? [];
+  const comparedLinks = new Map(unresolved.map((link) => [link.sha256, link.position]));
+  const reportCounts = new Map<string, number>();
+  for (const report of entry.reports) {
+    if (!report.sha256) continue;
+    reportCounts.set(report.sha256, (reportCounts.get(report.sha256) ?? 0) + 1);
+    if (report.manual_position) comparedLinks.set(report.sha256, report.manual_position);
+  }
+  const pending = baselines !== null && (
+    comparedLinks.size !== Object.keys(configuredLinks).length ||
+    [...comparedLinks].some(([digest, position]) => configuredLinks[digest] !== position)
+  );
+
+  const saveLink = async (sha256: string, position: string | null) => {
+    if (!editable || !baselines) return;
+    setBusy(true);
+    setMessage(null);
+    try {
+      const updated = await setNetaReportPositionLink(entry.family, entry.equipment_id, sha256, position, baselines.revision);
+      onBaselinesSaved(updated);
+      setEditor(null);
+    } catch (error) {
+      setMessage({ error: true, text: error instanceof Error ? error.message : String(error) });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const runEtl = async () => {
+    setBusy(true);
+    setMessage(null);
+    try {
+      await runAutomationJob("run_dashboard_etl");
+      setMessage({ text: "Dashboard ETL started. Reload this page after it finishes." });
+    } catch (error) {
+      setMessage({ error: true, text: error instanceof Error ? error.message : String(error) });
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <div className="mt-4 rounded-md border">
       <div className="flex flex-wrap items-center gap-2 border-b bg-muted/40 px-3 py-2 text-sm">
@@ -74,6 +135,23 @@ function EquipmentReports({ entry }: { entry: NetaPositionEquipment }) {
         {entry.report_stage === "temporary" ? <StatusBadge tone="warning">Temporary reports</StatusBadge> : null}
         <span className="text-muted-foreground">{entry.report_count} device reports</span>
       </div>
+      {pending ? (
+        <div className="flex flex-wrap items-center gap-2 border-b px-3 py-2 text-xs" role="status">
+          Manual position link changes saved. Run the dashboard ETL to update the matrix.
+          {editable ? <button className="rounded border px-2 py-1 hover:bg-accent" disabled={busy} onClick={runEtl} type="button">Run dashboard ETL</button> : null}
+        </div>
+      ) : null}
+      {message ? (
+        <div className={cn("border-b px-3 py-2 text-xs", message.error && "text-destructive")} role={message.error ? "alert" : "status"}>{message.text}</div>
+      ) : null}
+      {unresolved.map(({ sha256, position, reason }) => (
+        <div className="flex flex-wrap items-center gap-2 border-b px-3 py-2 text-xs text-amber-700" key={sha256}>
+          <span>Manual link to <strong>{position}</strong> needs review. {linkIssueLabels[reason]}</span>
+          {editable && configuredLinks[sha256] === position ? (
+            <button className="underline" disabled={busy} onClick={() => saveLink(sha256, null)} type="button">Remove link</button>
+          ) : null}
+        </div>
+      ))}
       <div className="max-h-80 overflow-auto">
         <table className="w-full text-left text-xs">
           <thead className="sticky top-0 bg-card text-muted-foreground">
@@ -85,18 +163,49 @@ function EquipmentReports({ entry }: { entry: NetaPositionEquipment }) {
           <tbody>
             {entry.reports.map((report) => {
               const pdf = report.pdf_fields ?? {};
+              const digest = report.sha256;
+              const canLink = editable && family && digest && reportCounts.get(digest) === 1
+                && !report.flags.includes("report_belongs_elsewhere");
+              const configured = digest ? configuredLinks[digest] : undefined;
+              const awaitingEtl = configured && digest && comparedLinks.get(digest) !== configured;
+              const editing = canLink && editor?.sha256 === digest;
               return (
                 <tr className="border-t align-top" key={report.file}>
                   <td className="px-3 py-1.5">
                     <a className="text-primary hover:underline" href={report.url} rel="noreferrer" target="_blank">{report.file.split("/").pop()}</a>
                     {report.source_report_name ? <div className="text-muted-foreground">{report.source_report_name}</div> : null}
-                    {report.suggested_gc_name ? (
+                    {report.suggested_gc_name && !awaitingEtl ? (
                       <div className="mt-0.5 text-amber-700">Suggested GC name: <span className="font-mono">{report.suggested_gc_name}</span></div>
                     ) : null}
                   </td>
                   <td className="px-3 py-1.5">
                     <div className="font-mono">{report.key}</div>
                     <div className="text-muted-foreground">{report.name_source.replace("pdf_", "PDF ").replace("gc_name", "GC name")}</div>
+                    {report.manual_position ? <div className="mt-1 font-medium">Manually linked to {report.manual_position}</div> : null}
+                    {awaitingEtl ? <div className="mt-1 text-muted-foreground">Link to {configured} pending ETL</div> : null}
+                    {editing ? (
+                      <div className="mt-1 flex flex-wrap items-center gap-2">
+                        <select
+                          aria-label="Target test position"
+                          className="rounded border bg-background px-1 py-0.5"
+                          disabled={busy}
+                          onChange={(event) => setEditor({ sha256: digest, position: event.target.value })}
+                          value={editor.position}
+                        >
+                          <option value="">Select position</option>
+                          {positions.map(({ key }) => <option key={key} value={key}>{key}</option>)}
+                        </select>
+                        <button className="underline" disabled={busy || !editor.position} onClick={() => saveLink(digest, editor.position)} type="button">Save link</button>
+                        <button className="underline" disabled={busy} onClick={() => setEditor(null)} type="button">Cancel</button>
+                      </div>
+                    ) : canLink ? (
+                      <div className="mt-1 flex flex-wrap gap-2">
+                        <button className="underline" disabled={busy} onClick={() => setEditor({ sha256: digest, position: configured ?? "" })} type="button">
+                          {configured ? "Change link" : "Link to position"}
+                        </button>
+                        {configured ? <button className="underline" disabled={busy} onClick={() => saveLink(digest, null)} type="button">Remove link</button> : null}
+                      </div>
+                    ) : null}
                   </td>
                   <td className="px-3 py-1.5">
                     <StatusBadge tone={report.status === "PASSED" ? "success" : report.status === "FAILED" ? "danger" : "muted"}>{report.status}</StatusBadge>
@@ -123,12 +232,9 @@ function EquipmentReports({ entry }: { entry: NetaPositionEquipment }) {
   );
 }
 
-interface FamilyDetailProps {
+interface FamilyDetailProps extends ReportLinkAccess {
   family: NetaPositionFamily;
   equipment: NetaPositionEquipment[];
-  baselines: NetaPositionBaselines | null;
-  editable: boolean;
-  onBaselinesSaved: (baselines: NetaPositionBaselines) => void;
 }
 
 function FamilyDetail({ family, equipment, baselines, editable, onBaselinesSaved }: FamilyDetailProps) {
@@ -229,14 +335,14 @@ function FamilyDetail({ family, equipment, baselines, editable, onBaselinesSaved
             ) : null}
           </>
         )}
-        {selectedEntry ? <EquipmentReports entry={selectedEntry} /> : null}
+        {selectedEntry ? <EquipmentReports key={selectedEntry.equipment_id} entry={selectedEntry} baselines={baselines} editable={editable} onBaselinesSaved={onBaselinesSaved} /> : null}
         <NetaBaselineEditor baselines={baselines} editable={editable} family={family} onSaved={onBaselinesSaved} />
       </CardContent>
     </Card>
   );
 }
 
-function AnomalyTable({ data }: { data: NetaPositionCheck }) {
+function AnomalyTable({ data, ...linkAccess }: ReportLinkAccess & { data: NetaPositionCheck }) {
   const [issue, setIssue] = useState<string>("complete_but_nonconforming");
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
@@ -280,7 +386,7 @@ function AnomalyTable({ data }: { data: NetaPositionCheck }) {
             </tbody>
           </table>
         </div>
-        {selectedEntry ? <EquipmentReports entry={selectedEntry} /> : null}
+        {selectedEntry ? <EquipmentReports key={selectedEntry.equipment_id} entry={selectedEntry} {...linkAccess} /> : null}
       </CardContent>
     </Card>
   );
@@ -350,7 +456,7 @@ export function NetaBaselinesPage() {
           </button>
         ))}
       </div>
-      {view === "anomalies" ? <AnomalyTable data={data} /> : (
+      {view === "anomalies" ? <AnomalyTable data={data} baselines={baselines} editable={editable} onBaselinesSaved={setBaselines} /> : (
         <div className="grid gap-4 lg:grid-cols-[280px_minmax(0,1fr)]">
           <Card className="h-fit">
             <CardContent className="p-3">

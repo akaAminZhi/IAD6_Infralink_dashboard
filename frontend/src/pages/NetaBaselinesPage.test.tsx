@@ -2,7 +2,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { NetaPositionCheck } from "../types/netaPositions";
+import type { NetaConfirmedFamily, NetaPositionCheck } from "../types/netaPositions";
 import { NetaBaselinesPage } from "./NetaBaselinesPage";
 
 const report = (file: string, key: string, status = "PASSED") => ({
@@ -114,6 +114,57 @@ describe("NetaBaselinesPage", () => {
     render(<NetaBaselinesPage />);
     expect(await screen.findByText(/Baseline service unavailable/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Confirm baseline/ })).toBeDisabled();
+  });
+
+  it("links one report in the anomaly list and can remove the saved link before ETL", async () => {
+    const familyKey = "MDS6|A-F";
+    const equipmentId = "IAD06-MDS6-01D";
+    const sha256 = "a".repeat(64);
+    const data = structuredClone(payload);
+    data.equipment[1].reports[0].sha256 = sha256;
+    data.equipment[1].reports[0].suggested_gc_name = "Suggested filename.pdf";
+    const family: NetaConfirmedFamily = {
+      status: "confirmed", confirmed_at: null, confirmed_by: null,
+      positions: ["CDS-PRI", "CDS-SEC"].map((key) => ({ key, aliases: [], optional: false, count: 1 })),
+      exceptions: {},
+    };
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (String(url).includes("neta-position-baselines")) {
+        return { ok: true, json: async () => ({ version: 1, editable: true, revision: 0, families: { [familyKey]: family } }) };
+      }
+      if (String(url).includes("neta-position-links")) {
+        const body = JSON.parse(String(init?.body));
+        return { ok: true, json: async () => ({
+          version: 1, revision: body.expected_revision + 1, families: { [familyKey]: {
+            ...family, report_position_links: body.position ? { [equipmentId]: { [sha256]: body.position } } : {},
+          } },
+        }) };
+      }
+      return { ok: true, json: async () => data };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<NetaBaselinesPage />);
+    await userEvent.click(await screen.findByRole("button", { name: "Anomaly list" }));
+    await userEvent.click(screen.getByText(equipmentId));
+    expect(screen.getByText("Suggested filename.pdf")).toBeInTheDocument();
+    await userEvent.click(await screen.findByRole("button", { name: "Link to position" }));
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Target test position" }), "CDS-SEC");
+    await userEvent.click(screen.getByRole("button", { name: "Save link" }));
+    expect(await screen.findByText("Link to CDS-SEC pending ETL")).toBeInTheDocument();
+    expect(screen.queryByText("Suggested filename.pdf")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Run dashboard ETL" })).toBeEnabled();
+    await userEvent.click(screen.getByRole("button", { name: "Remove link" }));
+    expect(await screen.findByText("Suggested filename.pdf")).toBeInTheDocument();
+
+    const patches = fetchMock.mock.calls.filter(([, init]) => init?.method === "PATCH");
+    expect(patches.map(([url]) => url)).toEqual([
+      expect.stringContaining("/neta-position-links/MDS6%7CA-F"),
+      expect.stringContaining("/neta-position-links/MDS6%7CA-F"),
+    ]);
+    expect(patches.map(([, init]) => JSON.parse(String(init?.body)))).toEqual([
+      { equipment_id: equipmentId, sha256, position: "CDS-SEC", expected_revision: 0 },
+      { equipment_id: equipmentId, sha256, position: null, expected_revision: 1 },
+    ]);
   });
 
   it("explains a missing dataset", async () => {

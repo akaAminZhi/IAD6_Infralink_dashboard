@@ -77,6 +77,14 @@ reuses the same rules with the current configuration, so a baseline edit takes
 effect on the next ETL without rerunning OCR. Suggestions preserve existing
 filename annotations and require the operator to confirm the rename.
 
+On `/neta-baselines`, the local operator can link a report to a confirmed
+position for one equipment. The revision-checked position-links API saves
+these mappings in the family baseline by equipment ID and report SHA-256.
+ETL applies an unambiguous link before comparing positions, keeps the parsed
+position for inspection, and suppresses the linked report's rename suggestion.
+Result and retest handling use the existing report statuses. Missing,
+ambiguous, or invalid links appear in the position check for review.
+
 ## Purpose
 
 The IAD6 Infralink Dashboard combines engineering exports and locally managed

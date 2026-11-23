@@ -402,6 +402,21 @@ def build_family_draft(
 # --- comparison -------------------------------------------------------------
 
 
+def find_linked_report(
+    reports: Iterable[dict[str, Any]], sha256: str,
+) -> tuple[dict[str, Any] | None, str | None]:
+    """Resolve a manual link among the reports considered for one equipment."""
+    matches = [report for report in reports if report.get("sha256") == sha256]
+    if not matches:
+        return None, "report_missing"
+    if len(matches) != 1:
+        return None, "report_ambiguous"
+    report = matches[0]
+    if "report_belongs_elsewhere" in report["flags"]:
+        return None, "other_equipment"
+    return report, None
+
+
 @dataclass(slots=True)
 class ReportRef:
     file: str
@@ -410,6 +425,7 @@ class ReportRef:
     status: str
     test_date: str | None = None
     serial_number: str | None = None
+    manual_position: str | None = None
 
 
 def _serial(value: str | None) -> str | None:
@@ -467,6 +483,9 @@ def compare_equipment(
     extras: list[ReportRef] = []
     unreadable: list[ReportRef] = []
     for report in reports:
+        if report.manual_position is not None:
+            by_key[report.manual_position].append(report)
+            continue
         if report.confidence == "needs_review":
             unreadable.append(report)
             continue

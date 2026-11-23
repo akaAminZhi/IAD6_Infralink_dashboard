@@ -26,6 +26,7 @@ export const ISSUE_LABELS: Record<string, string> = {
   fail_after_pass: "FAIL after PASS",
   duplicate_different_sn: "Two PASS with different SN",
   report_belongs_elsewhere: "Report belongs to other equipment",
+  unresolved_position_link: "Manual report link needs review",
   pdf_unparsed: "PDF field unreadable, GC name used",
   no_reports: "No reports",
 };

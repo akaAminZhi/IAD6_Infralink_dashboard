@@ -83,6 +83,15 @@ export function deleteNetaPositionBaseline(family: string, expectedRevision: num
   );
 }
 
+export function setNetaReportPositionLink(
+  family: string, equipmentId: string, sha256: string, position: string | null, expectedRevision: number,
+) {
+  return request<NetaPositionBaselines>(`/neta-position-links/${encodeURIComponent(family)}`, {
+    method: "PATCH",
+    body: JSON.stringify({ equipment_id: equipmentId, sha256, position, expected_revision: expectedRevision }),
+  });
+}
+
 export function getAutomationRun(runId: string) {
   return request<AutomationRun>(`/runs/${encodeURIComponent(runId)}`);
 }

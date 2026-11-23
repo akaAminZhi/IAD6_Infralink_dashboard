@@ -2,6 +2,8 @@ import csv
 import json
 from pathlib import Path
 
+import pytest
+
 from scripts.etl.build_neta_position_check import build_position_check, run_build
 from scripts.etl.run_etl import OUTPUT_FILES, build_pipeline_steps
 
@@ -180,6 +182,79 @@ def test_position_links_to_the_decisive_same_day_failure_first() -> None:
     check = build_position_check(reviews, {}, {passed.casefold(): field, failed.casefold(): field}, [], config)
     cell, = check["equipment"][0]["positions"]
     assert (cell["result"], cell["notes"], cell["reports"]) == ("failed_only", ["same_day_fail"], [failed, passed])
+
+
+@pytest.mark.parametrize(("status", "expected"), [
+    ("PASSED", "pass"), ("FAILED", "failed_only"), ("REVIEW_REQUIRED", "result_pending"),
+])
+def test_manual_ct_report_position_survives_renaming_and_can_be_removed(status: str, expected: str) -> None:
+    device = "IAD06-PDU6-02B-6"
+    positions = ["CT-S-A", "CT-S-B", "CT-S-C", "CT-S-MG"]
+    reports = [
+        {"file": f"{device}/{device} CT-S {phase}.pdf", "sha256": f"{index:064x}", "status": "PASSED"}
+        for index, phase in enumerate(("A PHASE", "B PHASE", "C PHASE", "MG"), 1)
+    ]
+    first = reports[0]
+    first["status"] = status
+    digest = first["sha256"]
+    fields = {report["sha256"]: {"fields": {"filename": f"{device} CT-S"}} for report in reports}
+    family = {"status": "confirmed", "positions": [{"key": position} for position in positions]}
+    config = {"families": {"PDU6|A-F|sub": family}}
+    equipment = [{"equipment_id": device, "neta_complete": True}]
+
+    def check():
+        return build_position_check({"reports": reports}, {}, fields, equipment, config)
+
+    auto = check()["equipment"][0]
+    assert all(cell["result"] == "missing" for cell in auto["positions"])
+    assert auto["reports"][0]["suggested_gc_name"] == f"{device} CT-S.pdf"
+
+    family["report_position_links"] = {device: {digest: "CT-S-A"}}
+    linked = check()
+    linked_entry = linked["equipment"][0]
+    assert linked["families"][0]["draft"]["support"] == {"CT-S": 1}
+    assert [cell["result"] for cell in linked_entry["positions"]] == [expected, "missing", "missing", "missing"]
+    assert linked_entry["positions"][0]["reports"] == [first["file"]]
+    assert linked_entry["issue_counts"]["extra"] == 3
+    assert linked_entry["issue_counts"]["gc_name_mismatch"] == 3
+    linked_report = linked_entry["reports"][0]
+    assert (linked_report["key"], linked_report["manual_position"]) == ("CT-S", "CT-S-A")
+    assert linked_report["suggested_gc_name"] is None
+
+    first["file"] = f"{device}/{device} renamed.pdf"
+    assert check()["equipment"][0]["positions"][0]["reports"] == [first["file"]]
+    del family["report_position_links"]
+    assert check()["equipment"][0]["positions"][0]["result"] == "missing"
+
+
+def test_unresolved_position_links_are_visible_and_fall_back_to_parsed_positions() -> None:
+    device = "IAD06-PDU6-02B-6"
+    digest = "a" * 64
+    position = "CT-S-A"
+    family = {"status": "confirmed", "positions": [{"key": position}],
+              "report_position_links": {device: {digest: position}}}
+    config = {"families": {"PDU6|A-F|sub": family}}
+    reports = [{"file": f"{device}/{device} CT-S B PHASE.pdf", "sha256": "b" * 64, "status": "PASSED"}]
+
+    def equipment_entry():
+        return build_position_check({"reports": reports}, {}, {}, [], config)["equipment"][0]
+
+    check = equipment_entry()
+    assert check["unresolved_position_links"] == [{"sha256": digest, "position": position, "reason": "report_missing"}]
+    assert check["issue_counts"]["unresolved_position_link"] == 1
+    reports[0]["sha256"] = digest
+    reports.append({**reports[0], "file": f"{device}/{device} CT-S B PHASE__2.pdf"})
+    check = equipment_entry()
+    assert check["unresolved_position_links"][0]["reason"] == "report_ambiguous"
+    assert check["positions"][0]["result"] == "missing"
+    assert all(report["manual_position"] is None for report in check["reports"])
+    reports.pop()
+    family["positions"] = [{"key": "CT-S-B"}]
+    check = equipment_entry()
+    assert check["unresolved_position_links"][0]["reason"] == "position_removed"
+    assert check["positions"][0]["result"] == "pass"
+    reports.clear()
+    assert equipment_entry()["unresolved_position_links"][0]["reason"] == "position_removed"
 
 
 def test_tx6_oil_analysis_uses_its_own_position_and_review_result() -> None:

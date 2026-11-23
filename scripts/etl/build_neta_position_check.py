@@ -20,6 +20,7 @@ from datetime import datetime
 import json
 import os
 from pathlib import Path
+import re
 import sys
 from typing import Any
 from urllib.parse import quote
@@ -33,6 +34,7 @@ from scripts.etl.neta_positions import (
     build_family_draft,
     compare_equipment,
     family_key,
+    find_linked_report,
     is_excluded_report,
     parse_position,
     position_source,
@@ -51,6 +53,7 @@ EQUIPMENT_PATH = DATA_DIR / "equipment.json"
 BASELINES_PATH = PROJECT_ROOT / "config" / "neta_position_baselines.json"
 GC_URL_BASE = "/neta-reports-gc"
 REVIEW_STATUSES = {"PASSED", "FAILED", "REVIEW_REQUIRED", "ERROR"}
+REPORT_SHA256 = re.compile(r"[0-9a-f]{64}")
 
 
 def tracker_root() -> Path:
@@ -206,6 +209,9 @@ def collect_reports(
         record = fields.get(str(review.get("sha256") or "")) or fields.get(file_name.casefold()) or {}
         pdf_fields = record.get("fields") if isinstance(record.get("fields"), dict) else {}
         report = parse_report(name, equipment_id.upper(), pdf_fields, record)
+        digest = str(review.get("sha256") or "").strip().lower()
+        if REPORT_SHA256.fullmatch(digest):
+            report.sha256 = digest
         suggestion = suggest_ocr_gc_name(name, equipment_id, record, confirmed_families)
         if suggestion:
             report.suggested_gc_name = suggestion
@@ -230,6 +236,24 @@ def _confirmed_positions(family: dict[str, Any] | None) -> list[dict[str, Any]] 
     return [position for position in family.get("positions") or [] if position.get("key")]
 
 
+def apply_position_links(
+    reports: list[dict[str, Any]], links: dict[str, str], position_keys: set[str],
+) -> list[dict[str, str]]:
+    unresolved = []
+    for digest, position in links.items():
+        report, issue = find_linked_report(reports, digest)
+        if position not in position_keys:
+            issue = "position_removed"
+        if issue:
+            unresolved.append({"sha256": digest, "position": position, "reason": issue})
+        elif report is not None:
+            report["manual_position"] = position
+            report["suggested_gc_name"] = None
+            if "gc_name_mismatch" in report["flags"]:
+                report["flags"].remove("gc_name_mismatch")
+    return unresolved
+
+
 def build_position_check(
     reviews_payload: dict[str, Any] | None,
     manifest: dict[str, dict[str, str]],
@@ -251,6 +275,12 @@ def build_position_check(
         equipment_id for equipment_id, record in equipment_lookup.items()
         if record.get("neta_complete") is True
     }
+    for family, entry in confirmed_families.items():
+        if entry.get("status") == "confirmed":
+            universe.update(
+                equipment_id for equipment_id in entry.get("report_position_links", {})
+                if family_key(equipment_id) == family
+            )
     tracked = sorted(
         equipment_id for equipment_id in universe
         if requires_equipment_test_tracking({"equipment_id": equipment_id})
@@ -283,6 +313,7 @@ def build_position_check(
         else:
             basis, baseline = "none", []
         exceptions = (confirmed_entry or {}).get("exceptions") or {}
+        position_links = confirmed_entry.get("report_position_links", {}) if confirmed is not None else {}
         draft_differs = confirmed is not None and sorted(p["key"] for p in confirmed) != draft["positions"]
 
         nonconforming = 0
@@ -291,8 +322,13 @@ def build_position_check(
             reports = reports_by_equipment.get(equipment_id, [])
             exception = exceptions.get(equipment_id) or {}
             device_baseline = [*baseline, *(exception.get("extra_positions") or [])]
-            refs = [ReportRef(report["file"], report["key"], report["confidence"], report["status"],
-                              report.get("test_date"), report.get("serial_number")) for report in reports]
+            unresolved = apply_position_links(
+                reports, position_links.get(equipment_id, {}), {position["key"] for position in device_baseline},
+            )
+            refs = [ReportRef(
+                report["file"], report["key"], report["confidence"], report["status"],
+                report["test_date"], report["serial_number"], manual_position=report["manual_position"],
+            ) for report in reports]
             comparison = compare_equipment(refs, device_baseline, exception.get("waived_positions") or [])
             if basis == "none":
                 comparison["nonconforming"] = False
@@ -302,6 +338,8 @@ def build_position_check(
                 flagged = sum(1 for report in reports if flag in report["flags"])
                 if flagged:
                     issue_counts[flag] = flagged
+            if unresolved:
+                issue_counts["unresolved_position_link"] = len(unresolved)
             complete_but_nonconforming = neta_complete and comparison["nonconforming"]
             if complete_but_nonconforming:
                 issue_counts["complete_but_nonconforming"] = 1
@@ -325,6 +363,7 @@ def build_position_check(
                 needs_review_reports=comparison["needs_review_reports"],
                 reports=reports,
                 exception_note=exception.get("note") or None,
+                unresolved_position_links=unresolved,
             ).to_dict())
         families_out.append({
             "family": family,

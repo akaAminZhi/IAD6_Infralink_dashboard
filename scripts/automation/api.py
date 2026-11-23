@@ -127,6 +127,14 @@ class NetaPositionBaselineRequest(BaseModel):
     exceptions: dict[str, dict[str, Any]] = Field(default_factory=dict, max_length=500)
 
 
+class NetaReportPositionLinkRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    expected_revision: int = Field(ge=0)
+    equipment_id: str = Field(pattern=r"^[A-Z0-9][A-Z0-9-]{2,79}$")
+    sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    position: str | None = Field(max_length=80)
+
+
 class NetaDuplicateDecisionRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     match_id: str = Field(pattern=r"^[0-9a-f]{64}$")
@@ -222,7 +230,7 @@ def create_app(
         CORSMiddleware,
         allow_origin_regex=r"^https?://(?:localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$",
         allow_credentials=False,
-        allow_methods=["GET", "POST", "PUT", "DELETE"],
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
         allow_headers=["Content-Type", "Authorization"],
     )
 
@@ -598,6 +606,21 @@ def create_app(
         if user_id != LOCAL_OPERATOR:
             raise HTTPException(status_code=403,
                                 detail="Only the local operator can confirm NETA position baselines.")
+
+    @app.patch("/api/automation/neta-position-links/{family:path}")
+    def set_neta_report_position_link(family: str, request: NetaReportPositionLinkRequest,
+                                      user_id: str = Depends(require_operator)) -> dict[str, Any]:
+        require_baseline_editor(user_id)
+        try:
+            return neta_position_baselines.set_report_position_link(
+                resolved_config.neta_position_baselines_path,
+                resolved_config.dashboard_root / "frontend" / "public" / "data" / "neta_position_check.json",
+                family, request.equipment_id, request.sha256, request.position, request.expected_revision,
+            )
+        except (neta_position_baselines.RevisionConflict, OSError, json.JSONDecodeError) as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     @app.put("/api/automation/neta-position-baselines/{family:path}")
     def save_neta_position_baseline(family: str, request: NetaPositionBaselineRequest,

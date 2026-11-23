@@ -237,6 +237,8 @@ class NetaPositionReport(SchemaRecord):
     pdf_fields: dict[str, str] = field(default_factory=dict)
     field_votes: dict[str, str] = field(default_factory=dict)
     suggested_gc_name: str | None = None
+    sha256: str | None = None
+    manual_position: str | None = None
 
 
 @dataclass(slots=True)
@@ -257,6 +259,7 @@ class NetaPositionEquipment(SchemaRecord):
     needs_review_reports: list[dict[str, Any]] = field(default_factory=list)
     reports: list[dict[str, Any]] = field(default_factory=list)
     exception_note: str | None = None
+    unresolved_position_links: list[dict[str, str]] = field(default_factory=list)
 
 
 @dataclass(slots=True)

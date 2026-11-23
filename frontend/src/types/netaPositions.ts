@@ -35,6 +35,7 @@ export interface NetaConfirmedFamily extends NetaPositionBaselineInput {
   status: "confirmed";
   confirmed_at: string | null;
   confirmed_by: string | null;
+  report_position_links?: Record<string, Record<string, string>>;
 }
 
 export interface NetaPositionBaselines {
@@ -63,6 +64,14 @@ export interface NetaPositionReport {
   pdf_fields?: Record<string, string>;
   field_votes?: Record<string, string>;
   suggested_gc_name?: string | null;
+  sha256?: string | null;
+  manual_position?: string | null;
+}
+
+export interface NetaUnresolvedPositionLink {
+  sha256: string;
+  position: string;
+  reason: "report_missing" | "report_ambiguous" | "other_equipment" | "position_removed";
 }
 
 export interface NetaPositionCell {
@@ -88,6 +97,7 @@ export interface NetaPositionEquipment {
   needs_review_reports: { file: string; key: string }[];
   reports: NetaPositionReport[];
   exception_note: string | null;
+  unresolved_position_links?: NetaUnresolvedPositionLink[];
 }
 
 export interface NetaPositionFamily {

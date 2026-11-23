@@ -13,6 +13,7 @@ from scripts.automation.runner import AutomationConfig, TaskManager
 
 URL = "/api/automation/neta-position-baselines/"
 FAMILY = "MDS6%7CA-F"
+LINK_URL = "/api/automation/neta-position-links/" + FAMILY
 
 
 def make_client(tmp_path: Path, user: str = LOCAL_OPERATOR) -> tuple[TestClient, AutomationConfig]:
@@ -77,3 +78,58 @@ def test_remote_operator_is_read_only(tmp_path: Path) -> None:
     assert client.get(URL.rstrip("/")).json()["editable"] is False
     assert client.put(URL + FAMILY, json={**BODY, "expected_revision": 0}).status_code == 403
     assert client.delete(URL + FAMILY, params={"expected_revision": 0}).status_code == 403
+    assert client.patch(LINK_URL, json={
+        "equipment_id": "IAD06-MDS6-01D", "sha256": "a" * 64, "position": "CDS-PRI", "expected_revision": 0,
+    }).status_code == 403
+
+
+def test_save_report_position_link_preserves_baseline_and_can_be_removed(tmp_path: Path) -> None:
+    client, config = make_client(tmp_path)
+    preflight = client.options(LINK_URL, headers={
+        "Origin": "http://localhost:5173", "Access-Control-Request-Method": "PATCH",
+        "Access-Control-Request-Headers": "content-type",
+    })
+    assert preflight.status_code == 200
+    assert preflight.headers["access-control-allow-origin"] == "http://localhost:5173"
+    assert client.put(URL + FAMILY, json={**BODY, "expected_revision": 0}).status_code == 200
+    report = {"sha256": "a" * 64, "flags": []}
+    equipment = {"family": "MDS6|A-F", "equipment_id": "IAD06-MDS6-01D", "reports": [report]}
+    check_path = config.dashboard_root / "frontend/public/data/neta_position_check.json"
+    check_path.parent.mkdir(parents=True)
+
+    def write_check():
+        check_path.write_text(json.dumps({"equipment": [equipment]}), encoding="utf-8")
+
+    write_check()
+    body = {"equipment_id": equipment["equipment_id"], "sha256": report["sha256"],
+            "position": "CDS-SEC", "expected_revision": 1}
+    for invalid in ({"position": "CDS-PRIMARY"}, {"sha256": "b" * 64}, {"equipment_id": "IAD06-MDS6-01B"}):
+        assert client.patch(LINK_URL, json={**body, **invalid}).status_code == 422
+    report["flags"] = ["report_belongs_elsewhere"]
+    write_check()
+    assert client.patch(LINK_URL, json=body).status_code == 422
+    report["flags"] = []
+    equipment["reports"].append(report.copy())
+    write_check()
+    assert client.patch(LINK_URL, json=body).status_code == 422
+    equipment["reports"].pop()
+    write_check()
+
+    saved = client.patch(LINK_URL, json=body)
+    assert saved.status_code == 200, saved.text
+    family = saved.json()["families"]["MDS6|A-F"]
+    assert family["report_position_links"] == {equipment["equipment_id"]: {report["sha256"]: "CDS-SEC"}}
+    assert family["exceptions"]["IAD06-MDS6-01X"]["note"] == "no secondary"
+    assert client.patch(LINK_URL, json=body).status_code == 409
+    reconfirmed = client.put(URL + FAMILY, json={**BODY, "expected_revision": 2})
+    assert reconfirmed.status_code == 200
+    assert reconfirmed.json()["families"]["MDS6|A-F"]["report_position_links"] == family["report_position_links"]
+    changed = client.patch(LINK_URL, json={**body, "expected_revision": 3, "position": "CDS-PRI"})
+    assert changed.json()["families"]["MDS6|A-F"]["report_position_links"][equipment["equipment_id"]] == {
+        report["sha256"]: "CDS-PRI",
+    }
+
+    check_path.unlink()
+    removed = client.patch(LINK_URL, json={**body, "expected_revision": 4, "position": None})
+    assert removed.status_code == 200, removed.text
+    assert "report_position_links" not in removed.json()["families"]["MDS6|A-F"]
