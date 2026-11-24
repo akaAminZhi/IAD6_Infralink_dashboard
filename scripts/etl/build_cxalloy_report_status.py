@@ -29,6 +29,7 @@ HASH_CACHE_VERSION = 1
 REHASH_ENV = "IAD6_CXALLOY_REHASH"
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 VALID_RENAME_STATUSES = {"copied", "skipped_existing"}
+IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".bmp"}
 COMPLETED_UPLOAD_STATUSES = {"uploaded", "skipped_existing_on_site"}
 UPLOAD_INVALIDATION_STATUSES = {"equipment_not_found", "cleanup_deleted"}
 
@@ -355,8 +356,13 @@ def build_cxalloy_report_status(
             continue
         device_name = canonical_equipment_id(row.get("device_name"))
         output_path = clean(row.get("output_path"))
-        if device_name and output_path:
-            grouped_rows[device_name].append(row)
+        # Match Tracker's PDF inventory, including legacy PDFs derived from images.
+        source_suffix = Path(clean(row.get("source_path")).replace("\\", "/")).suffix.casefold()
+        if (not device_name or Path(output_path).suffix.casefold() != ".pdf"
+                or clean(row.get("parsed_source")).upper() == "SUPPORTING_IMAGE"
+                or source_suffix in IMAGE_SUFFIXES):
+            continue
+        grouped_rows[device_name].append(row)
 
     upload_rows = read_csv_rows(upload_manifest)
     uploads_by_target: dict[str, list[dict[str, str]]] = defaultdict(list)

@@ -127,8 +127,10 @@ a pending package with a positive available-PDF count. Individual report status
 retains its evidence rules; upload decisions belong to the Tracker.
 
 Equipment details separate **Equipment Reports** from **Cable Reports**.
-Equipment reports have their own upload status; each downloaded cable PDF shows
-its individual CxAlloy status. No expected report total or completion ratio is
+Equipment reports have their own upload status, and each downloaded cable PDF
+shows its individual CxAlloy status. The upload status inventory includes only
+eligible PDFs. Supporting images and legacy PDFs derived from those images
+are excluded from the CxAlloy counts. No expected report total or completion ratio is
 inferred. Cable PDFs are classified using the GC rename manifest's LV/MV cable
 metadata, including shared PDFs and filenames without a cable prefix. Missing
 local PDFs and unverifiable upload history remain visible. Refresh this view with

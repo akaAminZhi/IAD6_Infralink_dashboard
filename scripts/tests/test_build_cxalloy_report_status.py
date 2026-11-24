@@ -69,6 +69,34 @@ def test_lifecycle_uploads_verify_equipment_and_cables_without_neta_completion(t
     assert result["upload_status"] == ("uploaded" if change in {"none", "shared_pdf"} else "pending")
 
 
+def test_supporting_images_do_not_count_as_cxalloy_reports(tmp_path: Path) -> None:
+    report = tmp_path / "MDB6-02D.PDF"
+    report.write_bytes(b"uploaded equipment report")
+    device = {"device_name": "IAD06-MDB6-02D", "status": "skipped_existing"}
+    rows = [
+        {**device, "source_path": "source/report.pdf", "output_path": report.name, "parsed_source": "ASSET"},
+        {**device, "source_path": "source/photo.JPG", "output_path": "photo.JPG", "parsed_source": "ASSET"},
+        {**device, "source_path": "source/photo.pdf", "output_path": "supporting.pdf", "parsed_source": "SUPPORTING_IMAGE"},
+        {**device, "source_path": r"C:\source\scan.TIFF", "output_path": "legacy.pdf", "parsed_source": "ASSET"},
+        {**device, "device_name": "IAD06-IMAGE-ONLY", "source_path": "source/only.jpg",
+         "output_path": "only.jpg", "parsed_source": "SUPPORTING_IMAGE"},
+    ]
+    for row in rows[1:]:
+        (tmp_path / row["output_path"]).write_bytes(b"supporting image")
+    upload = {"target_equipment": "MDB6-02D", "status": "uploaded", "sha256": uploader_group_hash([report])}
+    rename_manifest, upload_manifest = tmp_path / "rename.csv", tmp_path / "upload.csv"
+    write_csv(rename_manifest, list(rows[0]), rows)
+    write_csv(upload_manifest, list(upload), [upload])
+
+    result = build_cxalloy_report_status(rename_manifest, upload_manifest, tmp_path)
+    assert result["summary"]["pending_equipment"] == 0
+    assert result["summary"]["expected_report_files"] == 1
+    record, = result["records"]
+    assert record["equipment_id"] == device["device_name"]
+    assert record["upload_status"] == "uploaded"
+    assert [(item["report_name"], item["upload_status"]) for item in record["reports"]] == [(report.name, "uploaded")]
+
+
 def test_current_hash_controls_uploaded_status(tmp_path: Path) -> None:
     gc_dir = tmp_path / "NETA_eport_To_GC" / "IAD06-PDU6-01A-1"
     first = gc_dir / "first.pdf"
