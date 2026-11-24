@@ -239,6 +239,7 @@ class NetaPositionReport(SchemaRecord):
     suggested_gc_name: str | None = None
     sha256: str | None = None
     manual_position: str | None = None
+    gc_name_fallback_position: str | None = None
 
 
 @dataclass(slots=True)

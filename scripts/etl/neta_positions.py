@@ -426,6 +426,8 @@ class ReportRef:
     test_date: str | None = None
     serial_number: str | None = None
     manual_position: str | None = None
+    gc_name_candidate: str | None = None
+    gc_name_fallback_position: str | None = None
 
 
 def _serial(value: str | None) -> str | None:
@@ -480,14 +482,14 @@ def compare_equipment(
     waived_keys = set(waived)
     alias_lookup = _position_aliases(baseline)
     by_key: dict[str, list[ReportRef]] = defaultdict(list)
-    extras: list[ReportRef] = []
-    unreadable: list[ReportRef] = []
+    unmatched: list[ReportRef] = []
     for report in reports:
+        report.gc_name_fallback_position = None
         if report.manual_position is not None:
             by_key[report.manual_position].append(report)
             continue
         if report.confidence == "needs_review":
-            unreadable.append(report)
+            unmatched.append(report)
             continue
         target = alias_lookup.get(report.key)
         if target is None:
@@ -498,9 +500,23 @@ def compare_equipment(
         elif target != report.key:
             report.confidence = "alias"
         if target is None:
-            extras.append(report)
+            unmatched.append(report)
         else:
             by_key[target].append(report)
+    # A GC filename can fill an empty position. Keep all fallback reports for
+    # that position so the usual FAIL/PASS and retest rules still apply.
+    primary_positions = set(by_key)
+    extras: list[ReportRef] = []
+    unreadable: list[ReportRef] = []
+    for report in unmatched:
+        target = alias_lookup.get(report.gc_name_candidate) if report.gc_name_candidate else None
+        if target is not None and target not in primary_positions:
+            report.gc_name_fallback_position = target
+            by_key[target].append(report)
+        elif report.confidence == "needs_review":
+            unreadable.append(report)
+        else:
+            extras.append(report)
     positions = []
     issues: Counter[str] = Counter()
     for position in baseline:

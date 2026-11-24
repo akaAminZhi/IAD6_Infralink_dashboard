@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "revision": 1,
+  "revision": 17,
   "families": {
     "MDS6|R": {
       "status": "confirmed",
@@ -182,7 +182,572 @@
         }
       ],
       "exceptions": {},
-      "confirmed_at": "2026-11-20T14:22:05-05:00",
+      "confirmed_at": "2026-11-24T06:36:09-05:00",
+      "confirmed_by": "local_operator",
+      "report_position_links": {
+        "IAD06-MDS6-02R": {
+          "6f2e023b208b4a07a7ca8c43ed38194669eca33f63d8d435aae2fadbf97a00a4": "MBB-PRI"
+        }
+      }
+    },
+    "PDU6|A-F|sub": {
+      "status": "confirmed",
+      "positions": [
+        {
+          "key": "CT-P-A",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "CT-P-B",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "CT-P-C",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "CT-S-A",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "CT-S-B",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "CT-S-C",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "CT-S-MG",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "EQUIPMENT",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "FB5-PRI",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "FB6-PRI",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "FB7-PRI",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "FB8-PRI",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "MCB1-PRI",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "PM",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "TX",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        }
+      ],
+      "exceptions": {},
+      "confirmed_at": "2026-11-23T06:06:19-05:00",
+      "confirmed_by": "local_operator",
+      "report_position_links": {
+        "IAD06-PDU6-01A-5": {
+          "aeab1ec8a886d6355282bc530b6a022ff6c55169ba575cac6fe806fa56c38e62": "CT-S-MG"
+        },
+        "IAD06-PDU6-01A-7": {
+          "4427aec9233ecc25b7e10e82d2c76dc0bed82345fa4171da3defea2d4d448084": "CT-P-C"
+        },
+        "IAD06-PDU6-01B-2": {
+          "c4cb12246e7fa239bbd87499d3e92366749841d3c95f5f60eba594ec71320264": "CT-P-A",
+          "f679c3b6556f6f55faba9f70fd5a99fc232d78b256690b4ea3dc1da1a7afcaf5": "CT-P-B",
+          "f807d1cce622d39dfc736f7412dc1ac28d4491719aaf0eac0e5dd4a7396c08a1": "CT-S-B"
+        }
+      }
+    },
+    "TX6|A-F": {
+      "status": "confirmed",
+      "positions": [
+        {
+          "key": "EQUIPMENT",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "OIL-SAMPLE",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        }
+      ],
+      "exceptions": {},
+      "confirmed_at": "2026-11-23T06:06:30-05:00",
+      "confirmed_by": "local_operator"
+    },
+    "CDS6|R|sub": {
+      "status": "confirmed",
+      "positions": [
+        {
+          "key": "EQUIPMENT",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "FB1-PRI",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "FB10-PRI",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "FB11-PRI",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "FB12-PRI",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "FB2-PRI",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "FB3-PRI",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "FB4-PRI",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "FB5-PRI",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "FB6-PRI",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "FB7-PRI",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "FB8-PRI",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "FB9-PRI",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "MCB1",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        }
+      ],
+      "exceptions": {},
+      "confirmed_at": "2026-11-23T06:09:29-05:00",
+      "confirmed_by": "local_operator"
+    },
+    "CDS6|A-F": {
+      "status": "confirmed",
+      "positions": [
+        {
+          "key": "EQUIPMENT",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "FB1-PRI",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "FB2-PRI",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "FB3-PRI",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "FB4-PRI",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "FB5-PRI",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "FB6-PRI",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "FB7-PRI",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "FB8-PRI",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        }
+      ],
+      "exceptions": {},
+      "confirmed_at": "2026-11-23T06:10:22-05:00",
+      "confirmed_by": "local_operator"
+    },
+    "ATS6|A-F|sub": {
+      "status": "confirmed",
+      "positions": [
+        {
+          "key": "EQUIPMENT",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        }
+      ],
+      "exceptions": {},
+      "confirmed_at": "2026-11-23T06:12:39-05:00",
+      "confirmed_by": "local_operator"
+    },
+    "TX6|R": {
+      "status": "confirmed",
+      "positions": [
+        {
+          "key": "EQUIPMENT",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "OIL-SAMPLE",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        }
+      ],
+      "exceptions": {},
+      "confirmed_at": "2026-11-23T06:12:44-05:00",
+      "confirmed_by": "local_operator"
+    },
+    "MDS6|A-F": {
+      "status": "confirmed",
+      "positions": [
+        {
+          "key": "CDS-PRI",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "CDS-SEC",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "FB6-PRI",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "FB6-SEC",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "FB7-PRI",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "FB7-SEC",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "FB8-PRI",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "FB8-SEC",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "ISO-PRI",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "ISO-SEC",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "MAIN-SWBD",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "MBB-PRI",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "MBB-SEC",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "MCB1-PRI",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "MCB1-SEC",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "MCB2-PRI",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "MCB2-SEC",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "PQM1",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "PQM1-CT01-A",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "PQM1-CT01-B",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "PQM1-CT01-C",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        }
+      ],
+      "exceptions": {},
+      "confirmed_at": "2026-11-23T06:13:03-05:00",
+      "confirmed_by": "local_operator"
+    },
+    "MDB6|A-F": {
+      "status": "confirmed",
+      "positions": [
+        {
+          "key": "EQUIPMENT",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "FB1-PRI",
+          "count": 1,
+          "optional": true,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "FB2-PRI",
+          "count": 1,
+          "optional": true,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "FB5-PRI",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        },
+        {
+          "key": "FB6-PRI",
+          "count": 1,
+          "optional": false,
+          "aliases": [],
+          "form": ""
+        }
+      ],
+      "exceptions": {},
+      "confirmed_at": "2026-11-23T06:43:16-05:00",
       "confirmed_by": "local_operator"
     }
   }

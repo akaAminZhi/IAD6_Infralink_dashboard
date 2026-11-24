@@ -236,6 +236,20 @@ def _confirmed_positions(family: dict[str, Any] | None) -> list[dict[str, Any]] 
     return [position for position in family.get("positions") or [] if position.get("key")]
 
 
+def _gc_name_candidate(report: dict[str, Any]) -> str | None:
+    """Return a reliable GC filename key distinct from the header-derived key."""
+    if (
+        report["manual_position"] or report["name_source"] == "gc_name"
+        or report["form"] == "oil_analysis" or "report_belongs_elsewhere" in report["flags"]
+        or report["gc_name_key"] == report["key"]
+    ):
+        return None
+    parsed = parse_position(report["file"].rsplit("/", 1)[-1], report["equipment_id"])
+    if parsed.confidence != "needs_review" and "asset_equipment_conflict" not in parsed.flags:
+        return parsed.key
+    return None
+
+
 def apply_position_links(
     reports: list[dict[str, Any]], links: dict[str, str], position_keys: set[str],
 ) -> list[dict[str, str]]:
@@ -328,8 +342,13 @@ def build_position_check(
             refs = [ReportRef(
                 report["file"], report["key"], report["confidence"], report["status"],
                 report["test_date"], report["serial_number"], manual_position=report["manual_position"],
+                gc_name_candidate=_gc_name_candidate(report),
             ) for report in reports]
             comparison = compare_equipment(refs, device_baseline, exception.get("waived_positions") or [])
+            for report, ref in zip(reports, refs):
+                if ref.gc_name_fallback_position is not None:
+                    report["gc_name_fallback_position"] = ref.gc_name_fallback_position
+                    report["suggested_gc_name"] = None
             if basis == "none":
                 comparison["nonconforming"] = False
             neta_complete = record.get("neta_complete") is True

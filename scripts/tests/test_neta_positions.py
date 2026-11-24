@@ -146,6 +146,23 @@ def test_compare_honours_aliases_waivers_and_optional() -> None:
     assert result["nonconforming"] is False
 
 
+def test_gc_fallback_does_not_reuse_primary_reports_or_override_primary_results() -> None:
+    reports = [
+        ReportRef("extra.pdf", "UNKNOWN", "exact", "PASSED", gc_name_candidate="CT-P-A"),
+        ReportRef("header.pdf", "CT-P-A", "exact", "FAILED", gc_name_candidate="CT-P-B"),
+        ReportRef("manual.pdf", "UNKNOWN", "exact", "PASSED", manual_position="CT-P-C", gc_name_candidate="CT-P-B"),
+    ]
+    baseline = [{"key": key} for key in ("CT-P-A", "CT-P-B", "CT-P-C")]
+
+    result = compare_equipment(reports, baseline)
+
+    assert [(cell["result"], cell["reports"]) for cell in result["positions"]] == [
+        ("failed_only", ["header.pdf"]), ("missing", []), ("pass", ["manual.pdf"]),
+    ]
+    assert result["extra_reports"] == [{"file": "extra.pdf", "key": "UNKNOWN"}]
+    assert all(report.gc_name_fallback_position is None for report in reports)
+
+
 def test_vote_treats_asset_typo_as_conflict_not_reassignment() -> None:
     from scripts.etl.neta_positions import vote_equipment
     fields = {"asset": "IAD06-PDU6-01D-4-FCB-F5 PRI INJ", "substation": "IAD06-PDU6-01D-2",

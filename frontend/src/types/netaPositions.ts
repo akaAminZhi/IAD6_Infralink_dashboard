@@ -58,6 +58,7 @@ export interface NetaPositionReport {
   referenced_equipment: string | null;
   name_source: string;
   gc_name_key: string | null;
+  gc_name_fallback_position?: string | null;
   test_date: string | null;
   serial_number?: string | null;
   text_source?: string | null;

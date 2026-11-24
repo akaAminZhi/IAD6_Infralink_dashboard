@@ -184,6 +184,57 @@ def test_position_links_to_the_decisive_same_day_failure_first() -> None:
     assert (cell["result"], cell["notes"], cell["reports"]) == ("failed_only", ["same_day_fail"], [failed, passed])
 
 
+def test_gc_filenames_fill_missing_ct_positions_using_the_review_results() -> None:
+    device = "IAD06-PDU6-01B-2"
+    phase_results = [
+        ("CT-P A PHASE", "CT-P-A", "PASSED", "pass"),
+        ("CT-P B PHASE", "CT-P-B", "PASSED", "pass"),
+        ("CT-S B PHASE", "CT-S-B", "REVIEW_REQUIRED", "result_pending"),
+    ]
+    reviews = []
+    fields = {}
+    for name, _, status, _ in phase_results:
+        file = f"{device}/{device}-{name}.pdf"
+        reviews.append({"file": file, "status": status})
+        fields[file.casefold()] = {"fields": {"filename": f"{device}-{name} (RETEST)", "station": device}}
+    positions = [{"key": key} for _, key, _, _ in phase_results]
+    config = {"families": {"PDU6|A-F|sub": {"status": "confirmed", "positions": positions}}}
+    equipment = [{"equipment_id": device, "neta_complete": True}]
+
+    entry, = build_position_check({"reports": reviews}, {}, fields, equipment, config)["equipment"]
+
+    assert not entry["nonconforming"]
+    assert not entry["extra_reports"]
+    for (_, key, status, result), review, cell, report in zip(
+        phase_results, reviews, entry["positions"], entry["reports"],
+    ):
+        assert (cell["key"], cell["result"], cell["reports"]) == (key, result, [review["file"]])
+        assert report["gc_name_fallback_position"] == key
+        assert report["status"] == status and report["name_source"] == "pdf_filename"
+        assert "gc_name_mismatch" in report["flags"]
+        assert report["suggested_gc_name"] is None
+
+
+def test_gc_filename_fallback_rejects_conflicting_equipment_evidence() -> None:
+    device = "IAD06-PDU6-01B-2"
+    other = "IAD06-PDU6-01B-3"
+    wrong_filename = f"{device}/{other}-CT-P A PHASE.pdf"
+    wrong_header = f"{device}/{device}-CT-P B PHASE.pdf"
+    reviews = {"reports": [{"file": file, "status": "PASSED"} for file in (wrong_filename, wrong_header)]}
+    fields = {
+        wrong_filename.casefold(): {"fields": {"filename": f"{device}-CT-P"}},
+        wrong_header.casefold(): {"fields": {"filename": f"{other}-CT-P", "station": other}},
+    }
+    positions = [{"key": "CT-P-A"}, {"key": "CT-P-B"}]
+    config = {"families": {"PDU6|A-F|sub": {"status": "confirmed", "positions": positions}}}
+
+    entry, = build_position_check(reviews, {}, fields, [], config)["equipment"]
+
+    assert [cell["result"] for cell in entry["positions"]] == ["missing", "missing"]
+    assert "report_belongs_elsewhere" in entry["reports"][1]["flags"]
+    assert len(entry["extra_reports"]) == 2
+
+
 @pytest.mark.parametrize(("status", "expected"), [
     ("PASSED", "pass"), ("FAILED", "failed_only"), ("REVIEW_REQUIRED", "result_pending"),
 ])
@@ -206,19 +257,20 @@ def test_manual_ct_report_position_survives_renaming_and_can_be_removed(status: 
         return build_position_check({"reports": reports}, {}, fields, equipment, config)
 
     auto = check()["equipment"][0]
-    assert all(cell["result"] == "missing" for cell in auto["positions"])
-    assert auto["reports"][0]["suggested_gc_name"] == f"{device} CT-S.pdf"
+    assert [cell["result"] for cell in auto["positions"]] == [expected, "pass", "pass", "pass"]
+    assert auto["reports"][0]["gc_name_fallback_position"] == "CT-S-A"
 
     family["report_position_links"] = {device: {digest: "CT-S-A"}}
     linked = check()
     linked_entry = linked["equipment"][0]
     assert linked["families"][0]["draft"]["support"] == {"CT-S": 1}
-    assert [cell["result"] for cell in linked_entry["positions"]] == [expected, "missing", "missing", "missing"]
+    assert [cell["result"] for cell in linked_entry["positions"]] == [expected, "pass", "pass", "pass"]
     assert linked_entry["positions"][0]["reports"] == [first["file"]]
-    assert linked_entry["issue_counts"]["extra"] == 3
+    assert not linked_entry["extra_reports"]
     assert linked_entry["issue_counts"]["gc_name_mismatch"] == 3
     linked_report = linked_entry["reports"][0]
     assert (linked_report["key"], linked_report["manual_position"]) == ("CT-S", "CT-S-A")
+    assert linked_report["gc_name_fallback_position"] is None
     assert linked_report["suggested_gc_name"] is None
 
     first["file"] = f"{device}/{device} renamed.pdf"

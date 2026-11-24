@@ -182,6 +182,7 @@ function EquipmentReports({ entry, baselines, editable, onBaselinesSaved }: Repo
                     <div className="font-mono">{report.key}</div>
                     <div className="text-muted-foreground">{report.name_source.replace("pdf_", "PDF ").replace("gc_name", "GC name")}</div>
                     {report.manual_position ? <div className="mt-1 font-medium">Manually linked to {report.manual_position}</div> : null}
+                    {report.gc_name_fallback_position ? <div className="mt-1 font-medium">Matched by GC filename to {report.gc_name_fallback_position}</div> : null}
                     {awaitingEtl ? <div className="mt-1 text-muted-foreground">Link to {configured} pending ETL</div> : null}
                     {editing ? (
                       <div className="mt-1 flex flex-wrap items-center gap-2">
