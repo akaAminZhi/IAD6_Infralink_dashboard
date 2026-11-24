@@ -1,19 +1,22 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { NetaReportManifestProvider } from "../contexts/NetaReportManifestContext";
 import { InfralinkEquipmentLinksProvider } from "../contexts/InfralinkEquipmentLinksContext";
 import { CxalloyEquipmentLinksProvider } from "../contexts/CxalloyEquipmentLinksContext";
 import { DashboardResourcesProvider } from "../contexts/DashboardResourcesContext";
-import type { LayoutCableRecord, LayoutEquipmentRecord, LayoutPlanManifest } from "../types/data";
+import { useOperationsIdentity } from "../components/dataOperations/OperationsAuth";
+import type { LayoutCableRecord, LayoutEquipmentRecord, LayoutManualEnergization, LayoutPlanManifest } from "../types/data";
 import { LAYOUT_VIEW_KEY } from "../utils/layoutIsometricUtils";
 import * as isometricUtils from "../utils/layoutIsometricUtils";
 import { fetchJson } from "../utils/dataLoaders";
+import * as automationApi from "../utils/automationApi";
 import { LAYOUT_OVERRIDES_KEY, readLayoutOverrides, visibleLayoutEquipment } from "../utils/layoutPlanUtils";
 import { LayoutPlanPage } from "./LayoutPlanPage";
 
 vi.mock("../utils/dataLoaders", () => ({ fetchJson: vi.fn() }));
+vi.mock("../components/dataOperations/OperationsAuth", () => ({ useOperationsIdentity: vi.fn() }));
 const fetchMock = vi.mocked(fetchJson);
 
 function device(label: string, values: Partial<LayoutEquipmentRecord> = {}): LayoutEquipmentRecord {
@@ -42,6 +45,76 @@ beforeEach(() => {
   localStorage.setItem(LAYOUT_VIEW_KEY, "plan");
   vi.clearAllMocks();
   fetchMock.mockResolvedValue(dataset());
+  vi.mocked(useOperationsIdentity).mockReturnValue(null);
+});
+
+describe("shared Layout energization", () => {
+  const record: LayoutManualEnergization = {
+    equipment_id: "IAD06-EQ-FIX", energized: true, revision: 1,
+    updated_at: "2026-11-24T19:00:00Z", updated_by: "local_operator",
+  };
+
+  afterEach(() => vi.restoreAllMocks());
+
+  it("lets the local operator confirm and revoke a shared status immediately", async () => {
+    vi.mocked(useOperationsIdentity).mockReturnValue("local_operator");
+    vi.spyOn(automationApi, "getLayoutEnergizations").mockResolvedValue({ records: [] });
+    const save = vi.spyOn(automationApi, "saveLayoutEnergization").mockResolvedValueOnce(record)
+      .mockResolvedValueOnce({ ...record, energized: false, revision: 2 });
+    const confirm = vi.spyOn(window, "confirm").mockReturnValueOnce(false).mockReturnValue(true);
+    localStorage.setItem(LAYOUT_OVERRIDES_KEY, JSON.stringify({ "EQ-FIX": "energizeToday", "EQ-1": "energizeToday" }));
+    const user = userEvent.setup();
+    render(<LayoutPlanPage />);
+
+    await user.click(await screen.findByRole("button", { name: "EQ-UNKNOWN: Unknown" }));
+    const inspector = within(screen.getByRole("complementary"));
+    expect(inspector.queryByRole("button", { name: "Energized" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "EQ-FIX: Energize today" }));
+    const energized = inspector.getByRole("button", { name: "Energized" });
+    await waitFor(() => expect(energized).toBeEnabled());
+    expect(inspector.getByRole("button", { name: "Energize today" }).nextElementSibling).toBe(energized);
+    await user.click(energized);
+    expect(confirm).toHaveBeenCalledWith("Confirm that IAD06-EQ-FIX is energized.");
+    expect(save).not.toHaveBeenCalled();
+    await user.click(energized);
+    expect(save).toHaveBeenNthCalledWith(1, "IAD06-EQ-FIX", true, 0);
+    expect(await screen.findByRole("img", { name: "EQ-FIX Energized lightning" })).toBeInTheDocument();
+    expect(inspector.getByText("From manual energization")).toBeInTheDocument();
+    expect(inspector.getByRole("button", { name: "Energize today" })).toBeDisabled();
+
+    await user.click(inspector.getByRole("button", { name: "Revoke manual record" }));
+    expect(save).toHaveBeenNthCalledWith(2, "IAD06-EQ-FIX", false, 1);
+    expect(await screen.findByRole("img", { name: "EQ-FIX Energize today lightning" })).toBeInTheDocument();
+  });
+
+  it("reads the ETL snapshot in other browsers and prefers Excel while its date is present", async () => {
+    vi.mocked(useOperationsIdentity).mockReturnValue("user_remote_operator");
+    const live = vi.spyOn(automationApi, "getLayoutEnergizations");
+    const exported = dataset();
+    exported.manual_energizations = [record, { ...record, equipment_id: "IAD06-EQ-1" }];
+    fetchMock.mockResolvedValue(exported);
+    localStorage.setItem(LAYOUT_OVERRIDES_KEY, JSON.stringify({ "EQ-FIX": "energizeToday" }));
+    const user = userEvent.setup();
+    const { rerender } = render(<LayoutPlanPage />);
+
+    await user.click(await screen.findByRole("button", { name: "EQ-1: Energized" }));
+    const inspector = within(screen.getByRole("complementary"));
+    expect(inspector.getByText("From SystemElements Excel")).toBeInTheDocument();
+    expect(inspector.getByText(/^Manual backup recorded/)).toBeInTheDocument();
+    expect(inspector.queryByRole("button", { name: "Energized" })).not.toBeInTheDocument();
+    expect(inspector.queryByRole("button", { name: "Revoke manual record" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Reset local statuses" }));
+    expect(screen.getByRole("img", { name: "EQ-FIX Energized lightning" })).toBeInTheDocument();
+    const nextExport = dataset();
+    nextExport.floors[0].equipment[0].energized_completed_at = null;
+    nextExport.manual_energizations = exported.manual_energizations;
+    fetchMock.mockResolvedValue(nextExport);
+    rerender(<LayoutPlanPage refreshKey={1} />);
+    await user.click(await screen.findByRole("button", { name: "EQ-1: Energized" }));
+    expect(within(screen.getByRole("complementary")).getByText("From manual energization")).toBeInTheDocument();
+    expect(live).not.toHaveBeenCalled();
+  });
 });
 
 describe("2.5D Layout connections", () => {
@@ -419,7 +492,7 @@ describe("2.5D Layout connections", () => {
     expect(screen.getByLabelText("Electrical hazard warning")).toHaveTextContent("Scheduled to energize today; confirmation pending.");
     await user.click(screen.getByRole("button", { name: "EQ-1: Energized" }));
     expect(screen.getByLabelText("Electrical hazard warning")).toHaveTextContent("Energized equipment.");
-    await user.click(screen.getByRole("button", { name: "Reset all statuses" }));
+    await user.click(screen.getByRole("button", { name: "Reset local statuses" }));
     expect(screen.queryByRole("img", { name: "EQ-FIX Energize today lightning" })).not.toBeInTheDocument();
     expect(screen.getByRole("img", { name: "EQ-1 Energized lightning" })).toBeInTheDocument();
   });
@@ -957,7 +1030,7 @@ describe("LayoutPlanPage", () => {
     await user.click(screen.getByRole("button", { name: "EQ-2: Not Energized" }));
     await user.click(screen.getByRole("button", { name: "Energize today" }));
     await user.selectOptions(screen.getByLabelText("Floor"), "first");
-    await user.click(screen.getByRole("button", { name: "Reset all statuses" }));
+    await user.click(screen.getByRole("button", { name: "Reset local statuses" }));
     expect(screen.getByRole("button", { name: "EQ-FIX: Not Energized" }).querySelector("rect")?.outerHTML).toBe(before);
     expect(screen.getByRole("button", { name: "EQ-1: Energized" })).toBeInTheDocument();
     expect(localStorage.getItem(LAYOUT_OVERRIDES_KEY)).toBeNull();
@@ -974,7 +1047,7 @@ describe("LayoutPlanPage", () => {
     await user.keyboard("{Enter}");
     expect(screen.getByRole("button", { name: "Energize today" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.queryByLabelText("Equipment status")).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Reset device" }));
+    await user.click(screen.getByRole("button", { name: "Reset local override" }));
     expect(screen.getByRole("button", { name: "EQ-FIX: Not Energized" })).toBeInTheDocument();
   });
 
@@ -1051,7 +1124,7 @@ describe("LayoutPlanPage", () => {
     expect(screen.getByRole("button", { name: "Energize today" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Energize today" })).toHaveAttribute("aria-pressed", "false");
     expect(screen.getByText("From SystemElements Excel")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Reset device" }));
+    await user.click(screen.getByRole("button", { name: "Reset local override" }));
     expect(readLayoutOverrides()).toEqual({});
     expect(screen.getByRole("img", { name: "EQ-1 Energized lightning" })).toBeInTheDocument();
   });
@@ -1158,7 +1231,7 @@ describe("LayoutPlanPage", () => {
     expect(readLayoutOverrides()).toEqual({ "EQ-FIX": "energizeToday", "EQ-UNKNOWN": "energizeToday" });
     expect(screen.getByRole("img", { name: "EQ-1 Energized lightning" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Energize today (0)" })).toBeDisabled();
-    await user.click(screen.getByRole("button", { name: "Reset all statuses" }));
+    await user.click(screen.getByRole("button", { name: "Reset local statuses" }));
     expect(readLayoutOverrides()).toEqual({});
     await user.selectOptions(screen.getByLabelText("Floor"), "second");
     expect(screen.getByRole("status")).toHaveTextContent("0 selected");

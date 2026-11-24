@@ -4,7 +4,11 @@ import json
 
 import fitz
 import pytest
+from fastapi.testclient import TestClient
 
+from scripts.automation.api import create_app
+from scripts.automation.auth import require_operator
+from scripts.automation.runner import AutomationConfig
 from scripts.etl.build_layout_plan import build_layout_plan
 
 
@@ -82,6 +86,65 @@ def test_applies_pdf_rotation_to_control_and_equipment_coordinates(tmp_path):
     assert payload["floors"][0]["equipment"][0]["rect"] == {
         "x": 105.0, "y": 90.0, "width": 27.0, "height": 22.0,
     }
+
+
+def test_local_energization_is_published_by_etl_and_revocable_after_excel_confirmation(tmp_path, monkeypatch):
+    config_path, equipment_path = inputs(tmp_path)
+    config = AutomationConfig.discover(dashboard_root=tmp_path)
+    output = tmp_path / "frontend" / "public" / "data" / "layout_plan.json"
+
+    def rebuild():
+        return build_layout_plan(config_path, tmp_path, equipment_path, output, runtime_root=config.runtime_root)
+
+    assert rebuild()["manual_energizations"] == []
+    monkeypatch.setenv("AUTOMATION_LOCAL_AUTH_BYPASS", "true")
+    app = create_app(config)
+    local = TestClient(app, base_url="http://127.0.0.1:8765", client=("127.0.0.1", 12345))
+    remote = TestClient(app)
+    url = "/api/automation/layout-energizations"
+    equipment_id = "IAD06-EQ-FIX"
+    mark = {"equipment_id": equipment_id, "energized": True, "expected_revision": 0, "confirmed": True}
+
+    assert remote.put(url, json=mark).status_code == 401
+    app.dependency_overrides[require_operator] = lambda: "user_test_operator"
+    assert remote.put(url, json=mark).status_code == 403
+    assert remote.get(url).status_code == 403
+    app.dependency_overrides.clear()
+
+    assert local.put(url, json={**mark, "confirmed": False}).status_code == 422
+    assert local.put(url, json={**mark, "equipment_id": "IAD06-EQ-DUP"}).status_code == 422
+    assert local.put(url, json={**mark, "equipment_id": "IAD06-EQ-OUTSIDE"}).status_code == 422
+    assert local.put(url, json={**mark, "equipment_id": "IAD06-EQ-1"}).status_code == 409
+    saved = local.put(url, json=mark)
+    assert saved.status_code == 200
+    record = saved.json()
+    assert record["updated_by"] == "local_operator"
+    assert record["updated_at"]
+    assert record["revision"] == 1
+    assert local.get(url).json() == {"records": [record]}
+    assert json.loads(output.read_text())["manual_energizations"] == []
+    assert rebuild()["manual_energizations"] == [record]
+
+    equipment = json.loads(equipment_path.read_text())
+    completed = "2026-11-24T14:00:00"
+    equipment["records"][1]["energized_completed_at"] = completed
+    equipment_path.write_text(json.dumps(equipment))
+    payload = rebuild()
+    assert payload["fixed_equipment"][0]["energized_completed_at"] == completed
+    assert payload["manual_energizations"] == [record]
+
+    revoked = local.put(url, json={**mark, "energized": False, "expected_revision": 1})
+    assert revoked.status_code == 200
+    assert revoked.json()["energized"] is False
+    assert revoked.json()["revision"] == 2
+    assert json.loads(output.read_text())["manual_energizations"] == [record]
+    assert rebuild()["manual_energizations"] == []
+
+    equipment["records"][1]["energized_completed_at"] = None
+    equipment_path.write_text(json.dumps(equipment))
+    assert rebuild()["manual_energizations"] == []
+    assert local.put(url, json=mark).status_code == 409
+    assert local.get(url).json() == {"records": [revoked.json()]}
 
 
 def test_publishes_cable_endpoints_types_and_latest_daily_evidence(tmp_path):

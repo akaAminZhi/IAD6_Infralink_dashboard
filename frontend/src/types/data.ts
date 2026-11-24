@@ -395,12 +395,21 @@ export interface LayoutFloorRecord {
   regions?: LayoutRegionRecord[];
 }
 
+export interface LayoutManualEnergization {
+  equipment_id: string;
+  energized: boolean;
+  revision: number;
+  updated_at: string;
+  updated_by: string;
+}
+
 export interface LayoutPlanManifest {
   generated_at: string;
   selected_input_files: SourceFileMap;
   floors: LayoutFloorRecord[];
   fixed_equipment: LayoutEquipmentRecord[];
   fixed_regions?: LayoutRegionRecord[];
+  manual_energizations?: LayoutManualEnergization[];
   cables?: LayoutCableRecord[];
   cable_diagnostics?: { cable_id: string; reason: string; source_equipment_key: string | null; target_equipment_key: string | null }[];
   mv_daily_report_files?: SourceFileMetadata[];

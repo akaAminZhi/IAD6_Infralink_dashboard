@@ -4,11 +4,17 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 import fitz
+
+if __package__ in {None, ""}:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+from scripts.automation.layout_energization import layout_energization_equipment_id, read_layout_energizations
 
 try:
     from .build_power_plan import FEEDER_CABLE_ATP_DIR, MV_REPORT_DIR, build_feeder_cable_atp_index, build_mv_test_index, normalize_equipment_key
@@ -61,6 +67,7 @@ def build_layout_plan(
     mv_report_dir: Path = MV_REPORT_DIR,
     feeder_cable_atp_dir: Path = FEEDER_CABLE_ATP_DIR,
     eps_daily_report_dir: Path = EPS_DAILY_REPORT_DIR,
+    runtime_root: Path = PROJECT_ROOT / "runtime" / "automation",
 ) -> dict[str, Any]:
     config = json.loads(config_path.read_text(encoding="utf-8"))
     equipment_index: dict[str, list[dict[str, Any]]] = {}
@@ -184,14 +191,15 @@ def build_layout_plan(
         aligned_floors[spec["floor_id"]] = floor
     mv_test_index, mv_report_files = build_mv_test_index(mv_report_dir)
     eps_daily_test_index, eps_daily_report_files = build_eps_daily_test_index(eps_daily_report_dir)
-    for record in fixed_equipment + [item for floor in floors for item in floor["equipment"]]:
+    placements = fixed_equipment + [item for floor in floors for item in floor["equipment"]]
+    for record in placements:
         history = [*mv_test_index.get(record["equipment_key"], []), *eps_daily_test_index.get(record["equipment_key"], [])]
         record["daily_report_history"] = list({
             (event["source"], event["report_name"], event["line_number"]): event
             for result in history for event in result.get("events", [])
         }.values())
     feeder_cable_atp_index = build_feeder_cable_atp_index(feeder_cable_atp_dir)
-    layout_keys = {record["equipment_key"] for record in fixed_equipment + [record for floor in floors for record in floor["equipment"]]}
+    layout_keys = {record["equipment_key"] for record in placements}
     mv_path = source_dir / "Electrical-IAD6-MV.pdf"
     mv_connections = read_mv_connections(mv_path)
     if mv_path.exists():
@@ -199,6 +207,8 @@ def build_layout_plan(
     cables, cable_diagnostics = build_layout_connections(
         equipment_index, layout_keys, mv_test_index, feeder_cable_atp_index, eps_daily_test_index, mv_connections,
     )
+    matched_ids = {layout_energization_equipment_id(record) for record in placements}
+    manual_energizations = read_layout_energizations(runtime_root)
     # Preserve all placements; the UI chooses the first fixed source floor per ID.
     payload = {
         "generated_at": datetime.now().astimezone().isoformat(),
@@ -206,6 +216,8 @@ def build_layout_plan(
         "floors": floors,
         "fixed_equipment": fixed_equipment,
         "fixed_regions": shared_regions,
+        "manual_energizations": [record.to_dict() for equipment_id, record in manual_energizations.items()
+                                 if record.energized and equipment_id in matched_ids],
         "diagnostics": diagnostics,
         "cables": cables,
         "cable_diagnostics": cable_diagnostics,

@@ -1,4 +1,4 @@
-import type { LayoutEquipmentRecord, LayoutPlanManifest, LayoutRegionRecord, PowerPlanRect } from "../types/data";
+import type { LayoutEquipmentRecord, LayoutManualEnergization, LayoutPlanManifest, LayoutRegionRecord, PowerPlanRect } from "../types/data";
 
 export type LayoutStatus = "notEnergized" | "energizeToday" | "energized" | "unknown";
 export const LAYOUT_STATUS_LABELS: Record<LayoutStatus, string> = {
@@ -20,10 +20,20 @@ export function baselineLayoutStatus(record: LayoutEquipmentRecord): LayoutStatu
   return record.energized_completed_at ? "energized" : "notEnergized";
 }
 
-export function layoutEquipmentStatus(record: LayoutEquipmentRecord, overrides: Record<string, LayoutStatus>): LayoutStatus {
+export function layoutManualEnergization(
+  record: LayoutEquipmentRecord, manual?: ReadonlyMap<string, LayoutManualEnergization>,
+): LayoutManualEnergization | undefined {
+  if (record.match_status !== "matched" || !record.matched_equipment_id) return;
+  const entry = manual?.get(record.matched_equipment_id);
+  if (entry?.energized) return entry;
+}
+
+export function layoutEquipmentStatus(
+  record: LayoutEquipmentRecord, overrides: Record<string, LayoutStatus>, manual?: ReadonlyMap<string, LayoutManualEnergization>,
+): LayoutStatus {
   const baseline = baselineLayoutStatus(record);
-  // Confirmed energisation takes priority over a previously saved planning flag.
-  return baseline === "energized" ? baseline : overrides[record.equipment_key] ?? baseline;
+  if (baseline === "energized" || layoutManualEnergization(record, manual)) return "energized";
+  return overrides[record.equipment_key] ?? baseline;
 }
 
 export function readLayoutOverrides(): Record<string, LayoutStatus> {
@@ -96,10 +106,11 @@ export function equipmentInLayoutSelection(records: LayoutEquipmentRecord[], sel
 
 export function planLayoutSelection(
   records: LayoutEquipmentRecord[], selection: ReadonlySet<string>, overrides: Record<string, LayoutStatus>,
+  manual?: ReadonlyMap<string, LayoutManualEnergization>,
 ): Record<string, LayoutStatus> {
   const next = { ...overrides };
   for (const record of records) {
-    if (selection.has(record.equipment_key) && layoutEquipmentStatus(record, overrides) !== "energized") {
+    if (selection.has(record.equipment_key) && layoutEquipmentStatus(record, overrides, manual) !== "energized") {
       next[record.equipment_key] = "energizeToday";
     }
   }

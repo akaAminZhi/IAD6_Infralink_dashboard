@@ -6,9 +6,9 @@ import json
 from pathlib import Path
 from typing import Any, Literal
 
-from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, model_validator
 
 from scripts.automation.daily_reports import (
     ReportNameError,
@@ -28,12 +28,18 @@ from scripts.automation.mv_comments import (
     delete_mv_equipment_comment,
     list_mv_equipment_comments,
 )
+from scripts.automation.layout_energization import (
+    LayoutEnergizationConflict,
+    layout_energization_equipment_id,
+    read_layout_energizations,
+    save_layout_energization,
+)
 from scripts.automation.neta_report_reviews import (
     list_neta_report_reviews,
     update_neta_report_review,
 )
 from scripts.automation.runner import AutomationConfig, TaskManager
-from scripts.automation.auth import require_operator
+from scripts.automation.auth import is_local_operator, require_operator
 from scripts.automation import neta_position_baselines, neta_report_rename
 from scripts.automation.neta_report_rename import LOCAL_OPERATOR
 from scripts.automation.browser_login import BrowserLoginManager, KEYS, WIDTH, HEIGHT
@@ -103,6 +109,15 @@ class MvEquipmentCommentRequest(BaseModel):
 
     annotation_id: str = Field(min_length=1, max_length=300)
     text: str = Field(min_length=1, max_length=4_000)
+
+
+class LayoutEnergizationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    equipment_id: str = Field(min_length=1, max_length=300)
+    energized: StrictBool
+    expected_revision: int = Field(ge=0, strict=True)
+    confirmed: StrictBool = False
 
 
 class NetaReportReviewRequest(BaseModel):
@@ -549,6 +564,46 @@ def create_app(
     @app.get("/api/automation/mv-equipment-comments")
     def mv_equipment_comments() -> dict[str, list[dict[str, str]]]:
         return {"comments": list_mv_equipment_comments(resolved_config.runtime_root)}
+
+    def require_layout_operator(request: Request, user_id: str = Depends(require_operator)) -> str:
+        if user_id != LOCAL_OPERATOR or not is_local_operator(request):
+            raise HTTPException(403, "Manual Layout energization is only available to the local operator.")
+        return user_id
+
+    @app.get("/api/automation/layout-energizations")
+    def layout_energizations(user_id: str = Depends(require_layout_operator)) -> dict[str, Any]:
+        try:
+            records = read_layout_energizations(resolved_config.runtime_root)
+        except (OSError, ValueError) as exc:
+            raise HTTPException(503, "Unable to read the local energization records.") from exc
+        return {"records": [record.to_dict() for record in records.values()]}
+
+    @app.put("/api/automation/layout-energizations")
+    def update_layout_energization(request: LayoutEnergizationRequest,
+                                    user_id: str = Depends(require_layout_operator)) -> dict[str, Any]:
+        if request.energized and not request.confirmed:
+            raise HTTPException(422, "Confirm that the selected equipment is energized.")
+        path = resolved_config.dashboard_root / "frontend" / "public" / "data" / "layout_plan.json"
+        try:
+            manifest = json.loads(path.read_text(encoding="utf-8"))
+            placements = [*manifest["fixed_equipment"],
+                          *(row for floor in manifest["floors"] for row in floor["equipment"])]
+            matching = [row for row in placements if layout_energization_equipment_id(row) == request.equipment_id]
+        except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
+            raise HTTPException(503, "Unable to verify the Layout equipment. Run ETL and try again.") from exc
+        if not matching:
+            raise HTTPException(422, "Select a placed device with a unique SystemElements match.")
+        if request.energized and any(row.get("energized_completed_at") for row in matching):
+            raise HTTPException(409, "SystemElements Excel already records this equipment as energized.")
+        try:
+            return save_layout_energization(
+                resolved_config.runtime_root, request.equipment_id, request.energized,
+                request.expected_revision, user_id,
+            ).to_dict()
+        except LayoutEnergizationConflict as exc:
+            raise HTTPException(409, str(exc)) from exc
+        except (OSError, ValueError) as exc:
+            raise HTTPException(503, "Unable to save the local energization records.") from exc
 
     @app.post("/api/automation/neta-report-duplicates/decisions", status_code=202)
     def decide_neta_duplicate(request: NetaDuplicateDecisionRequest,

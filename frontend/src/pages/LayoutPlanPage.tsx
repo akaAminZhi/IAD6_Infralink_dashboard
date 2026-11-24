@@ -17,12 +17,14 @@ import { LayoutCable } from "../components/layout/LayoutCable";
 import { LayoutBackground } from "../components/layout/LayoutBackground";
 import { LayoutFloorGround } from "../components/layout/LayoutFloorGround";
 import { useFrameState } from "../hooks/useFrameState";
+import { useLayoutEnergizations } from "../hooks/useLayoutEnergizations";
 import { usePinchZoom } from "../hooks/usePinchZoom";
 import { useNetaReportManifest } from "../contexts/NetaReportManifestContext";
 import { useDashboardResources } from "../contexts/DashboardResourcesContext";
 import type { Equipment, LayoutCableRecord, LayoutEquipmentRecord, LayoutPlanManifest, PowerPlanRect } from "../types/data";
 import { buildLayoutSearchEntries, searchLayoutEntries, type LayoutSearchEntry } from "../utils/layoutSearchUtils";
 import { fetchJson } from "../utils/dataLoaders";
+import { formatDateTime } from "../utils/formatters";
 import { LAYOUT_CABLE_MISSING_REPORT_MESSAGE, LAYOUT_CABLE_TEST_STATES, layoutCableMissingReport, layoutCableTestState, type LayoutCableTestState } from "../utils/cableTestUtils";
 import { getLayoutCableReportNames } from "../utils/layoutReportUtils";
 import { getNetaReportNames } from "../utils/netaReports";
@@ -32,7 +34,8 @@ import {
   placedLayoutCables, projectLayoutPoint, projectedLayoutBounds, projectedLayoutRoomLabel,
 } from "../utils/layoutIsometricUtils";
 import {
-  equipmentInLayoutSelection, interpolateLayoutTransform, insetEquipmentRect, layoutBounds, layoutCanvasPoint, layoutEquipmentStatus, layoutRoomLabels,
+  baselineLayoutStatus, equipmentInLayoutSelection, interpolateLayoutTransform, insetEquipmentRect, layoutBounds,
+  layoutCanvasPoint, layoutEquipmentStatus, layoutManualEnergization, layoutRoomLabels,
   layoutSelectionRect, layoutViewportTransform, planLayoutSelection, rebaseLayoutTransform, type LayoutTransform,
   LAYOUT_OVERRIDES_KEY, LAYOUT_STATUS_COLORS, LAYOUT_STATUS_LABELS, readLayoutOverrides,
   visibleLayoutEquipment, visibleLayoutRegions, zoomLayoutViewport, type LayoutStatus,
@@ -171,6 +174,7 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
   const [cableStateFilter, setCableStateFilter] = useState<LayoutCableTestState | null>(null);
   const [statusFilter, setStatusFilter] = useState<LayoutStatus | null>(null);
   const [manifest, setManifest] = useState<LayoutPlanManifest | null>(null);
+  const energizations = useLayoutEnergizations(manifest?.manual_energizations, refreshKey);
   const [loading, setLoading] = useState(true);
   const [retry, setRetry] = useState(0);
   const [floorId, setFloorId] = useState("");
@@ -382,7 +386,11 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
     : !!query && !row.equipment_key.includes(query);
   const inspected = rows.find((row) => row.annotation_id === inspection?.annotationId);
   const query = search.trim().toUpperCase().replace(/^IAD06-/, "");
-  const statusOf = (row: LayoutEquipmentRecord) => layoutEquipmentStatus(row, overrides);
+  const statusOf = (row: LayoutEquipmentRecord) => layoutEquipmentStatus(row, overrides, energizations.records);
+  const selectedManual = selected && layoutManualEnergization(selected, energizations.records);
+  const selectedExcel = selected && baselineLayoutStatus(selected) === "energized";
+  const selectedMatchedId = selected?.match_status === "matched" ? selected.matched_equipment_id : null;
+  const selectedSaveError = energizations.saveError?.equipmentId === selectedMatchedId ? energizations.saveError : null;
   const selectedRows = useMemo(() => [...new Map(rows.filter((row) => selectionKeys.has(row.equipment_key)).map((row) => [row.equipment_key, row])).values()], [rows, selectionKeys]);
   const eligibleRows = selectedRows.filter((row) => statusOf(row) !== "energized" && statusOf(row) !== "energizeToday");
   const cableDiagnosticCounts = useMemo(() => (manifest?.cable_diagnostics ?? []).reduce<Record<string, number>>((counts, item) => {
@@ -803,7 +811,7 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
       <div><h2 className="text-2xl font-semibold">Layout</h2>
         <p className="mt-1 text-sm text-muted-foreground">{rows.length} rectangles · {new Set(rows.map((row) => row.equipment_key)).size} equipment IDs · {rows.filter((row) => row.fixed).length} fixed across floors · {rows.filter((row) => row.match_status !== "matched").length} unmatched / ambiguous</p></div>
       <Button variant="outline" onClick={() => saveOverrides({})} disabled={!Object.keys(overrides).length}>
-        <RotateCcw className="mr-2 h-4 w-4" />Reset all statuses
+        <RotateCcw className="mr-2 h-4 w-4" />Reset local statuses
       </Button>
     </div>
     <div className="relative z-20 space-y-3 rounded-lg border bg-card p-4">
@@ -838,7 +846,7 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
         }}><MousePointer2 className="mr-2 h-4 w-4" />Box select</Button>
       </div>
       <span role="status" className="text-sm text-muted-foreground">{selectedRows.length} selected{selectionMode ? ` · ${eligibleRows.length} eligible` : ""}</span>
-      {selectionMode ? <Button disabled={!eligibleRows.length} onClick={() => saveOverrides(planLayoutSelection(rows, selectionKeys, overrides))}>
+      {selectionMode ? <Button disabled={!eligibleRows.length} onClick={() => saveOverrides(planLayoutSelection(rows, selectionKeys, overrides, energizations.records))}>
         <Zap className="mr-2 h-4 w-4 text-orange-500" />Energize today ({eligibleRows.length})
       </Button> : null}
       <Button variant="ghost" disabled={!selectionKeys.size} onClick={() => { setSelectionKeys(new Set()); setSelectedId(null); setSelectedCableId(null); setSearch(""); }}><X className="mr-2 h-4 w-4" />Clear selection</Button>
@@ -1042,6 +1050,20 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
               else next[selected.equipment_key] = "energizeToday";
               saveOverrides(next);
             }}><Zap className="h-4 w-4 text-orange-500" />Energize today</Button>
+          {energizations.local && selectedMatchedId ? <>
+            <Button className="w-full gap-2" variant="outline"
+              disabled={!energizations.canEdit || energizations.saving || !!selectedExcel || !!selectedManual}
+              onClick={() => {
+                if (window.confirm(`Confirm that ${selectedMatchedId} is energized.`)) {
+                  void energizations.save(selectedMatchedId, true);
+                }
+              }}><Zap className="h-4 w-4 text-red-700" aria-hidden="true" />Energized</Button>
+            {energizations.loadError ? <div className="flex items-center justify-between gap-2">
+              <p role="alert" className="text-xs text-muted-foreground">Unable to load local energization records.</p>
+              <Button variant="ghost" onClick={energizations.retry}>Retry</Button>
+            </div> : null}
+            {selectedSaveError ? <p role="alert" className="text-sm text-red-700">{selectedSaveError.message}</p> : null}
+          </> : null}
           <p className="text-xs text-muted-foreground">{equipmentFloorLabel(selected)} · {selected.match_status}</p>
           {isometric ? <p className="text-xs text-muted-foreground">{DEVICE_KIND_LABELS[layoutDeviceKind(selected)]}</p> : null}
           <p className="text-sm">Excel energized date: {selected.energized_completed_at ?? "No completed date"}</p>
@@ -1056,11 +1078,20 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
             </div>
           </section> : null}
           <DailyTestHistory events={selected.daily_report_history} />
-          <p className="text-xs text-muted-foreground">{overrides[selected.equipment_key] && !selected.energized_completed_at ? "Manual override · saved in this browser" : "From SystemElements Excel"}</p>
+          <p className="text-xs text-muted-foreground">{selectedExcel ? "From SystemElements Excel"
+            : selectedManual ? "From manual energization"
+            : overrides[selected.equipment_key] ? "Manual override · saved in this browser" : "From SystemElements Excel"}</p>
+          {selectedManual ? <p className="text-xs text-muted-foreground">
+            {selectedExcel ? "Manual backup recorded" : "Recorded"} {formatDateTime(selectedManual.updated_at)}
+          </p> : null}
           <div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => focusDevice(selected)}>Zoom to device</Button>
             <Button variant="ghost" disabled={!overrides[selected.equipment_key]} onClick={() => {
               const next = { ...overrides }; delete next[selected.equipment_key]; saveOverrides(next);
-            }}>Reset device</Button></div>
+            }}>Reset local override</Button>
+            {energizations.local && selectedMatchedId && selectedManual ? <Button variant="outline"
+              disabled={!energizations.canEdit || energizations.saving}
+              onClick={() => void energizations.save(selectedMatchedId, false)}>Revoke manual record</Button> : null}
+          </div>
         </div> : !selectedCable && !unplacedEquipment ? <p className="text-sm text-muted-foreground">Select equipment or confirm a search suggestion to view its details.</p> : null}
         {isometric && selected ? <section className="space-y-2 border-t pt-3" aria-label="Connected cables">
           <h3 className="text-sm font-semibold">Connected cables ({selectedConnections.length})</h3>

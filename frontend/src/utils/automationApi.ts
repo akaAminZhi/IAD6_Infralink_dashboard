@@ -18,6 +18,7 @@ import type {
   SiteDailyReport, SavedSiteDailyReport, TestSite,
 } from "../types/automation";
 import type { NetaPositionBaselineInput, NetaPositionBaselines } from "../types/netaPositions";
+import type { LayoutManualEnergization } from "../types/data";
 import { isLocalOperationsMode } from "./localOperations";
 
 const API_BASE =
@@ -33,6 +34,17 @@ export function setAutomationTokenGetter(getter: (() => Promise<string | null>) 
 
 export function getAutomationAccess() {
   return request<{ user_id: string }>("/access");
+}
+
+export function getLayoutEnergizations() {
+  return request<{ records: LayoutManualEnergization[] }>("/layout-energizations");
+}
+
+export function saveLayoutEnergization(equipmentId: string, energized: boolean, expectedRevision: number) {
+  return request<LayoutManualEnergization>("/layout-energizations", {
+    method: "PUT",
+    body: JSON.stringify({ equipment_id: equipmentId, energized, expected_revision: expectedRevision, confirmed: energized }),
+  });
 }
 
 export function decideNetaDuplicate(matchId: string, revision: string, action: "confirm" | "revoke") {

@@ -384,9 +384,9 @@ Search provides suggestions across floors. Click a suggestion or choose it with
 Arrow Up/Down and Enter to select and zoom directly to the device; its floor is
 selected automatically. Drag anywhere on the map, including equipment, to pan.
 Mouse wheel zooms around the cursor; Fit layout resets the view. Dragging does
-not select a device. Select equipment and click Energize today to toggle the
-orange animated lightning marker. Clicking again or resetting restores Excel
-state, including red Energized lightning. There is no equipment-status dropdown.
+not select a device. Select equipment and click **Energize today** to toggle the
+orange animated lightning marker. The toggle and both local reset controls only
+change status overrides saved in the current browser.
 Animation respects reduced-motion settings.
 
 Use the pointer button, Box select, to drag a rectangle around multiple devices.
@@ -398,8 +398,19 @@ Escape/pointer cancellation abandons an unfinished rectangle. Switching floors,
 search confirmation or leaving Box select clears selection. Turn Box select off
 to return to panning. All planning remains browser-local and globally resettable.
 
-Energized equipment has a disabled Energize today button. Excel-confirmed
-energisation takes priority over previously saved planning overrides.
+On the dashboard host, authorized local operators can use **Energized** below
+**Energize today** for equipment placed on the layout with a unique SystemElements
+match. Confirm the full equipment ID before recording. Both Excel and manual
+energization use red lightning and disable the planning button. The detail panel
+shows the active source and the time a manual record was saved.
+
+The local automation API stores decisions in `runtime/automation/layout_energizations.json`.
+The host sees saves and revocations immediately. Run dashboard ETL after a change
+to publish it in `layout_plan.json`, then reload Layout in other browsers. The
+**Revoke manual record** button works even after Excel has supplied a date. The
+Excel completion date takes priority while present, and a retained manual record
+supplies the status when the date is blank. Existing local plans apply when both
+sources are absent. See the root README for the local operator configuration.
 Hover equipment, or focus it with the keyboard, to see a card with its full ID
 in 16px text and its electrical status without zooming. Escape dismisses the card;
 dragging/zooming/floor changes also dismiss it. Click/tap for the details panel.

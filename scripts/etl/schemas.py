@@ -33,6 +33,15 @@ class SchemaRecord:
 
 
 @dataclass(slots=True)
+class LayoutManualEnergization(SchemaRecord):
+    equipment_id: str
+    energized: bool
+    revision: int
+    updated_at: str
+    updated_by: str
+
+
+@dataclass(slots=True)
 class EpsDailyReportEvent(SchemaRecord):
     date: str
     source: Literal["Daily_test_report", "MV_Daily_test_report", "Onsite_Test_Report", "Offsite_Test_Report"]
