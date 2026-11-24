@@ -139,10 +139,12 @@ PDFs separately using the same per-file evidence as the details. Hover over a
 count for its equipment/cable breakdown. Legacy status data without file-level
 evidence shows a status without a file count.
 Historical site checks naming another PDF are ignored. A later
-`equipment_not_found` revokes older success until a subsequent successful upload
-or site check verifies it again; cached dashboard hashes and manifest skips do
-not override this. Login failures or failed cable uploads alone do not revoke
-previously confirmed equipment uploads.
+`equipment_not_found` or `cleanup_deleted` invalidates older upload evidence.
+The device returns to pending when local PDFs are available, until a successful
+upload or site check verifies coverage again. Cached hashes and manifest skips
+cannot restore invalidated evidence. An out-of-band site deletion needs a
+record in the Tracker upload history so the offline status builder can see it.
+Login failures or failed cable uploads alone preserve established coverage.
 Per-file upload status is independent of NETA Complete. Verified temporary
 attachments can be Uploaded while equipment NETA remains incomplete/unknown.
 Upload evidence supports both legacy package hashes and Tracker lifecycle

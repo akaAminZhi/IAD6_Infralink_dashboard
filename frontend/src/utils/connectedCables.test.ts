@@ -33,11 +33,11 @@ describe("connected cable energization readiness", () => {
     expect(equipmentEnergizationReadiness(equipment, allExcluded).status).toBe("ready");
   });
   it.each([
-    ["UPP6-01A", true], ["TX-UPP6-01A", true], ["TX-UPP6-01R", true],
+    ["UPP6-01A", false], ["TX-UPP6-01A", false], ["TX-UPP6-01R", false],
     ["CUPP6-04F-3", true], ["TX-CUPP6-01A-1", true], ["CUPP6", true],
     ["CUPP6-01A-R", true], ["TX-CUPP6-01A-REMARK", true],
     ["CUPP6-R", false], ["CUPP6-04R-3", false], ["TX-CUPP6-01R-1", false],
-    [" iad6-tx-upp6-01a ", true], ["IAD06-CUPP6-01A", true],
+    [" iad6-tx-upp6-01a ", false], ["IAD06-CUPP6-01A", true],
     [" iad6-cupp6-01r-2 ", false], ["UPP60-01A", false], ["UPP6A", false],
     ["CUPP60-01A", false], ["MDS6-01A", false], [null, false],
   ])("matches the upload script's default exclusion for %s", (reference, excluded) => {
@@ -45,7 +45,7 @@ describe("connected cable energization readiness", () => {
   });
 
   it.each(["source_equipment_key", "target_equipment_key"] as const)("excludes connections by %s from the list and every count", (endpoint) => {
-    const excluded = makeLayoutCable({ cable_id: "excluded", [endpoint]: "TX-UPP6-01A",
+    const excluded = makeLayoutCable({ cable_id: "excluded", [endpoint]: "TX-CUPP6-01A-1",
       [endpoint === "source_equipment_key" ? "target_equipment_key" : "source_equipment_key"]: "EQ-1", eps_daily_test_status: "failed" });
     const required = makeLayoutCable({ feeder_cable_atp_names: ["ATP.pdf"] });
     const index = buildConnectedCableIndex(makeLayoutManifest([excluded, required]), null)!;
@@ -53,6 +53,14 @@ describe("connected cable energization readiness", () => {
     expect(getConnectedCableScope(equipment, index).excludedCount).toBe(1);
     expect(connectedCableCounts([excluded, required], index)).toEqual({ total: 1, tested: 1, failed: 0, unconfirmed: 0, withReport: 1, ready: 1 });
     expect(equipmentEnergizationReadiness(equipment, index).status).toBe("ready");
+  });
+
+  it.each(["UPP6-01A", "TX-UPP6-01A"])("requires tests and reports on connections to %s", (endpoint) => {
+    const cable = makeLayoutCable({ source_equipment_key: endpoint, target_equipment_key: "EQ-1", eps_daily_test_status: "failed" });
+    const index = buildConnectedCableIndex(makeLayoutManifest([cable]), null)!;
+    expect(getConnectedCableScope(equipment, index)).toEqual({ cables: [cable], excludedCount: 0 });
+    expect(connectedCableCounts([cable], index)).toMatchObject({ total: 1, failed: 1, withReport: 0 });
+    expect(equipmentEnergizationReadiness(equipment, index).status).toBe("not_ready");
   });
 
   it("keeps R-zone connections and unresolved endpoints in scope", () => {

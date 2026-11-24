@@ -39,12 +39,12 @@ see remote endpoints, tested/failed/unconfirmed counts, report availability,
 daily evidence, external links and ATP/NETA PDF previews. Unplaced and
 one-ended connections stay included. Equipment no longer loads EPS test items
 for this page; the EPS Test Execution page retains them.
-Connections with either endpoint in the uploader's default excluded families
-(`UPP6`, `TX-UPP6`, and non-R-zone `CUPP6`/`TX-CUPP6`) are excluded from the
-Equipment cable list, test/report totals and readiness. Family boundaries and
-the first-zone R exception match `upload_cxalloy_reports.py`; unknown endpoints
-are retained. Additional Equipment-page exclusions remove every AHU6 connection
-and UPS6 connections outside the first R zone (UPS6-R / UPS6-01R remain).
+`UPP6` panel and `TX-UPP6` transformer connections count toward the Equipment
+cable list, test/report totals and energization readiness. The cable scope uses
+the uploader's default exclusions for `CUPP6` and `TX-CUPP6` outside the first
+R zone. Unknown endpoints are retained. The Equipment page also excludes every
+AHU6 connection and UPS6 connections outside the first R zone (UPS6-R / UPS6-01R
+remain).
 These additions apply to either endpoint without changing uploader defaults or
 global tracking exclusions. Excluded counts remain visible. Cable and remote-equipment names
 are selectable text with a pointer cursor. Clicking the remote name or cable ID
@@ -149,10 +149,9 @@ Static deployments need the generated dataset along with rebuilt application cod
 
 ## Pending CxAlloy uploads
 
-Equipment IDs starting with `IAD06-TX-UPP6` or `IAD06-UPP6` are excluded from
-pending-upload counts and filters because they do not require CxAlloy uploads.
-Their EPS/NETA tracking remains unchanged.
-`CUPP6` and `TX-CUPP6` are also excluded unless the first zone is `R`
+`UPP6` panels and `TX-UPP6` transformers are eligible for CxAlloy upload and
+appear in the pending-upload counts and filters when they meet the rules below.
+`CUPP6` and `TX-CUPP6` are excluded unless the first zone is `R`
 or digits followed by `R`, matching the Tracker's default upload scope.
 For example, `IAD06-CUPP6-04F-3` is excluded while `IAD06-CUPP6-04R-3`
 remains eligible. Project prefixes and case do not affect this rule.

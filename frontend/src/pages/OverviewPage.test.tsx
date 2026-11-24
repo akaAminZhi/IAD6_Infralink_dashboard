@@ -75,7 +75,7 @@ describe("OverviewPage", () => {
       <Route path="/equipment" element={<LocationProbe />} />
     </Routes></MemoryRouter>);
     const button = screen.getByRole("button", { name: /Pending CxAlloy report upload/ });
-    expect(button).toHaveTextContent("3");
+    expect(button).toHaveTextContent("5");
     expect(button).not.toHaveTextContent("999");
     await user.click(button);
     expect(screen.getByTestId("location")).toHaveTextContent("/equipment?quickFilter=cxalloyPending");

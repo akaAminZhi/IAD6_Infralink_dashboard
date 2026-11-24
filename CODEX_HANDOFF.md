@@ -1,5 +1,26 @@
 ﻿# Codex Handoff
 
+## Current update (2026-11-24) — CxAlloy cleanup status
+
+- The CxAlloy status builder now handles `cleanup_deleted` as an invalidation
+  for both upload history and cached package/file coverage. Later verified
+  success restores coverage. The focused status suite passed all 57 tests.
+- Checked all 22 UPP6/TX-UPP6 checklists read-only. Recorded 13 confirmed stale
+  upload groups in Tracker's append-only history, then rebuilt the dashboard
+  status data. The scope now shows 17 pending and 5 uploaded. The two 01R
+  equipment PDFs matched the current local bytes under their old names.
+
+## Current update (2026-11-24) — UPP6 review scope
+
+- `UPP6` panels and `TX-UPP6` transformers enter the Equipment cable review,
+  test/report counts and energization readiness. Equipment and Overview also
+  include eligible UPP6 assets in Pending CxAlloy Upload. The Tracker uses the
+  same family scope for upload selection. CUPP6/TX-CUPP6 use the first-zone R
+  rule, and the Equipment page retains its own AHU6 and UPS6 cable rules.
+- The compiled Chromium preview showed both UPP6-02F devices in the pending
+  upload filter and their shared feeder cable on both equipment rows. Existing
+  Layout and NETA review snapshots provide the evidence.
+
 ## Current update (2026-11-20): NETA test-position baselines, phases 1-5
 
 - Plan: `docs/NETA_POSITION_BASELINE_PLAN.md`; design summary in `ARCHITECTURE.md`

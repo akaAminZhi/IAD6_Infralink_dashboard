@@ -30,6 +30,7 @@ REHASH_ENV = "IAD6_CXALLOY_REHASH"
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 VALID_RENAME_STATUSES = {"copied", "skipped_existing"}
 COMPLETED_UPLOAD_STATUSES = {"uploaded", "skipped_existing_on_site"}
+UPLOAD_INVALIDATION_STATUSES = {"equipment_not_found", "cleanup_deleted"}
 
 
 def clean(value: object) -> str:
@@ -185,10 +186,10 @@ def mismatched_site_check(row: dict[str, str]) -> bool:
 
 
 def valid_upload_history(rows: Iterable[dict[str, str]]) -> list[dict[str, str]]:
-    """Use confirmed successes since the last failed lookup, in append order.
+    """Use confirmed successes after the last deletion or failed device lookup.
 
-    Cached manifest skips do not independently prove an upload or undo a failed
-    lookup. Legacy site checks naming another PDF do not prove content coverage.
+    Process events in append order. Cached manifest skips and legacy site checks
+    naming another PDF cannot establish confirmed coverage.
     """
     successes: dict[str, list[dict[str, str]]] = defaultdict(list)
     for row in rows:
@@ -196,7 +197,7 @@ def valid_upload_history(rows: Iterable[dict[str, str]]) -> list[dict[str, str]]
         status = clean(row.get("status")).casefold()
         if not target:
             continue
-        if status == "equipment_not_found":
+        if status in UPLOAD_INVALIDATION_STATUSES:
             successes.pop(target, None)
         elif status in COMPLETED_UPLOAD_STATUSES and not mismatched_site_check(row):
             successes[target].append(row)
@@ -212,7 +213,7 @@ def trusted_prior_status(payload: dict[str, Any], rows: list[dict[str, str]]) ->
     invalidated = {
         target_equipment(row.get("target_equipment") or row.get("device_name")).casefold()
         for row in rows
-        if clean(row.get("status")).casefold() == "equipment_not_found" or mismatched_site_check(row)
+        if clean(row.get("status")).casefold() in UPLOAD_INVALIDATION_STATUSES or mismatched_site_check(row)
     }
     records = []
     for record in payload.get("records") or []:
@@ -229,7 +230,7 @@ def trusted_prior_status(payload: dict[str, Any], rows: list[dict[str, str]]) ->
         if any(clean(name).casefold() == answered_name.casefold() for name in record.get("report_names") or []):
             attempt["pdf_path"] = answered_name
         if (target not in invalidated
-                and attempt["status"].casefold() != "equipment_not_found"
+                and attempt["status"].casefold() not in UPLOAD_INVALIDATION_STATUSES
                 and not mismatched_site_check(attempt)):
             records.append(record)
     return {**payload, "records": records}

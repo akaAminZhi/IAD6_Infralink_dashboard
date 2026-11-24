@@ -190,9 +190,10 @@ explicit dependency map in `frontend/src/utils/dashboardResources.ts`:
   explicit equipment NETA completion and every connected cable tested with an
   ATP/NETA report; absent cable scope stays unknown. Equipment excludes cables
   with either endpoint in the uploader's default excluded families from its
-  list, test/report counts and readiness, preserving CUPP6/TX-CUPP6 first-zone R
-  exceptions. Equipment also excludes all AHU6 endpoints and non-R-zone UPS6
-  endpoints; UPS6's first-zone R exception follows the same zone syntax. These
+  list, test/report counts and readiness. UPP6 panels, TX-UPP6 transformers and
+  CUPP6/TX-CUPP6 in the first R zone are in scope. Equipment also excludes all
+  AHU6 endpoints and non-R-zone UPS6 endpoints. UPS6's first-zone R exception
+  follows the same zone syntax. These
   page-specific additions do not alter uploader defaults or global tracking.
   If every known connection is excluded, cable requirements are
   satisfied; this differs from missing scope. Raw Layout data is unchanged.

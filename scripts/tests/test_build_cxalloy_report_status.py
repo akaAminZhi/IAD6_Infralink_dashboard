@@ -441,6 +441,9 @@ def test_changed_historical_pdf_needs_review_and_other_targets_do_not_prove_uplo
     ("correct_answer", "uploaded"),
     ("not_found", "pending"),
     ("cache_only_not_found", "pending"),
+    ("cleanup_deleted", "pending"),
+    ("cache_only_cleanup_deleted", "pending"),
+    ("recovered_after_cleanup", "uploaded"),
     ("upload_failed", "uploaded"),
     ("auth_required", "uploaded"),
     ("recovered_upload", "uploaded"),
@@ -457,25 +460,26 @@ def test_bad_history_revokes_package_and_per_file_caches(tmp_path: Path, case: s
                "status": "uploaded", "error": "", "uploaded_at": "2026-06-30T06:50:23-04:00"}
     skip = {**success, "status": "skipped_manifest_uploaded", "uploaded_at": "2026-10-19T08:00:00-04:00"}
     rows = [success]
+    invalidation = "cleanup_deleted" if "cleanup" in case else "equipment_not_found"
     if case in {"wrong_answer", "correct_answer"}:
         rows[0] = {**success, "status": "skipped_existing_on_site",
                    "pdf_path": r"C:\old\IAD06-TX-HTP6-01E.pdf",
                    "error": f"CxAlloy row already has answer file: {'IAD06-ATS-TX-HTP6-01E.pdf' if case == 'wrong_answer' else report.name}."}
     else:
-        failure = "equipment_not_found" if case not in {"upload_failed", "auth_required"} else case
+        failure = case if case in {"upload_failed", "auth_required"} else invalidation
         rows.append({**success, "status": failure, "error": failure,
                      "uploaded_at": "2026-10-19T07:21:52-04:00"})
     rows.append(skip)
     if case.startswith("recovered_"):
-        recovery = "uploaded" if case == "recovered_upload" else "skipped_existing_on_site"
+        recovery = "skipped_existing_on_site" if case == "recovered_site_check" else "uploaded"
         rows.append({**success, "status": recovery, "uploaded_at": "2026-10-19T09:00:00-04:00"})
     rename_manifest, upload_manifest, prior = [tmp_path / name for name in ("rename.csv", "upload.csv", "prior.json")]
     write_csv(rename_manifest, list(row), [row])
-    write_csv(upload_manifest, list(success), [] if case == "cache_only_not_found" else rows)
+    write_csv(upload_manifest, list(success), [] if case.startswith("cache_only_") else rows)
     # Both caches are deliberately stale: neither may override raw invalidation.
     cached = {"equipment_id": row["device_name"], "upload_status": "uploaded",
               "current_sha256": success["sha256"], "report_names": [report.name],
-              "last_attempt_status": "equipment_not_found" if case == "cache_only_not_found" else "uploaded",
+              "last_attempt_status": invalidation if case.startswith("cache_only_") else "uploaded",
               "reports": [{"report_name": report.name, "report_kind": "equipment", "upload_status": "uploaded",
                            "sha256": hashlib.sha256(report.read_bytes()).hexdigest()}]}
     prior.write_text(json.dumps({"records": [cached]}), encoding="utf-8")
