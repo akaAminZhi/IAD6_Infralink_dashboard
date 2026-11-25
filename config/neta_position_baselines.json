@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "revision": 17,
+  "revision": 18,
   "families": {
     "MDS6|R": {
       "status": "confirmed",
@@ -313,6 +313,9 @@
           "c4cb12246e7fa239bbd87499d3e92366749841d3c95f5f60eba594ec71320264": "CT-P-A",
           "f679c3b6556f6f55faba9f70fd5a99fc232d78b256690b4ea3dc1da1a7afcaf5": "CT-P-B",
           "f807d1cce622d39dfc736f7412dc1ac28d4491719aaf0eac0e5dd4a7396c08a1": "CT-S-B"
+        },
+        "IAD06-PDU6-03A-5": {
+          "5b907e77ed1f083f17f287dbdd95058b808805da0cce8140b8c1b63716b7de8a": "CT-S-A"
         }
       }
     },
