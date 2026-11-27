@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it } from "vitest";
@@ -171,6 +171,7 @@ describe("EpsTestExecutionPage", () => {
         {
           pdm_name: "PDM-A",
           module_equipment: "MODULE-A",
+          module_equipment_key: "ITEM-1",
           eps_test_status: "Complete",
         },
       ],
@@ -178,6 +179,7 @@ describe("EpsTestExecutionPage", () => {
         {
           pdm_name: "PDM-A",
           module_equipment: "MODULE-A",
+          module_equipment_key: "ITEM-1",
           equipment_name: "ITEM-1",
           equipment_key: "ITEM-1",
           item_status: "Passed",
@@ -185,6 +187,7 @@ describe("EpsTestExecutionPage", () => {
         {
           pdm_name: "PDM-A",
           module_equipment: "MODULE-A",
+          module_equipment_key: "ITEM-1",
           equipment_name: "ITEM-2",
           equipment_key: "ITEM-2",
           item_status: "Passed",
@@ -201,5 +204,50 @@ describe("EpsTestExecutionPage", () => {
     await expandExecutionTables(user);
     expect(screen.getByText("ITEM-1")).toBeInTheDocument();
     expect(screen.queryByText("ITEM-2")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "PDM-A" }));
+    const moduleTable = screen.getByRole("columnheader", { name: "Equipment ID or Source Label" }).closest("table")!;
+    await user.click(within(moduleTable).getByText("MODULE-A"));
+    expect(screen.getByText("ITEM-2")).toBeInTheDocument();
+  });
+
+  it("filters the standalone table to newly passed equipment in an advanced date comparison", async () => {
+    const user = userEvent.setup();
+    const data = makeDashboardData({
+      epsTestSummary: {
+        daily_history: {
+          latest_date: "2026-11-25",
+          entries: [
+            { date: "2026-11-23", cumulative_passed_equipment: ["OLD-ITEM"] },
+            { date: "2026-11-24", cumulative_passed_equipment: ["OLD-ITEM", "PRIOR-ITEM"] },
+            { date: "2026-11-25", cumulative_passed_equipment: ["OLD-ITEM", "PRIOR-ITEM", "IAD06-NEW-ITEM"] },
+          ],
+        },
+      },
+      epsTestItems: [
+        { equipment_key: "OLD-ITEM", item_status: "Passed" },
+        { equipment_key: "PRIOR-ITEM", item_status: "Passed" },
+        { equipment_key: "NEW-ITEM", item_status: "Fixed - Not In Tracker" },
+      ],
+    });
+
+    render(
+      <MemoryRouter>
+        <EpsTestExecutionPage data={data} />
+      </MemoryRouter>,
+    );
+
+    await expandExecutionTables(user);
+    await user.click(screen.getByRole("button", { name: "Advanced" }));
+    await user.selectOptions(screen.getByLabelText("Baseline"), "2026-11-24");
+    await user.click(screen.getByRole("button", { name: /New Passed/ }));
+
+    expect(screen.getByText("NEW-ITEM")).toBeInTheDocument();
+    expect(screen.queryByText("OLD-ITEM")).not.toBeInTheDocument();
+    expect(screen.queryByText("PRIOR-ITEM")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Hide Advanced" }));
+    await user.click(screen.getByRole("button", { name: "Advanced" }));
+    expect(screen.getByLabelText("Baseline")).toHaveValue("2026-11-24");
   });
 });

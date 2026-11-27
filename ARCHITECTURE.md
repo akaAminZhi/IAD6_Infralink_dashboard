@@ -216,6 +216,12 @@ The Equipment page flattens PDM equipment plus standalone equipment records so
 that equipment missing from module links can still appear in global metrics and
 lookup. URL query parameters carry drill-down filters from Overview and KPR.
 
+The EPS execution route composes activity cards, breakdowns, and detail tables
+from `components/eps/`. `useEpsExecutionRows` memoizes the pure selectors in
+`utils/epsExecution*.ts`. The PDM and standalone test-item views share result
+and tracker-type rules. Module details use equipment-scoped activity, while
+the KPR test-item cohort matches exact item identifiers.
+
 ## ETL Architecture
 
 ### Inputs and discovery
