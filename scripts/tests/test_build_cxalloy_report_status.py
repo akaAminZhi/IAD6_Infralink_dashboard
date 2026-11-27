@@ -97,6 +97,57 @@ def test_supporting_images_do_not_count_as_cxalloy_reports(tmp_path: Path) -> No
     assert [(item["report_name"], item["upload_status"]) for item in record["reports"]] == [(report.name, "uploaded")]
 
 
+@pytest.mark.parametrize("case", ["current", "snapshot", "deleted", "temporary"])
+def test_completed_refresh_retains_only_proven_formal_files(tmp_path: Path, case: str) -> None:
+    equipment, revised, cable, added = [tmp_path / f"{name}.pdf" for name in
+                                       ("equipment", "revised", "cable", "added")]
+    for path in (equipment, revised, cable, added):
+        path.write_bytes(path.stem.encode())
+    previous = [
+        {"source_path": f"downloads/{path.name}", "device_name": "IAD06-EQ-1",
+         "parsed_source": kind, "output_path": path.name, "status": "copied",
+         "source_sha256": hashlib.sha256(path.read_bytes()).hexdigest(), "report_stage": "formal",
+         "batch_id": "old"}
+        for path, kind in ((equipment, "ASSET"), (revised, "ASSET"), (cable, "MV_CABLE"))
+    ]
+    # One physical cable can be referenced by several source rows in the upload receipt.
+    previous.append({**previous[-1], "source_path": "downloads/other-cable-reference.pdf"})
+    stage = "temporary" if case == "temporary" else "formal"
+    package_hash = uploader_group_hash([equipment, revised, cable])
+    receipt = {"target_equipment": "EQ-1", "status": "uploaded", "report_stage": stage, "batch_id": "old",
+               "source_path": ";".join(row["source_path"] for row in previous),
+               "pdf_path": ";".join(path.name for path in (equipment, revised, cable)),
+               "sha256": hashlib.sha256(f"{stage}:old:{package_hash}".encode()).hexdigest()}
+    current = [{**row, "batch_id": "new"} for row in previous]
+    current.append({**current[0], "source_path": "downloads/added.pdf", "output_path": added.name,
+                    "source_sha256": hashlib.sha256(added.read_bytes()).hexdigest()})
+
+    if case == "snapshot":
+        before = tmp_path / "downloads/neta_reports/_staging/completed_review/transactions/txn/before"
+        write_csv(before / "7", list(previous[0]), previous)
+        (before / "8").write_text("{}", encoding="utf-8")
+        revised.write_bytes(b"changed")
+        current[1]["source_sha256"] = hashlib.sha256(revised.read_bytes()).hexdigest()
+
+    rename_manifest, upload_manifest = tmp_path / "rename.csv", tmp_path / "upload.csv"
+    write_csv(rename_manifest, list(current[0]), current)
+    history = [receipt]
+    if case == "deleted":
+        history.append({**receipt, "status": "cleanup_deleted"})
+        history.append({**receipt, "status": "skipped_manifest_uploaded"})
+    write_csv(upload_manifest, list(receipt), history)
+
+    record, = build_cxalloy_report_status(rename_manifest, upload_manifest, tmp_path)["records"]
+    uploaded = {report["report_name"] for report in record["reports"] if report["upload_status"] == "uploaded"}
+    assert record["upload_status"] == "pending"
+    assert uploaded == {
+        "current": {equipment.name, revised.name, cable.name},
+        "snapshot": {equipment.name, cable.name},
+        "deleted": set(),
+        "temporary": set(),
+    }[case]
+
+
 def test_current_hash_controls_uploaded_status(tmp_path: Path) -> None:
     gc_dir = tmp_path / "NETA_eport_To_GC" / "IAD06-PDU6-01A-1"
     first = gc_dir / "first.pdf"

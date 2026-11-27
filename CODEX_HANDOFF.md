@@ -1,5 +1,17 @@
 ﻿# Codex Handoff
 
+## 2026-11-25 CxAlloy status after completed NETA refresh
+
+- The status builder reconstructs confirmed formal upload hashes from the
+  current GC rename manifest and completed-refresh transaction snapshots.
+  Shared cable source rows count as one physical file. A current PDF must
+  match verified historical bytes for its equipment.
+- Rebuilt the Dashboard status data. Upload evidence restored 177 file
+  badges on 11 devices. On IAD06-CDS6-01A, 9 equipment reports and 2 cable
+  reports are Uploaded, and 8 new equipment reports are Pending. The local
+  Dashboard endpoint returned the rebuilt data. The 73 focused ETL tests
+  passed. This work used local evidence.
+
 ## Current update (2026-11-24) — CxAlloy cleanup status
 
 - The CxAlloy status builder now handles `cleanup_deleted` as an invalidation

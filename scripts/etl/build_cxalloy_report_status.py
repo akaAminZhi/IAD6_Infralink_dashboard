@@ -11,7 +11,7 @@ import stat
 import sys
 from collections import defaultdict
 from datetime import datetime
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Any, Iterable
 
 try:
@@ -121,13 +121,15 @@ def combined_sha256(files: Iterable[tuple[Path, str]]) -> str:
     return digest.hexdigest()
 
 
-def matches_upload_digest(digest: str, upload: dict[str, str]) -> bool:
+def matches_upload_digest(
+    digest: str, upload: dict[str, str], *, field: str = "sha256",
+) -> bool:
     """Match Tracker's legacy or lifecycle-qualified package digest."""
     stage = clean(upload.get("report_stage")) or "formal"
     batch = clean(upload.get("batch_id"))
     if batch or stage == "temporary":
         digest = hashlib.sha256(f"{stage}:{batch}:{digest}".encode()).hexdigest()
-    return digest == clean(upload.get("sha256"))
+    return digest == clean(upload.get(field))
 
 
 def canonical_equipment_id(value: object) -> str:
@@ -203,6 +205,68 @@ def valid_upload_history(rows: Iterable[dict[str, str]]) -> list[dict[str, str]]
         elif status in COMPLETED_UPLOAD_STATUSES and not mismatched_site_check(row):
             successes[target].append(row)
     return [row for records in successes.values() for row in records]
+
+
+def is_formal(row: dict[str, str], path_field: str) -> bool:
+    stage = clean(row.get("report_stage")).casefold()
+    if stage:
+        return stage == "formal"
+    return all("_temporary" not in PureWindowsPath(path.strip()).parts
+               for path in clean(row.get(path_field)).casefold().split(";"))
+
+
+def formal_upload_hashes(
+    rows: Iterable[dict[str, str]], uploads: dict[str, list[dict[str, str]]],
+) -> dict[str, set[str]]:
+    """Recover per-file bytes only after reconstructing a confirmed upload digest."""
+    catalogs: dict[str, dict[str, set[tuple[str, bool]]]] = defaultdict(lambda: defaultdict(set))
+    for row in rows:
+        target = target_equipment(row.get("device_name")).casefold()
+        digest = clean(row.get("source_sha256"))
+        if (target not in uploads or clean(row.get("status")).casefold() not in VALID_RENAME_STATUSES
+                or not is_formal(row, "output_path") or not SHA256_PATTERN.fullmatch(digest)):
+            continue
+        name = PureWindowsPath(clean(row.get("output_path"))).name
+        cable = clean(row.get("parsed_source")).upper() in {"LV_CABLE", "MV_CABLE"}
+        if name.casefold().endswith(".pdf"):
+            catalogs[target][name.casefold()].add((digest, cable))
+
+    verified: dict[str, set[str]] = defaultdict(set)
+    for target, catalog in catalogs.items():
+        for upload in uploads[target]:
+            names = [PureWindowsPath(path.strip()).name for path in (upload.get("pdf_path") or "").split(";")]
+            keys = [name.casefold() for name in names]
+            if not all(names) or len(set(keys)) != len(names) or any(len(catalog.get(key, ())) != 1 for key in keys):
+                continue
+            files, equipment = [], []
+            for name, key in zip(names, keys):
+                digest, cable = next(iter(catalog[key]))
+                files.append((Path(name), digest))
+                if not cable:
+                    equipment.append((Path(name), digest))
+            if matches_upload_digest(combined_sha256(files), upload):
+                verified[target].update(digest for _, digest in files)
+            elif equipment and matches_upload_digest(combined_sha256(equipment), upload, field="equipment_sha256"):
+                verified[target].update(digest for _, digest in equipment)
+    return verified
+
+
+def completed_refresh_snapshots(tracker_root: Path) -> Iterable[list[dict[str, str]]]:
+    transactions = tracker_root / "downloads" / "neta_reports" / "_staging" / "completed_review" / "transactions"
+    # Tracker stores numbered copies of the files present before publication.
+    # The last entries are the download manifest, rename manifest and state.
+    for backup_dir in transactions.glob("*/before"):
+        backups = sorted((path for path in backup_dir.glob("*") if path.name.isdecimal()),
+                         key=lambda path: int(path.name), reverse=True)
+        for path in backups[:3]:
+            try:
+                with path.open("rb") as file:
+                    header = file.read(64)
+                if header.removeprefix(b"\xef\xbb\xbf").startswith(b"source_path,device_name,parsed_source,"):
+                    yield read_csv_rows(path)
+                    break
+            except (OSError, UnicodeError, csv.Error):
+                continue
 
 
 def trusted_prior_status(payload: dict[str, Any], rows: list[dict[str, str]]) -> dict[str, Any]:
@@ -350,8 +414,9 @@ def build_cxalloy_report_status(
         from .cxalloy_upload_plan import ReportEvidence, plan_upload
     except ImportError:
         from cxalloy_upload_plan import ReportEvidence, plan_upload
+    rename_rows = read_csv_rows(rename_manifest)
     grouped_rows: dict[str, list[dict[str, str]]] = defaultdict(list)
-    for row in read_csv_rows(rename_manifest):
+    for row in rename_rows:
         if clean(row.get("status")).casefold() not in VALID_RENAME_STATUSES:
             continue
         device_name = canonical_equipment_id(row.get("device_name"))
@@ -369,6 +434,15 @@ def build_cxalloy_report_status(
     for row in upload_rows:
         target = target_equipment(row.get("target_equipment") or row.get("device_name"))
         uploads_by_target[target.casefold()].append(row)
+    formal_receipts: dict[str, list[dict[str, str]]] = defaultdict(list)
+    for row in valid_upload_history(upload_rows):
+        if is_formal(row, "pdf_path"):
+            target = target_equipment(row.get("target_equipment") or row.get("device_name"))
+            formal_receipts[target.casefold()].append(row)
+    verified_formal = formal_upload_hashes(rename_rows, formal_receipts)
+    for snapshot in completed_refresh_snapshots(tracker_root):
+        for target, hashes in formal_upload_hashes(snapshot, formal_receipts).items():
+            verified_formal[target].update(hashes)
     prior_payload = read_status_payload(prior_status_manifest)
     trusted_prior = trusted_prior_status(prior_payload, upload_rows)
     completed_keys = completed_upload_keys(upload_rows) | completed_status_keys(
@@ -399,6 +473,7 @@ def build_cxalloy_report_status(
                 report_files[path_key] = {
                     "path": report_path,
                     "report_kind": "equipment",
+                    "formal": True,
                 }
                 report_names.append(report_path.name)
                 try:
@@ -414,6 +489,7 @@ def build_cxalloy_report_status(
                     report_hashes[path_key] = None
             if clean(row.get("parsed_source")).upper() in {"LV_CABLE", "MV_CABLE"}:
                 report_files[path_key]["report_kind"] = "cable"
+            report_files[path_key]["formal"] &= is_formal(row, "output_path")
             digest = report_hashes[path_key]
             if digest is not None:
                 evidence.append(ReportEvidence(clean(row.get("source_path")), report_path, digest))
@@ -449,6 +525,7 @@ def build_cxalloy_report_status(
                     "missing_pdf" if digest is None
                     else "uploaded" if (
                         uploaded or content_plan.aliases.get(path)
+                        or (report_file["formal"] and digest in verified_formal.get(target.casefold(), ()))
                         or digest in prior_report_hashes.get(target.casefold(), set())
                     )
                     else "review_required" if path in review_paths
