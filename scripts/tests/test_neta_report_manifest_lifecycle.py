@@ -102,6 +102,25 @@ def test_legacy_formal_and_same_name_other_device_survive(tracker):
     assert all(r["report_stage"] == "temporary" for r in builder.build_neta_report_manifest()["records"])
 
 
+def test_published_revision_includes_updates_and_versions_same_name_links(tracker):
+    original = tracker / 'downloads/neta_reports/EQ-1'
+    gc = tracker / 'NETA_eport_To_GC/EQ-1/GC current.pdf'
+    pdf(original / 'Report.pdf')
+    pdf(original / 'Updates only.pdf')
+    pdf(gc)
+    rename(tracker, [{'source_path': str(original / 'Report.pdf'), 'output_path': str(gc), 'device_name': 'EQ-1'}])
+    fields = {'report_stage': 'formal', 'download_ready': True, 'formal_ready': True,
+              'primary_expected': ['Report.pdf', 'Removed.pdf'], 'expected': ['Report.pdf', 'Updates only.pdf'],
+              'download_hashes': {'Report.pdf': 'a' * 64, 'Updates only.pdf': 'b' * 64},
+              'organized_hashes': {str(gc.resolve()): 'a' * 64}}
+    state(tracker, temporary_cleaned=False, **fields)
+    assert builder.build_neta_report_manifest()['completed_report_revisions'] == {}
+    state(tracker, temporary_cleaned=True, **fields)
+    manifest = builder.build_neta_report_manifest()
+    assert manifest['completed_report_revisions'] == {'eq-1': ['Report.pdf', 'Updates only.pdf']}
+    assert sorted(row['url'].split('?v=')[-1] for row in manifest['records']) == ['a' * 64, 'a' * 64, 'b' * 64]
+
+
 def test_environment_root_and_absolute_gc_mapping(tracker, tmp_path, monkeypatch):
     other = tmp_path / "configured-tracker"
     output = other / "NETA_eport_To_GC/_temporary/EQ-1/GC.pdf"

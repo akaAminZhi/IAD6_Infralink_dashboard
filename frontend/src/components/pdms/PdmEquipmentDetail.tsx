@@ -6,7 +6,7 @@ import type { EpsTestItemRecord, PdmEquipmentRecord } from "../../types/data";
 import { formatDateTime, formatNumber } from "../../utils/formatters";
 import { requiresEquipmentTestTracking } from "../../utils/equipmentTrackingUtils";
 import {
-  getNetaReportNames,
+  getEquipmentNetaReportNames,
   hasGcNetaReportLinks,
   type NetaReportNameMode,
 } from "../../utils/netaReports";
@@ -43,7 +43,7 @@ export function PdmEquipmentDetail({ equipment, epsTestItems }: PdmEquipmentDeta
   const manifest = useNetaReportManifest();
   const [netaReportNameMode, setNetaReportNameMode] =
     useState<NetaReportNameMode>("original");
-  const reportNames = getNetaReportNames(equipment.neta_test_report);
+  const reportNames = getEquipmentNetaReportNames(equipment.neta_test_report, manifest, equipment.equipment_id);
   const canShowGcNames = hasGcNetaReportLinks(reportNames, manifest, equipment.equipment_id);
   const trackingRequired = requiresEquipmentTestTracking(equipment);
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import json
 import os
+import re
 import subprocess
 from datetime import datetime
 from pathlib import Path
@@ -186,6 +187,21 @@ def read_lifecycle(source_directory: Path) -> dict[str, Any]:
     return {key.casefold(): entry for key, entry in state["devices"].items()}
 
 
+def completed_report_revisions(lifecycle: dict[str, Any], records: list[dict[str, Any]]) -> dict[str, list[str]]:
+    published: dict[str, set[str]] = {}
+    for row in records:
+        if row['source_key'] == 'downloaded' and row['report_stage'] == 'formal' and row['bytes'] > 0:
+            key = (row['equipment_id'] or '').casefold()
+            published.setdefault(key, set()).add(row['report_name'].casefold())
+    return {
+        key: [name for name in entry.get('expected', [])
+              if isinstance(name, str) and name.casefold() in published.get(key, set())]
+        for key, entry in lifecycle.items()
+        if 'primary_expected' in entry and entry.get('report_stage') == 'formal'
+        and entry.get('formal_ready') is True and entry.get('temporary_cleaned') is True
+    }
+
+
 def build_records_for_source(
     source: dict[str, Any], lifecycle: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
@@ -225,7 +241,16 @@ def build_records_for_source(
             entry.get("report_stage") != "formal" or entry.get(ready_field) is not True
         ):
             continue
-        source_report_name = gc_metadata.get("source_report_name")
+        source_report_name = gc_metadata.get("source_report_name") or file_path.name
+        digest = gc_metadata.get('source_sha256')
+        url = make_url(source["url_base"], relative_path)
+        if not temporary and entry and 'primary_expected' in entry:
+            if source['source_key'] == 'downloaded':
+                digest = entry.get('download_hashes', {}).get(file_path.name)
+            else:
+                digest = entry.get('organized_hashes', {}).get(str(file_path.resolve())) or digest
+            if isinstance(digest, str) and re.fullmatch(r'[a-f0-9]{64}', digest):
+                url += f'?v={digest}'
         metadata = file_metadata(file_path)
 
         records.append(
@@ -234,13 +259,13 @@ def build_records_for_source(
                 source_label=source["source_label"],
                 equipment_id=equipment_id,
                 report_name=file_path.name,
-                source_report_name=source_report_name or file_path.name,
+                source_report_name=source_report_name,
                 relative_path=relative_path_text,
-                url=make_url(source["url_base"], relative_path),
+                url=url,
                 bytes=file_path.stat().st_size,
                 modified_at=metadata["modified_at"],
                 report_stage="temporary" if temporary else "formal",
-                source_sha256=gc_metadata.get("source_sha256"),
+                source_sha256=digest,
                 parsed_source=gc_metadata.get("parsed_source"),
                 identifier_version=gc_metadata.get("identifier_version"),
                 pending_cxalloy_rename=pending_renames.get(
@@ -327,6 +352,7 @@ def build_neta_report_manifest(tracker_root: Path | None = None) -> dict[str, An
         "source_directories": source_directories,
         "public_links": public_links,
         "records": records,
+        "completed_report_revisions": completed_report_revisions(lifecycle, records),
         "duplicate_audit": NetaDuplicateAudit(**duplicate_audit).to_dict(),
     }
 

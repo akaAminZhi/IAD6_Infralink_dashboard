@@ -118,7 +118,7 @@ export class AutomationApiError extends Error {
   }
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+async function requestResponse(path: string, init?: RequestInit): Promise<Response> {
   const token = await tokenGetter?.();
   const headers = new Headers(init?.headers);
   headers.set("Content-Type", "application/json");
@@ -137,7 +137,47 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     }
     throw new AutomationApiError(message, response.status);
   }
+  return response;
+}
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await requestResponse(path, init);
   return (await response.json()) as T;
+}
+
+export interface NetaVersionFile {
+  name: string;
+  source: "main" | "updates";
+  uploaded_at: string;
+  identifier: string;
+  verdict: string;
+  sha256: string;
+}
+
+export interface NetaVersionMatch {
+  id: string;
+  revision: string;
+  device: string;
+  current: NetaVersionFile;
+  candidate: NetaVersionFile;
+  decision: NetaVersionChoice | null;
+}
+
+export type NetaVersionChoice = "keep" | "adopt";
+
+export function getNetaVersionMatches(device: string) {
+  return request<{ matches: NetaVersionMatch[] }>(`/neta-report-versions?device=${encodeURIComponent(device)}`);
+}
+
+export async function getNetaVersionPdf(match: NetaVersionMatch, side: "current" | "candidate", signal?: AbortSignal) {
+  const response = await requestResponse(`/neta-report-versions/${match.id}/pdf/${side}?revision=${match.revision}`, { signal });
+  return response.blob();
+}
+
+export function saveNetaVersionDecision(match: NetaVersionMatch, choice: NetaVersionChoice) {
+  return request<{ decision: NetaVersionChoice }>(`/neta-report-versions/${match.id}/decision`, {
+    method: "POST", body: JSON.stringify({ revision: match.revision, choice }),
+  });
 }
 
 export function getAutomationHealth() {

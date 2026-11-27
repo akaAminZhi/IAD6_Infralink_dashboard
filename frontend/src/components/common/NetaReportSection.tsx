@@ -1,7 +1,7 @@
 import { useState } from "react";
 
 import { useNetaReportManifest } from "../../contexts/NetaReportManifestContext";
-import { getNetaReportNames, hasGcNetaReportLinks, type NetaReportNameMode } from "../../utils/netaReports";
+import { getEquipmentNetaReportNames, hasGcNetaReportLinks, type NetaReportNameMode } from "../../utils/netaReports";
 import { NetaReportChips } from "./NetaReportChips";
 import { NetaDuplicatePanel } from "./NetaDuplicatePanel";
 
@@ -9,8 +9,8 @@ export function NetaReportSection({ equipmentId, value }: {
   equipmentId?: string | null;
   value?: string | null;
 }) {
-  const reports = getNetaReportNames(value);
-  const manifest = useNetaReportManifest(reports.length > 0);
+  const manifest = useNetaReportManifest(Boolean(equipmentId || value));
+  const reports = getEquipmentNetaReportNames(value, manifest, equipmentId);
   const [nameMode, setNameMode] = useState<NetaReportNameMode>("original");
   if (!reports.length) return null;
   return (

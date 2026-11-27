@@ -39,6 +39,28 @@ def wait_until_idle(manager: TaskManager) -> None:
     assert not manager.has_active_run()
 
 
+def test_neta_version_review_uses_opaque_ids_and_operator(tmp_path, monkeypatch):
+    from scripts.automation import neta_report_versions as versions
+
+    client, config, manager = make_client(tmp_path)
+    conflict_id, revision = 'b' * 64, 'c' * 64
+    calls = []
+    sample = tmp_path / 'staged.pdf'
+    sample.write_bytes(b'%PDF-sample')
+    monkeypatch.setattr(versions, 'review_matches', lambda root, device: [{'device': device}])
+    monkeypatch.setattr(versions, 'review_pdf', lambda *args: (sample, 'Update.pdf'))
+    monkeypatch.setattr(versions, 'decide', lambda *args: calls.append(args))
+    route = '/api/automation/neta-report-versions'
+    assert client.get(route, params={'device': 'CDS6'}).json()['matches'] == [{'device': 'CDS6'}]
+    response = client.get(f'{route}/{conflict_id}/pdf/candidate', params={'revision': revision})
+    assert response.content == b'%PDF-sample' and response.headers['cache-control'] == 'no-store'
+    url = f'{route}/{conflict_id}/decision'
+    assert client.post(url, json={'revision': revision, 'choice': 'adopt', 'path': 'any'}).status_code == 422
+    assert client.post(url, json={'revision': revision, 'choice': 'adopt'}).json() == {'decision': 'adopt'}
+    assert calls == [(config.eps_root, conflict_id, revision, 'adopt', 'user_test_operator')]
+    assert not manager.has_active_run()
+
+
 def test_site_reports_preserve_duplicates_scope_overwrites_and_validate_paths(tmp_path: Path) -> None:
     client, config, manager = make_client(tmp_path)
     payload = {"tested_and_passed": "TX6-01\nTX6-01\nUTILITY6-01-A PHASE", "failed": "TX6-01"}

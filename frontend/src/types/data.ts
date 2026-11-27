@@ -225,6 +225,7 @@ export interface NetaPendingCxalloyRename {
 }
 
 export interface NetaReportManifest {
+  completed_report_revisions?: Record<string, string[]>;
   duplicate_audit?: NetaDuplicateAudit;
   generated_at?: string;
   source_directories?: Record<string, Record<string, unknown>>;

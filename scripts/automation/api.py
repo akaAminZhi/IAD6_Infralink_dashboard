@@ -8,6 +8,7 @@ from typing import Any, Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, model_validator
 
 from scripts.automation.daily_reports import (
@@ -40,7 +41,7 @@ from scripts.automation.neta_report_reviews import (
 )
 from scripts.automation.runner import AutomationConfig, TaskManager
 from scripts.automation.auth import is_local_operator, require_operator
-from scripts.automation import neta_position_baselines, neta_report_rename
+from scripts.automation import neta_position_baselines, neta_report_rename, neta_report_versions
 from scripts.automation.neta_report_rename import LOCAL_OPERATOR
 from scripts.automation.browser_login import BrowserLoginManager, KEYS, WIDTH, HEIGHT
 
@@ -54,6 +55,13 @@ class JobOptionsRequest(BaseModel):
     only: list[str] = Field(default_factory=list)
     limit: int | None = Field(default=None, ge=1, le=10_000)
     no_excel_update: bool = False
+
+
+class NetaVersionDecision(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+
+    revision: str = Field(pattern=r'^[a-f0-9]{64}$')
+    choice: Literal['keep', 'adopt']
 
 
 class JobRunRequest(BaseModel):
@@ -604,6 +612,35 @@ def create_app(
             raise HTTPException(409, str(exc)) from exc
         except (OSError, ValueError) as exc:
             raise HTTPException(503, "Unable to save the local energization records.") from exc
+
+    @app.get('/api/automation/neta-report-versions')
+    def list_neta_versions(device: str = Query(min_length=1, max_length=120),
+                           _operator: str = Depends(require_operator)) -> dict[str, Any]:
+        try:
+            return {'matches': neta_report_versions.review_matches(resolved_config.eps_root, device)}
+        except (OSError, ValueError) as exc:
+            raise HTTPException(503, 'Unable to read pending report versions.') from exc
+
+    @app.get('/api/automation/neta-report-versions/{conflict_id}/pdf/{side}')
+    def neta_version_pdf(conflict_id: str, side: Literal['current', 'candidate'],
+                         revision: str = Query(pattern=r'^[a-f0-9]{64}$'),
+                         _operator: str = Depends(require_operator)):
+        try:
+            path, filename = neta_report_versions.review_pdf(resolved_config.eps_root, conflict_id, revision, side)
+            return FileResponse(path, media_type='application/pdf', filename=filename,
+                                content_disposition_type='inline', headers={'Cache-Control': 'no-store'})
+        except (OSError, ValueError, KeyError) as exc:
+            raise HTTPException(409, 'Reload the version review before opening this PDF.') from exc
+
+    @app.post('/api/automation/neta-report-versions/{conflict_id}/decision')
+    def decide_neta_version(conflict_id: str, request: NetaVersionDecision,
+                            user_id: str = Depends(require_operator)) -> dict[str, str]:
+        try:
+            neta_report_versions.decide(resolved_config.eps_root, conflict_id,
+                                        request.revision, request.choice, user_id)
+            return {'decision': request.choice}
+        except (OSError, ValueError, RuntimeError) as exc:
+            raise HTTPException(409, str(exc)) from exc
 
     @app.post("/api/automation/neta-report-duplicates/decisions", status_code=202)
     def decide_neta_duplicate(request: NetaDuplicateDecisionRequest,

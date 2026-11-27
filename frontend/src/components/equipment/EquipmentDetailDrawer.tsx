@@ -4,6 +4,7 @@ import { useId, useState } from "react";
 import { useDashboardResources } from "../../contexts/DashboardResourcesContext";
 import { useNetaReportManifest } from "../../contexts/NetaReportManifestContext";
 import { NetaDuplicatePanel } from "../common/NetaDuplicatePanel";
+import { NetaVersionReview } from "../common/NetaVersionReview";
 import { NetaDuplicateBadge } from "../common/NetaDuplicateBadge";
 import type {
   NetaReportReview,
@@ -16,12 +17,12 @@ import { formatDateTime, formatNumber } from "../../utils/formatters";
 import { requiresEquipmentTestTracking } from "../../utils/equipmentTrackingUtils";
 import {
   getCasesMissingIssueImageCount,
-  getNetaReportNames,
   getOpenCaseCount,
   isBlank,
   type FlattenedEquipmentRow,
 } from "../../utils/equipmentUtils";
 import {
+  getEquipmentNetaReportNames,
   getGcReportRecord,
   hasGcNetaReportLinks,
   type NetaReportNameMode,
@@ -145,7 +146,7 @@ function NetaReportNames({
   const [nameMode, setNameMode] = useState<NetaReportNameMode>("original");
   const [savingFile, setSavingFile] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const reportNames = getNetaReportNames(value);
+  const reportNames = getEquipmentNetaReportNames(value, manifest, equipmentId);
   const canShowGcNames = hasGcNetaReportLinks(reportNames, manifest, equipmentId);
 
   async function handleStatusChange(file: string, status: "PASSED" | "FAILED") {
@@ -391,6 +392,7 @@ export function EquipmentDetailDrawer({
                   <NetaTestPositionsPanel entry={positionEntry} />
                   <EquipmentCableAtpEvidence equipment={equipment} />
                   <NetaDuplicatePanel key={equipment.equipment_id} equipmentId={equipment.equipment_id} />
+                  <NetaVersionReview key={`versions-${equipment.equipment_id}`} equipmentId={equipment.equipment_id} />
                   {equipment.cxalloy_upload_status ? <CxalloyReportUploadPanel equipment={equipment} /> : null}
                 </CardContent>
               </Card> : null}

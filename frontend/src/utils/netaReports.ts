@@ -61,6 +61,48 @@ export function getNetaReportCount(value: string | null | undefined): number {
   return getNetaReportNames(value).length;
 }
 
+export function getEquipmentNetaReportNames(
+  value: string | null | undefined,
+  manifest: NetaReportManifest | null,
+  equipmentId?: string | null,
+): string[] {
+  const excelNames = getNetaReportNames(value);
+  const publishedNames = getPublishedNetaReportNames(manifest, equipmentId);
+  if (!publishedNames?.length) return excelNames;
+
+  const namesByKey = new Map<string, string>();
+  for (const name of [...excelNames, ...publishedNames]) {
+    const key = normalizeReportKey(name);
+    if (!namesByKey.has(key)) namesByKey.set(key, name);
+  }
+  return sortNetaReportNames([...namesByKey.values()]);
+}
+
+function getPublishedNetaReportNames(
+  manifest: NetaReportManifest | null,
+  equipmentId?: string | null,
+): string[] | undefined {
+  const key = normalizeReportKey(equipmentId);
+  const active = key ? manifest?.completed_report_revisions?.[key] : undefined;
+  return Array.isArray(active) ? active : undefined;
+}
+
+export function withPublishedNetaReports<T extends {
+  equipment_id?: string | null;
+  neta_complete?: boolean | string | null;
+  neta_test_report?: string | null;
+}>(
+  equipment: T, manifest: NetaReportManifest | null,
+): T {
+  if (!getPublishedNetaReportNames(manifest, equipment.equipment_id)?.length) return equipment;
+  const names = getEquipmentNetaReportNames(equipment.neta_test_report, manifest, equipment.equipment_id);
+  return {
+    ...equipment,
+    neta_test_report: names.join("; "),
+    ...(equipment.neta_complete === true && { neta_report_status: "report_available" }),
+  };
+}
+
 export function getNetaReportLinks(
   reportName: string,
   manifest: NetaReportManifest | null,

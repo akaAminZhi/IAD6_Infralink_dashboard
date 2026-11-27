@@ -2,6 +2,16 @@
 
 ## NETA duplicate evidence and decisions
 
+The Equipment NETA reports section also lists unresolved completed-report version
+conflicts for authorized operators. The automation API serves the two PDFs by
+opaque conflict ID, revision and side, with the Tracker validating staged hashes.
+Operators can keep the current version or adopt the candidate. The Tracker logs
+the choice, and a manually triggered `--completed-reports refresh` verifies it
+and publishes an eligible formal batch. Daily Data Refresh runs the standard
+download workflow. ETL publishes revised equipment's active formal filenames,
+including Updates-only reports, and fingerprints their PDF links. Normal
+CxAlloy uploads pick up the resulting batch.
+
 The report manifest builder reads the configured Tracker's v2 duplicate audit
 through its `neta_duplicate_decisions` validation API. Candidate GC paths must
 remain within the report root, belong to active rename rows and the current

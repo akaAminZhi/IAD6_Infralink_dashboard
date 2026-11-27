@@ -17,6 +17,7 @@ import {
 import { EquipmentTable } from "../components/equipment/EquipmentTable";
 import type { DashboardData, NetaReportManifest } from "../types/data";
 import { getEquipmentDuplicates } from "../utils/netaDuplicates";
+import { withPublishedNetaReports } from "../utils/netaReports";
 import type { NetaReportReview, NetaReportReviewsResponse } from "../types/automation";
 import { clearPublishedNetaReviewCache, loadNetaReportReviews } from "../utils/loadNetaReportReviews";
 import { clearNetaReportReviewCache } from "../utils/automationApi";
@@ -393,8 +394,8 @@ export function EquipmentPage({ data }: EquipmentPageProps) {
         data.cases,
         data.epsTestItems,
         data.cxalloyReportStatus,
-      ),
-    [data.cases, data.cxalloyReportStatus, data.epsTestItems, data.equipment, data.pdms],
+      ).map((equipment) => withPublishedNetaReports(equipment, data.netaReportManifest)),
+    [data.cases, data.cxalloyReportStatus, data.epsTestItems, data.equipment, data.pdms, data.netaReportManifest],
   );
   const summaryMetrics = useMemo(() => getEquipmentSummaryMetrics(equipmentRows), [equipmentRows]);
   const newNetaCompleteIds = useMemo(() => getNewNetaCompleteIds(data), [data]);

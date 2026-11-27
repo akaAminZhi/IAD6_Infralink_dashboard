@@ -190,6 +190,8 @@ def test_daily_pipeline_runs_neta_post_processing_once_after_downloads(tmp_path:
     download, _ = manager.build_command("download_neta_reports", {"force": True}, pipeline=True)
     organize, _ = manager.build_command("organize_gc_reports", {"force": True}, pipeline=True)
     assert download[3:] == ["--force", "--skip-post"]
+    normal, _ = manager.build_command("download_neta_reports", {}, pipeline=True)
+    assert normal[3:] == ["--skip-post"]
     assert organize[3:] == ["--force", "--after-download"]
 
     standalone, _ = manager.build_command("download_neta_reports", {})

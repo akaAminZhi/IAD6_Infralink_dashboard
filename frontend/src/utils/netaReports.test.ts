@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import type { NetaReportManifest } from "../types/data";
 import {
+  getEquipmentNetaReportNames,
+  withPublishedNetaReports,
   getGcReportRecord,
   getNetaReportCount,
   getNetaReportLinks,
@@ -35,6 +37,20 @@ const manifest: NetaReportManifest = {
 };
 
 describe("netaReports", () => {
+  it("combines Excel and published reports without counting shared filenames twice", () => {
+    const data = { ...manifest, completed_report_revisions: { "eq-1": ["Update.pdf", "Report.pdf"], "eq-3": [] } };
+    expect(getEquipmentNetaReportNames("REPORT.pdf; Excel Only.pdf", data, " EQ-1 ")).toEqual([
+      "Excel Only.pdf", "REPORT.pdf", "Update.pdf",
+    ]);
+    expect(getEquipmentNetaReportNames(null, data, "EQ-1")).toEqual(["Report.pdf", "Update.pdf"]);
+    expect(getEquipmentNetaReportNames("Legacy.pdf", data, "EQ-2")).toEqual(["Legacy.pdf"]);
+    expect(getEquipmentNetaReportNames("Legacy.pdf", data, "EQ-3")).toEqual(["Legacy.pdf"]);
+    const row = { equipment_id: "EQ-1", neta_complete: true, neta_test_report: null, neta_report_status: "missing_report" };
+    expect(withPublishedNetaReports(row, data)).toMatchObject({ neta_test_report: "Report.pdf; Update.pdf",
+      neta_report_status: "report_available" });
+    expect(row.neta_test_report).toBeNull();
+  });
+
   it("sorts report numbers naturally", () => {
     expect(
       sortNetaReportNames([

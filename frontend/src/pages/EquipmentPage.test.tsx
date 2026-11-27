@@ -201,19 +201,21 @@ describe("EquipmentPage", () => {
     const data = makeDashboardData({
       pdms: [],
       equipment: [{ equipment_id: "EQ-REPORTS", neta_test_report: "Original-1.pdf; Original-2.pdf" }],
-      netaReportManifest: { records: [
+      netaReportManifest: { completed_report_revisions: { "eq-reports": ["Original-1.pdf", "Update.pdf"] }, records: [
         { source_key: "downloaded", report_name: "Original-1.pdf", url: "/neta-reports/Original-1.pdf" },
         { source_key: "gc", source_report_name: "Original-1.pdf", report_name: "GC-Equipment-Report.pdf", url: "/gc-reports/GC-Equipment-Report.pdf" },
         { source_key: "downloaded", report_name: "Original-2.pdf", url: "/neta-reports/Original-2.pdf" },
+        { source_key: "downloaded", equipment_id: "EQ-REPORTS", report_name: "Update.pdf", url: "/neta-reports/Update.pdf" },
       ] },
     });
     render(<MemoryRouter><NetaReportManifestProvider manifest={data.netaReportManifest}><EquipmentPage data={data} /></NetaReportManifestProvider></MemoryRouter>);
     const row = screen.getByRole("cell", { name: "EQ-REPORTS" }).closest("tr")!;
-    const reports = () => within(row).getByRole("button", { name: "2 reports" });
+    const reports = () => within(row).getByRole("button", { name: "3 reports" });
     expect(within(row).queryByRole("button", { name: "Show GC report names" })).not.toBeInTheDocument();
 
     await user.click(reports());
     expect(within(row).getByRole("button", { name: "Original-1.pdf" })).toBeInTheDocument();
+    expect(within(row).getByRole("button", { name: "Update.pdf" })).toBeInTheDocument();
     await user.click(within(row).getByRole("button", { name: "Show GC report names" }));
     expect(reports()).toHaveAttribute("aria-expanded", "true");
     expect(within(row).queryByRole("button", { name: "Original-1.pdf" })).not.toBeInTheDocument();
@@ -230,6 +232,13 @@ describe("EquipmentPage", () => {
     expect(within(row).queryByRole("button", { name: "Show original report names" })).not.toBeInTheDocument();
     await user.click(reports());
     expect(within(row).getByRole("button", { name: "Original-1.pdf" })).toBeInTheDocument();
+
+    await user.click(within(row).getByRole("cell", { name: "EQ-REPORTS" }));
+    const heading = screen.getByRole("heading", { name: "NETA Test Report" });
+    expect(heading.parentElement).toHaveTextContent("3");
+    const testEvidence = screen.getByLabelText("Equipment test evidence");
+    expect(within(testEvidence).getByText("Original-2.pdf")).toBeInTheDocument();
+    expect(within(testEvidence).getByText("Update.pdf")).toBeInTheDocument();
   });
 
   it("shows cable ATP completion consistently in table, summary, filters and details", async () => {

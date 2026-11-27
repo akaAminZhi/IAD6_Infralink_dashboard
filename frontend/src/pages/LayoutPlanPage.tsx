@@ -27,7 +27,7 @@ import { fetchJson } from "../utils/dataLoaders";
 import { formatDateTime } from "../utils/formatters";
 import { LAYOUT_CABLE_MISSING_REPORT_MESSAGE, LAYOUT_CABLE_TEST_STATES, layoutCableMissingReport, layoutCableTestState, type LayoutCableTestState } from "../utils/cableTestUtils";
 import { getLayoutCableReportNames } from "../utils/layoutReportUtils";
-import { getNetaReportNames } from "../utils/netaReports";
+import { getEquipmentNetaReportNames } from "../utils/netaReports";
 import { ALL_LAYOUT_FLOORS, buildCombinedLayoutScene, isometricLayoutEquipment, layoutCableGeometry, layoutFloorFootprint } from "../utils/layoutSceneUtils";
 import {
   DEVICE_KIND_LABELS, LAYOUT_VIEW_KEY, layoutCableLanes, layoutConnectionBounds, layoutDeviceHeight, layoutDeviceKind,
@@ -364,7 +364,10 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
   const zoom = fullBounds.width / bounds.width;
   const selected = selectionMode ? undefined : rows.find((row) => row.annotation_id === selectedId && selectionKeys.has(row.equipment_key))
     ?? rows.find((row) => selectionKeys.has(row.equipment_key));
-  const selectedEquipmentReports = useMemo(() => getNetaReportNames(selected?.neta_test_report), [selected]);
+  const selectedEquipmentReports = useMemo(() => getEquipmentNetaReportNames(selected?.neta_test_report,
+    netaReportManifest, selected?.matched_equipment_id ?? selected?.equipment_key), [selected, netaReportManifest]);
+  const unplacedEquipmentReports = getEquipmentNetaReportNames(unplacedEquipment?.neta_test_report,
+    netaReportManifest, unplacedEquipment?.equipment_id);
   const selectedConnections = useMemo(() => selected ? cableIndex.byEquipment.get(selected.equipment_key) ?? [] : [], [selected, cableIndex]);
   const selectedCableCounts = useMemo(() => selectedConnections.reduce((counts, cable) => {
     const state = layoutCableTestState(cable);
@@ -1028,7 +1031,7 @@ export function LayoutPlanPage({ refreshKey = 0, equipment = [] }: { refreshKey?
           <p className="break-all text-sm">Parent: {unplacedEquipment.parent ?? "Unknown"}</p>
           <p className="text-sm">Excel energized date: {unplacedEquipment.energized_completed_at ?? "No completed date"}</p>
           <p className="text-sm">NETA: {unplacedEquipment.neta_complete === true ? "Complete" : "Not confirmed"}</p>
-          {getNetaReportNames(unplacedEquipment.neta_test_report).length ? <NetaReportChips equipmentId={unplacedEquipment.equipment_id} reports={getNetaReportNames(unplacedEquipment.neta_test_report)} showLinkedFileNames stackedCompact /> : null}
+          {unplacedEquipmentReports.length ? <NetaReportChips equipmentId={unplacedEquipment.equipment_id} reports={unplacedEquipmentReports} showLinkedFileNames stackedCompact /> : null}
           <NetaDuplicatePanel key={unplacedEquipment.equipment_id} equipmentId={unplacedEquipment.equipment_id} />
           {unplacedEquipment.neta_complete === true && !unplacedEquipment.neta_test_report ? <p className="text-xs text-red-700">Data quality: NETA complete but report is missing.</p> : null}
         </section> : null}
