@@ -84,10 +84,9 @@ python scripts/start_dashboard.py
 
 The dashboard is available at `http://127.0.0.1:5173`. Data Operations uses the
 same-origin `/api/automation` proxy, forwarded to `http://127.0.0.1:8765`.
-Data Operations requires Clerk sign-in and a backend-authorized operator ID;
-see the root README's Clerk setup instructions. Missing Clerk configuration leaves
-remote operations locked. Optional localhost access without sign-in is enabled
-in the newly created local env files; restart the launcher to use it.
+Remote Data Operations requires Clerk sign-in and a backend-authorized operator
+ID. See the [operator access guide](../docs/DATA_OPERATIONS.md#choose-operator-access)
+for Clerk setup and optional localhost access.
 
 To run only the frontend:
 
@@ -409,7 +408,8 @@ to publish it in `layout_plan.json`, then reload Layout in other browsers. The
 **Revoke manual record** button works even after Excel has supplied a date. The
 Excel completion date takes priority while present, and a retained manual record
 supplies the status when the date is blank. Existing local plans apply when both
-sources are absent. See the root README for the local operator configuration.
+sources are absent. See [localhost operator access](../docs/DATA_OPERATIONS.md#optional-localhost-access-without-sign-in)
+for setup.
 Hover equipment, or focus it with the keyboard, to see a card with its full ID
 in 16px text and its electrical status without zooming. Escape dismisses the card;
 dragging/zooming/floor changes also dismiss it. Click/tap for the details panel.

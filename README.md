@@ -1,537 +1,92 @@
 # IAD6 Infralink Dashboard
 
-React + TypeScript dashboard data project for IAD06 engineering equipment, PDM/module mapping, NETA status, test reports, and related case issues.
+IAD06 engineering dashboard for PDMs, equipment readiness, Infralink NETA
+reports, issue evidence, EPS testing, KPR metrics, and power plan, MV and Layout views.
 
-## NETA duplicate report review
+## Quick start
 
-Equipment lists show duplicate **group** counts with All duplicate alerts,
-Possible duplicates and Confirmed duplicates filters. Shared equipment report
-details in Equipment, PDM, Power Plan, MV and Layout show both copies,
-Original/GC previews, confirmation source and time. A manually confirmed
-`possible_duplicate` displays as **Confirmed Duplicate**. Invalid evidence is
-shown separately; unavailable audit data never means zero duplicates.
-
-Refresh with `python scripts/etl/build_neta_report_manifest.py` or normal ETL.
-The builder reads Tracker's duplicate audit, active rename manifest, lifecycle
-batch and candidate PDF hashes. Page loads do not render PDFs or scan for
-duplicates. Update both projects together, including Tracker's
-`neta_duplicate_decisions.py`; `IAD6_EPS_TRACKER_ROOT` still applies.
-
-Authorized operators can **Confirm Duplicate** or **Revoke Confirmation** after
-reviewing the pair and impact. The primary copy stays with Tracker. Confirmation
-can skip a duplicate equipment PDF during subsequent uploads; both local files
-remain. Cable confirmation does not suppress cable uploads. Revoking a manual
-confirmation restores possible-duplicate status; automatic identical-byte/render
-confirmations cannot be manually revoked. Neither action starts an upload or
-changes attachments already on CxAlloy.
-
-Writes require existing `/access` authorization, current evidence and explicit
-confirmation, and use the allowlisted task runner. Success refreshes report
-evidence in place, preserving filters and open details. If a decision saves but
-publication fails, use **Refresh duplicate evidence** rather than submitting it
-again. Refresh republishes existing detection; changed/missing PDFs need another
-Tracker duplicate audit. Static deployments need the refreshed manifest; live
-writes need the automation backend. Restart the backend after updating both projects.
-
-The ETL pipeline is PDM-centric:
-
-- PDM Name is the main grouping field.
-- Each PDM contains related equipment from the module list.
-- Each equipment can contain related cases/issues.
-- Every case preserves the `Issue Image` field.
-- NETA completion/report inconsistencies are flagged in the data quality report.
-
-## Project Structure
-
-```text
-raw_data/
-  module/             Latest module list Excel file.
-  system_elements/    Weekly SystemElements_*.xlsx exports.
-  cases/              Weekly Cases_*.xlsx exports.
-scripts/etl/          Python ETL scripts.
-scripts/tests/        Pytest tests for ETL logic.
-frontend/public/data/ Generated JSON/CSV data consumed by the frontend.
-frontend/src/         Future React + TypeScript application source.
-```
-
-## Local Dashboard And Data Operations
-
-Equipment details display **Updated By** and **Updated At** from the System
-Elements Excel export in Equipment, PDMs (including Overview/KPR drill-downs),
-Power Plan, MV, and Layout equipment/cable inspectors. These identify the latest
-system-element update; blank export values display `--`. Normal ETL carries both
-fields into the PDM JSON/CSV and map datasets. Refresh data and the browser after
-new exports; compiled preview needs rebuilt frontend code for the initial change.
-
-Equipment details include **Open in Infralink** at the top in Equipment, PDMs
-(including Overview/KPR drill-downs), Power Plan, MV Equipment and Layout.
-Layout cables also link to their own system element. Links open JC2's main
-`DeviceFullPage` entry in a new tab using the internal numeric ID. This entry
-shows the company login when needed, then hosts the device detail. The embedded
-`imms-js-webapp` detail URL alone can return Session 401 and a blank page when
-the browser is signed out. The saved automation session is separate from the
-user's browser login. Equipment names are matched exactly; missing or
-ambiguous identities show **Infralink link unavailable**.
-
-Refresh the device-ID snapshot after adding equipment or deploying to a new
-host, using the same saved JC2 session as the EPS Tracker:
-
-中文操作说明：[Infralink 设备链接刷新与登录帮助](docs/INFRALINK_LINKS_HELP.md)，
-包含新增设备、session 过期后重新登录，以及刷新链接的完整步骤。
-
-```powershell
-python scripts/etl/build_infralink_equipment_links.py --refresh --auth-state "$env:LOCALAPPDATA\iad6_eps_tracker\jc2_auth_state.json"
-```
-
-This reads the tracker view's project contract scope and queries device names
-and IDs only. It does not modify Infralink or save authentication data into the
-dashboard. The snapshot stays in gitignored `runtime/automation/`; the generated
-`frontend/public/data/infralink_equipment_links.json` contains only matched names
-and IDs plus mapping diagnostics. Normal ETL rebuilds links offline from that
-snapshot, or retains published identities if the local snapshot is absent.
-New unmatched equipment needs another snapshot refresh. Reload the browser after
-refreshing; static deployments must include the generated link dataset.
-
-Equipment details also include **Open in CxAlloy** beside the Infralink link,
-including nested Overview/KPR equipment details and Layout cable inspectors.
-Only unique project-scoped identities produce links; missing or ambiguous
-equipment shows **CxAlloy link unavailable**. The CxAlloy project's equipment
-names may omit `IAD06-`; the Tracker's narrow Utility leading-zero alias is also
-supported. Full cable IDs and all other suffixes are retained. Browser links use
-the viewer's own CxAlloy login, independently of automation sessions.
-
-Refresh identities explicitly (read-only), using your CxAlloy storage-state path:
-
-```powershell
-python scripts/etl/build_cxalloy_equipment_links.py --refresh --auth-state "C:\path\to\your\cxalloy_auth_state.json"
-```
-
-Normal ETL rebuilds links offline. No snapshot is fetched during page loading or
-ordinary ETL. The current Tracker project defaults to `49402`; environment
-`CXALLOY_PROJECT_URL` and CLI `--project-url` support an explicit project override.
-See [CxAlloy link refresh and login help](docs/CXALLOY_LINKS_HELP.md).
-
-CxAlloy uploads from Data Operations directly run the configured sibling
-EPS Tracker's `upload_cxalloy_reports.py`. The Tracker owns report selection,
-upload history, temporary/formal lifecycle checks, replacement and verification.
-Dashboard does not add PDF/history/site-filename upload gates or replace Tracker
-functions. Advanced Force is passed through to the Tracker. Operator access,
-personal sessions, task serialization and explicit live-upload confirmation remain.
-Pending equipment includes previously uploaded equipment needing additional cable
-PDFs; it is not a count of equipment never uploaded.
-The Overview and Equipment **Pending CxAlloy Upload** count/filter requires an
-explicit NETA Complete flag and at least one local report with file status
-`pending`. Incomplete/unknown equipment and records with only uploaded,
-review-required or missing-local PDFs are excluded. Legacy status data requires
-a pending package with a positive available-PDF count. Individual report status
-retains its evidence rules; upload decisions belong to the Tracker.
-
-Equipment details separate **Equipment Reports** from **Cable Reports**.
-Equipment reports have their own upload status, and each downloaded cable PDF
-shows its individual CxAlloy status. The upload status inventory includes only
-eligible PDFs. Supporting images and legacy PDFs derived from those images
-are excluded from the CxAlloy counts. No expected report total or completion ratio is
-inferred. Cable PDFs are classified using the GC rename manifest's LV/MV cable
-metadata, including shared PDFs and filenames without a cable prefix. Missing
-local PDFs and unverifiable upload history remain visible. Refresh this view with
-`python scripts/etl/build_cxalloy_report_status.py` or the normal ETL; this reads
-local upload evidence and does not contact CxAlloy.
-The Equipment table counts uploaded, pending, review-required, and missing-local
-PDFs separately using the same per-file evidence as the details. Hover over a
-count for its equipment/cable breakdown. Legacy status data without file-level
-evidence shows a status without a file count.
-Historical site checks naming another PDF are ignored. A later
-`equipment_not_found` or `cleanup_deleted` invalidates older upload evidence.
-The device returns to pending when local PDFs are available, until a successful
-upload or site check verifies coverage again. Cached hashes and manifest skips
-cannot restore invalidated evidence. An out-of-band site deletion needs a
-record in the Tracker upload history so the offline status builder can see it.
-Login failures or failed cable uploads alone preserve established coverage.
-Per-file upload status is independent of NETA Complete. Verified temporary
-attachments can be Uploaded while equipment NETA remains incomplete/unknown.
-Upload evidence supports both legacy package hashes and Tracker lifecycle
-hashes containing the report stage and batch; current PDF bytes must still
-match the successful historical upload.
-
-Preview without contacting CxAlloy or changing upload records:
-
-```powershell
-python scripts/automation/cxalloy_upload.py --dry-run
-python scripts/automation/cxalloy_upload.py --dry-run --only IAD06-PDU6-03F-5
-```
-
-This compatibility entry point forwards arguments to the Tracker script from its
-working directory, including `--force`; Data Operations invokes that script
-directly. Keep the upload manifest alongside the report PDFs when deploying to
-another machine. Dashboard report-status evidence remains read-only and does not
-block uploads.
-
-Install the Python dependencies and Playwright Chromium once:
+From the repository root in PowerShell, use the conda base Python interpreter.
+Install Node.js with npm for the frontend.
 
 ```powershell
 python -m pip install -r requirements.txt
-playwright install chromium
-```
-
-Install the frontend dependencies once:
-
-```powershell
-cd frontend
+python -m playwright install chromium
+Push-Location frontend
 npm install
-cd ..
+Pop-Location
 ```
 
-Start the local automation service and Vite together:
+For a fresh checkout, [generate the dashboard data](#refresh-data) before opening
+the dashboard. Start Vite and the local FastAPI service together.
 
 ```powershell
 python scripts/start_dashboard.py
 ```
 
-Open `http://127.0.0.1:5173/data-operations` to:
+Open [Dashboard](http://127.0.0.1:5173) or
+[Data Operations](http://127.0.0.1:5173/data-operations). The API binds to
+`127.0.0.1:8765`. See [operator access](docs/DATA_OPERATIONS.md#choose-operator-access)
+for Clerk and optional localhost sign-in settings.
 
-- Enter or edit daily EPS test reports.
-- Enter or edit MV daily test reports with Tested And Passed, Partially Tested,
-  Failed, and Retested And Passed sections.
-- Refresh JC2 browser sessions and Excel exports.
-- Download NETA reports, Feeder Cable ATP files, and issue attachments.
-- Organize renamed reports for GC.
-- Run the dashboard ETL as a resumable daily workflow.
-- Preview or explicitly confirm CxAlloy uploads as a separate operation.
+Use `python scripts/start_dashboard.py --preview` for a local compiled preview.
+The launcher looks for the sibling `IAD6_EPS_Testing_Tracker` repository. To use
+another location, set `IAD6_EPS_TRACKER_ROOT` to its absolute path before launching
+the dashboard or running ETL.
 
-Daily reports now use two new mixed-equipment directories in the tracker:
-`Onsite_Test_Report/` and `Offsite_Test_Report/`. Ordinary equipment, MV devices
-and complete cable IDs share the same report. Use **New Onsite Daily Report** or
-**New Offsite Daily Report** under Data Operations' **Daily Test Report Entry**.
-The Onsite/Offsite panel is visible by default; **Legacy Reports** starts collapsed.
-Both lists share the same table styling. Site lists show the latest report first;
-**Browse All** opens five reports per page, and **Show Latest Only** collapses them.
-Filenames are `YYYY-MM-DD.md`;
-the sections are Tested And Passed, Failed, and Retested And Passed. Duplicate
-lines and cross-section entries are preserved. Saving the same filename in the
-other site is independent; replacing a report within one site requires confirmation.
+## Refresh data
 
-`Daily_test_report/` and `MV_Daily_test_report/` remain Legacy sources. Do not move
-or reclassify their history. Legacy reports remain available for corrections.
-Partially Tested is ignored everywhere, including old MV reports; the original
-files are retained. Empty new directories are valid. Invalid/undated reports are
-visible in the audit and must be corrected before rebuilding the EPS summary.
+For a manual refresh, put the latest workbooks in these directories.
 
-Deploy the Dashboard and Tracker changes together, including the Tracker's new
-`daily_report_sources.py`. Both the standalone wash script and Tracker Excel
-entry point use that shared reader. The wash job rebuilds
-`daily_tested_equipment.md` without rewriting the source reports. Standalone Excel
-generation refreshes this summary first. Raw legacy MV evidence retains its old
-map/audit scope and does not expand EPS completion totals. New site records enter
-the existing matching and completion flow. Tracking exclusions remain unchanged.
-New-site spaced PHASE IDs are read directly from structured evidence so the legacy
-compact summary parser cannot discard them. Historical EPS completion scope stays
-unchanged. Same-day conflicts between site reports use failure first; a later
-passing result clears failure. This does not replace Infralink NETA/report evidence
-or change energisation markers.
-
-EPS Test Execution's **Daily Reports / Repeated Tests** panel defaults to repeats
-in the last seven calendar days including today, with ten items per page in the
-existing fixed-height region.
-Any complete normalized test ID appearing twice is repeated, including same-day
-entries, duplicate lines, failures, retests and Offsite-to-Onsite testing. Different
-phases, child test items and tracker aliases are not merged. Filter all repeats,
-cross-site repeats, same-day repeats, cross-date repeats, site, source, date or ID.
-Filters preserve the full expanded evidence, including filenames and line numbers.
-Reset returns to the recent seven-day view using the America/New_York calendar;
-All repeat history clears the date bounds. Legacy M-D dates infer the year from file modification
-time and are marked with `*`. The summary file is never counted as another test.
-
-The audit is published as `eps_daily_report_audit.json` by the EPS builder and
-normal ETL, honoring `IAD6_EPS_TRACKER_ROOT`. Equipment/PDM, Power Plan, MV and
-Layout details include applicable source histories. After saving reports, verify
-the summary rebuild succeeds, run Dashboard ETL, then refresh. A saved report is
-retained if rebuilding fails so it can be retried. Restart the automation service
-and frontend after installing the new API/UI; static deployments need rebuilt
-code and refreshed generated datasets. No vendor upload is needed for this change.
-
-The automation API listens only on `127.0.0.1:8765`. It uses the sibling
-`IAD6_EPS_Testing_Tracker` directory by default. Set `IAD6_EPS_TRACKER_ROOT`
-when the tracker repository is stored elsewhere:
+| Source | Directory |
+| --- | --- |
+| Module list Excel workbook | `raw_data/module/` |
+| `SystemElements_*.xlsx` | `raw_data/system_elements/` |
+| `Cases_*.xlsx` | `raw_data/cases/` |
 
 ```powershell
-$env:IAD6_EPS_TRACKER_ROOT = "C:\path\to\IAD6_EPS_Testing_Tracker"
-python scripts/start_dashboard.py
+python scripts/etl/run_etl.py
 ```
 
-Run logs are stored under `runtime/automation/` and are not committed.
+Check the selected sources and any quality findings in `etl_run_metadata.json`
+and `data_quality_report.json` under `frontend/public/data/`, then reload the
+dashboard. Each PDM groups equipment, and each equipment record carries its
+cases. ETL preserves issue and corrective images and flags equipment marked
+NETA Complete with a missing report.
 
-## Clerk sign-in for Data Operations (free plan)
+Operators can also run **Daily Data Refresh** in
+[Data Operations](docs/DATA_OPERATIONS.md#daily-data-refresh). Live CxAlloy
+uploads run separately and require explicit confirmation.
 
-For VM trials with less browser startup work, use
-`python scripts/start_dashboard.py --preview`. This builds the frontend once
-before starting services without copying runtime datasets/reports, then serves
-compiled assets on the same port 5173
-with the same API proxy and Clerk settings. Re-run the command after changes to
-source or frontend env values. JSON/CSV requests under `/data/` read the current
-`frontend/public/data/` files directly, with caching disabled. A successful ETL
-in Data Operations triggers the existing dashboard reload and shows updated data
-without restarting preview or rebuilding code. Missing live files return 404
-instead of falling back to stale copies in `dist/`. The normal command retains
-the Vite development server. Preview is a local trial mode, not a permanent
-production deployment setup. Application routes load their code on demand;
-PDMs, Equipment, Power Plan and Layout load their own required datasets rather
-than waiting for all dashboard files. PDM EPS details, report/attachment links,
-and Infralink identities load when needed. Equipment/Power Plan retain the data
-required for accurate status colors and filters. Loaded datasets are reused when
-switching pages and cleared by a successful ETL dashboard reload; Layout refreshes
-its independent manifest too. Live JSON/CSV responses use gzip when the browser
-accepts it, while retaining `no-store` so ETL updates remain visible. Re-run the
-preview launcher once after installing these changes to load the new middleware.
+## Test and build
 
-NETA report PDFs also read live from `frontend/public/neta-reports/` and
-`frontend/public/neta-reports-gc/`, including their tracker junction targets.
-The report index includes `_temporary/<equipment>/` in both roots. Temporary
-PDFs display a **Temporary** label and support Original/GC names and previews;
-their presence does not change NETA/EPS completion or readiness metrics.
-For the same equipment, original report name and source, ready formal files
-take precedence. Tracker lifecycle state gates original formal files on
-`download_ready` and GC formal files on `formal_ready`; retained temporary
-files remain viewable during an unsuccessful promotion. Legacy formal files
-without lifecycle entries retain their existing behavior. Internal staging,
-backup and archive directories remain excluded.
-After downloading/organizing reports, run the normal ETL and refresh the page.
-To refresh only report links, run `python scripts/etl/build_neta_report_manifest.py`.
-This honors `IAD6_EPS_TRACKER_ROOT`; existing public links must point to that
-tracker. A page opened before temporary cleanup needs a refresh after indexing.
-Power Plan and MV equipment details also provide the shared report preview.
-The report middleware supports browser PDF byte-range requests. Missing reports
-return 404 instead of falling through to dashboard HTML or stale built copies.
-The report files and junctions must exist on the machine hosting the dashboard;
-they are not committed to git. Report-manifest generation creates the configured
-public links when its source directories are available. After syncing report
-middleware changes, restart preview once. Later downloads do not require rebuild.
-Issue attachments and reference drawings are likewise served live from
-`frontend/public/issue-case-images/` and `frontend/public/references/`. This avoids
-copying large report/attachment collections during preview startup. Regular
-`npm run build` retains public-file copying for standalone static publication.
-
-Data Operations now requires a Clerk session and an authorized operator ID.
-Without Clerk configuration remote operations are locked. The local env files
-enable optional localhost use without sign-in (described below). Other dashboard
-pages remain viewable. The existing read-only MV comments and NETA review
-endpoints remain public; all automation operations and all writes require auth.
-
-1. Create a Clerk application and enable **email verification code** sign-in.
-   Disable passwords and other sign-in methods if you want email codes only.
-2. Set **Restricted / Require invitations** access. Invite only the approved
-   email addresses (for example, your three operators). This is included in the
-   free plan; Clerk's Allowlist feature is paid and is not used here.
-3. After each invite is accepted, copy that user's `user_...` ID from the Clerk
-   Dashboard Users page. A new invited account remains unable to operate until
-   you add its ID below. Alternatively, manually create the approved users in
-   Clerk first and copy their IDs. Remove any existing unwanted accounts.
-4. Create `frontend/.env.local` locally:
-
-   ```dotenv
-   VITE_CLERK_PUBLISHABLE_KEY=pk_test_your_key
-   VITE_LOCAL_OPERATIONS_BYPASS=true
-   ```
-
-5. Create `.env.local` at the repository root locally:
-
-   ```dotenv
-   CLERK_ISSUER=https://your-instance.clerk.accounts.dev
-   CLERK_AUTHORIZED_PARTIES=http://127.0.0.1:5173,http://localhost:5173,https://your-host.ngrok-free.app
-   CLERK_ALLOWED_USER_IDS=user_first,user_second,user_third
-   AUTOMATION_LOCAL_AUTH_BYPASS=true
-   ```
-
-   Use the Frontend API URL / session issuer for the **same Clerk instance** as
-   the publishable key. List exact frontend origins, without paths or trailing
-   slashes. No Clerk secret key is needed: the backend verifies RS256 signatures
-   against the configured instance's public JWKS, issuer, expiration, session
-   claims and authorized origin. The operator list is backend-only and can be
-   used with the free Clerk plan.
-6. Install updated dependencies (`python -m pip install -r requirements.txt`,
-   then `npm install` inside `frontend/`), and restart with
-   `python scripts/start_dashboard.py`. The launcher loads the root `.env.local`;
-   Vite loads the frontend `.env.local`. If starting Uvicorn separately, load
-   the root variables yourself or use `--env-file .env.local`.
-7. Keep ngrok forwarding to port **5173**. Open `/data-operations` from its HTTPS
-   URL. The frontend uses `/api/automation`; Vite forwards that prefix to the
-   loopback API on port 8765. A second tunnel is unnecessary. Clear any old
-   `VITE_AUTOMATION_API_URL` override pointing to loopback. If the ngrok hostname
-   changes, update `CLERK_AUTHORIZED_PARTIES` and restart the backend.
-
-Never commit either environment file. Start with Clerk development keys for a
-trial; production uses the production instance's keys, issuer, user IDs and
-Clerk's domain setup. The invite restriction controls account creation, while
-the backend ID list independently controls operations. Invitation mode does not
-by itself promise that Clerk never sends verification emails to other addresses;
-check that behavior in your actual Clerk sign-in flow.
-
-To verify remote setup, open the ngrok URL, sign in as an invited, authorized operator and check that
-the operations page loads. A signed-in account omitted from the ID list should
-see an access-denied message; a direct API request without a token should return
-401. CxAlloy live upload still requires its existing explicit confirmation.
-JC2/CxAlloy browsers run on the automation host, but their personal login windows
-are displayed and controlled inside Data Operations. Keep the host running and
-retain its tracker files for remote operations.
-
-### Personal JC2 / CxAlloy accounts
-
-Each authenticated Clerk user now has separate JC2 and CxAlloy browser state.
-Click **Refresh login**, click the fields in the displayed browser image and
-type, or select a field then use the masked **Send text** box. Use **Tab** and
-**Enter** as needed. For JC2, complete Microsoft sign-in and approve the phone
-MFA prompt. Once the actual provider page has loaded, click **Save my session**.
-The window closes and your personal session status updates. No remote desktop
-access or second ngrok tunnel is required.
-
-Session files are stored under the existing local auth directory's
-`users/<hash-of-Clerk-user-ID>/` subdirectories, outside the repository. Password
-inputs and screenshots are not written to application logs or files. Stored
-browser state contains sensitive cookies/tokens; keep that directory private.
-Existing shared VM states are never assigned to remote users or used as a
-fallback. Everyone must connect their own provider accounts once.
-
-All external jobs receive the caller's explicit `--auth-state` path; missing
-personal state produces `auth_required`. Runs are tagged with the initiating
-Clerk user and only that user can inspect logs, resume or cancel them. Jobs
-continue to share project datasets/files and run one at a time on the host.
-**Disconnect my account** removes only your saved state and closes your pending
-login window. It does not revoke the account at the provider. Browser windows
-expire after 20 minutes, and up to six can be open at once.
-
-For per-person identity on localhost as well, set both local bypass switches to
-`false` and sign in with Clerk. Anonymous local bypass uses its own single
-`local_operator` profile. A supplied Clerk token always takes precedence.
-
-The VM needs Playwright Chromium (`python -m playwright install chromium`).
-The remote login window shows browser content, so Windows Security / Windows
-Hello / passkey dialogs on the VM cannot be controlled through it. Microsoft
-passkey requests are cancelled before opening native dialogs. Select **Other
-ways to sign in** / **Sign in another way** and use a company-permitted password,
-Authenticator approval, or verification code. MFA is still required by the
-provider. If company policy requires passkeys exclusively, this remote login
-flow cannot satisfy it; consult the identity administrator about a supported
-sign-in flow. After updating, restart the automation backend and open a new
-personal login window; existing browser contexts retain their old behavior.
-Microsoft sign-in image CDN hosts under `msauthimages.net` and
-`msftauthimages.net` are included in the login network allowlist.
-Login URLs come from the sibling tracker's JC2 configuration and CxAlloy script
-default (or `CXALLOY_PROJECT_URL`). Login navigation is limited to HTTPS provider
-and Microsoft authentication/CDN hosts. If a company SSO or asset host is
-blocked, add its exact hostname to root `.env.local` and restart:
-
-```dotenv
-AUTOMATION_LOGIN_ALLOWED_HOSTS=idp.mcdean.com,assets.example.com
-```
-
-If your provider rejects headless Chromium, Windows hosts can set
-`AUTOMATION_LOGIN_HEADLESS=false` and restart. This requires an interactive
-Windows desktop session on the host; the user's controls still work through
-the webpage. Company MFA/device policies require a real VM trial; tests use a
-local simulated login/MFA flow and never sign in to live vendor accounts.
-
-### Optional localhost access without sign-in
-
-Both local env files have now been created in this workspace with blank Clerk
-values and local access enabled. They are gitignored. `VITE_CLERK_PUBLISHABLE_KEY`
-is Clerk's public frontend application identifier, copied from Clerk Dashboard
-**API keys > Publishable key**; it connects the sign-in UI to your Clerk instance.
-It is not a secret or a substitute for backend token verification.
-
-With `VITE_LOCAL_OPERATIONS_BYPASS=true` in `frontend/.env.local` and
-`AUTOMATION_LOCAL_AUTH_BYPASS=true` in root `.env.local`, opening
-`http://127.0.0.1:5173/data-operations` or `http://localhost:5173/data-operations`
-does not require Clerk. Local mode connects directly to `127.0.0.1:8765` and
-checks backend access before enabling controls, so no Clerk key is needed for
-local use. Restart the launcher after changing the files.
-
-Remote browsers still use the `/api/automation` proxy and require Clerk. Vite
-overwrites `X-IAD6-Proxied` on forwarded requests; the backend denies local bypass
-for any proxied/forwarded request, non-loopback peer/host, or external browser
-origin. This prevents a ngrok request from inheriting the proxy's loopback IP.
-Keep ngrok pointed at **5173**, and keep the backend bound to loopback. Remove
-any old `VITE_AUTOMATION_API_URL` override to use this automatic routing.
-Set both bypass switches to `false` and restart to require Clerk locally too.
-
-### VM white screen with "Invalid hook call"
-
-If the browser reports `Invalid hook call` / `useContext` in `ClerkProvider`,
-check React resolution and the VM's dependency installation before changing
-Clerk authorization settings. Both Vite configs deduplicate `react` and
-`react-dom` to the frontend root. On the VM, stop the dashboard, sync the updated
-configs and lockfile, run `npm ci` from `frontend/`, then restart the normal
-launcher and hard-refresh the browser. `npm ci` replaces the installed dependency
-tree and old Vite cache with the lockfile's versions. If the error remains, run
-`npm ls react react-dom @clerk/react` on the VM and inspect the actual browser
-Console error. Local bypass may hide a Clerk initialization problem because it
-does not mount ClerkProvider; always check the ngrok route as well.
-
-The current JC2 SystemElements view URL is stored in the sibling tracker at
-`config/jc2_system_elements_url.txt`. Paste the latest DeviceList URL into that
-file when the JC2 view changes; Excel, NETA, and Feeder Cable ATP download jobs
-all read the same setting. `JC2_SYSTEM_ELEMENTS_URL` can override it temporarily.
-
-## Manual Weekly Update Workflow
-
-1. Put the latest module list Excel file into:
-   `raw_data/module/`
-
-2. Put the latest SystemElements export into:
-   `raw_data/system_elements/`
-
-3. Put the latest Cases export into:
-   `raw_data/cases/`
-
-4. Run:
-
-   ```powershell
-   python scripts/etl/run_etl.py
-   ```
-
-5. Confirm the selected files printed in the terminal are correct.
-
-6. Review:
-   `frontend/public/data/etl_run_metadata.json`
-   `frontend/public/data/data_quality_report.json`
-
-7. Start the frontend after the ETL succeeds.
-
-Full ETL logs include elapsed seconds for every step and workbook-cache reuse
-counts. Equipment and case normalization uses a local, gitignored cache under
-`runtime/etl-cache/workbooks/`. Workbook content, ETL Python source, Python and
-openpyxl versions determine reuse; changed files/rules are parsed again. Corrupt
-or unavailable cache files fall back to parsing. The first run builds the cache,
-so later refreshes are faster. Removing this cache only makes the next run rebuild
-it. Independent normalizer/builder commands retain their uncached behavior.
-EPS matching uses an inventory suffix index; daily history snapshots are still
-fully regenerated so corrections to older reports remain visible. CxAlloy PDF
-content verification is unchanged.
-
-## ETL Outputs
-
-Key generated outputs:
-
-- `equipment.json`
-- `module_equipment_links.json`
-- `cases.json`
-- `pdms.json`
-- `summary.json`
-- `data_quality_report.json`
-- `etl_run_metadata.json`
-- `cxalloy_report_status.json` (current GC report packages compared with successful CxAlloy upload records)
-
-Normalized JSON files include source file metadata so the dashboard can show exactly which weekly exports were used.
-
-## Tests
-
-Run:
+Run Python tests from the repository root.
 
 ```powershell
-pytest scripts/tests
+python -m pytest scripts/tests
 ```
 
-## Architecture
+Run frontend tests and the static build from `frontend/`.
 
-- React and Vite provide the dashboard UI.
-- FastAPI provides a local-only, allowlisted task runner.
-- Existing EPS Tracker scripts remain the source of download, cleanup, and upload behavior.
-- No database is required; generated datasets remain under `frontend/public/data/`.
+```powershell
+npm test
+npm run build
+```
+
+The build writes `frontend/dist/`. Static hosting can serve dashboard pages
+with the generated data and published files. Data Operations requires the
+automation service and the host's Tracker files.
+
+## Documentation
+
+| Topic | Guide |
+| --- | --- |
+| System boundaries, data flow and configuration | [Architecture](ARCHITECTURE.md) |
+| Frontend development and dashboard features | [Frontend README](frontend/README.md) |
+| Operator access, logins, daily reports and refresh | [Data Operations](docs/DATA_OPERATIONS.md) |
+| NETA previews, duplicate decisions and CxAlloy upload status | [Report operations](docs/REPORT_OPERATIONS.md) |
+| Equipment links and identity refresh | [Infralink](docs/INFRALINK_LINKS_HELP.md) and [CxAlloy](docs/CXALLOY_LINKS_HELP.md) |
+| Current engineering handoff | [Codex handoff](CODEX_HANDOFF.md) |
+
+Code lives in `frontend/src/`, `scripts/etl/` and `scripts/automation/`.
+Keep raw exports, generated datasets, reports, runtime logs, env files and
+browser sessions out of Git.
