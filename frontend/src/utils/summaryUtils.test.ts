@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import caseStatusExamples from "../../../scripts/tests/fixtures/case_status.json";
+
 import type {
   CaseIssue,
   DashboardSummary,
@@ -7,6 +9,10 @@ import type {
   ModuleEquipmentLink,
   PdmRecord,
 } from "../types/data";
+import { flattenEquipmentFromPdms, getOpenCaseCount } from "./equipmentUtils";
+import { getEquipmentReadinessMetrics } from "./equipmentReadinessUtils";
+import { isOpenIssue } from "./issueUtils";
+import { getPdmOpenCaseCount } from "./pdmUtils";
 import {
   arrayToChartData,
   asNumber,
@@ -24,6 +30,21 @@ import {
 } from "./summaryUtils";
 
 describe("summaryUtils", () => {
+  it.each(caseStatusExamples)("uses the same open-case rule for $case", ({ case: caseItem, open }) => {
+    const count = Number(open);
+    const pdm: PdmRecord = {
+      pdm_name: "PDM-A",
+      equipment: [{ equipment_id: "EQ-1", cases: [caseItem] }],
+    };
+    const [equipment] = flattenEquipmentFromPdms([pdm]);
+
+    expect(isOpenIssue(caseItem)).toBe(open);
+    expect(countOpenCases([caseItem])).toBe(count);
+    expect(getOpenCaseCount(equipment)).toBe(count);
+    expect(getPdmOpenCaseCount(pdm)).toBe(count);
+    expect(getEquipmentReadinessMetrics([pdm]).totalOpenCases).toBe(count);
+  });
+
   it("prefers nested metric and grouped-summary values", () => {
     const summary = {
       total_cases: 3,

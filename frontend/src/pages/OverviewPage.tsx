@@ -26,9 +26,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../co
 import type { CaseIssue, DashboardData, PdmRecord } from "../types/data";
 import { formatDateTime } from "../utils/formatters";
 import { flattenEquipmentFromPdms, getPendingCxalloyEquipmentCount } from "../utils/equipmentUtils";
+import { isOpenIssue } from "../utils/issueUtils";
 import {
   getPdmTableRows,
-  isOpenCase,
   type PdmReadinessLevel,
   type PdmTableRow,
 } from "../utils/pdmUtils";
@@ -317,7 +317,7 @@ function getOverviewCases(data: DashboardData): CaseIssue[] {
 }
 
 function isOverdueOpenCase(caseItem: CaseIssue): boolean {
-  if (!isOpenCase(caseItem) || !caseItem.due_date) {
+  if (!isOpenIssue(caseItem) || !caseItem.due_date) {
     return false;
   }
 
@@ -348,7 +348,7 @@ function ReadinessOverview({
   const notStarted = rows.filter((row) => row.readinessLevel === "Not Started").length;
   const needingAttention = watch + attention + critical;
   const waitingNeta = data.epsTestSummary?.waiting_infralink_neta_count ?? 0;
-  const openIssues = countUniqueCases(getOverviewCases(data), isOpenCase);
+  const openIssues = countUniqueCases(getOverviewCases(data), isOpenIssue);
   const equipmentStatusDistribution = getEquipmentStatusDistribution(data.pdms);
   const totalPdmEquipment = equipmentStatusDistribution.reduce(
     (total, item) => total + item.count,
@@ -794,10 +794,10 @@ function ManagementExceptions({
     0,
   );
   const overdueIssues = countUniqueCases(cases, isOverdueOpenCase);
-  const openIssues = countUniqueCases(cases, isOpenCase);
+  const openIssues = countUniqueCases(cases, isOpenIssue);
   const missingIssueImages = countUniqueCases(
     cases,
-    (caseItem) => isOpenCase(caseItem) && !String(caseItem.issue_image ?? "").trim(),
+    (caseItem) => isOpenIssue(caseItem) && !String(caseItem.issue_image ?? "").trim(),
   );
   const pendingCxalloy = useMemo(() => getPendingCxalloyEquipmentCount(
     flattenEquipmentFromPdms(data.pdms, data.equipment, [], [], data.cxalloyReportStatus),

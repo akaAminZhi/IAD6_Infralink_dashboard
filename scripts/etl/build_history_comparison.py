@@ -8,12 +8,14 @@ from pathlib import Path
 from typing import Any
 
 try:
+    from .case_status import is_closed_case
     from .file_discovery import CASES_DIR, SYSTEM_ELEMENTS_DIR, get_input_files
     from .json_utils import file_metadata, selected_input_files_metadata, write_json
     from .normalize_cases import normalize_cases
     from .normalize_equipment import normalize_equipment
     from .tracking_rules import requires_equipment_test_tracking
 except ImportError:
+    from case_status import is_closed_case
     from file_discovery import CASES_DIR, SYSTEM_ELEMENTS_DIR, get_input_files
     from json_utils import file_metadata, selected_input_files_metadata, write_json
     from normalize_cases import normalize_cases
@@ -27,15 +29,6 @@ OUTPUT_PATH = DATA_DIR / "history_comparison.json"
 LOOKBACK_DAYS = 7
 
 EXPORT_DATE_PATTERN = re.compile(r"_(\d{2})-(\d{2})-(\d{4})_")
-CLOSED_CASE_STATUSES = {
-    "closed",
-    "complete",
-    "completed",
-    "cancelled",
-    "canceled",
-    "void",
-    "resolved",
-}
 
 
 def parse_export_date(path: str | Path) -> date:
@@ -87,15 +80,6 @@ def is_neta_complete(record: dict[str, Any]) -> bool:
         requires_equipment_test_tracking(record)
         and record.get("neta_complete") is True
     )
-
-
-def is_closed_case(record: dict[str, Any] | None) -> bool:
-    if not record:
-        return False
-    status = record.get("status")
-    if not isinstance(status, str):
-        return False
-    return status.strip().casefold() in CLOSED_CASE_STATUSES
 
 
 def first_by_key(records: list[dict[str, Any]], key: str) -> dict[str, dict[str, Any]]:

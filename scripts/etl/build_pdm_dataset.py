@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 try:
+    from .case_status import is_closed_case
     from .file_discovery import get_input_files
     from .json_utils import (
         load_records_json,
@@ -18,6 +19,7 @@ try:
     from .pdm_energisation import attach_energisation
     from .tracking_rules import requires_equipment_test_tracking
 except ImportError:
+    from case_status import is_closed_case
     from file_discovery import get_input_files
     from json_utils import (
         load_records_json,
@@ -39,16 +41,6 @@ CASES_PATH = DATA_DIR / "cases.json"
 PDMS_OUTPUT_PATH = DATA_DIR / "pdms.json"
 PDMS_CSV_OUTPUT_PATH = DATA_DIR / "pdms.csv"
 ENERGISATION_OUTPUT_PATH = DATA_DIR / "pdm_energisation.json"
-
-CLOSED_CASE_STATUSES = {
-    "closed",
-    "complete",
-    "completed",
-    "cancelled",
-    "canceled",
-    "void",
-    "resolved",
-}
 
 CASE_FIELDS = [
     "case_id",
@@ -128,13 +120,6 @@ def first_present(current_value: Any, candidate_value: Any) -> Any:
     if candidate_value in (None, ""):
         return current_value
     return candidate_value
-
-
-def is_closed_case(case: dict[str, Any]) -> bool:
-    status = case.get("status")
-    if not isinstance(status, str):
-        return False
-    return status.strip().casefold() in CLOSED_CASE_STATUSES
 
 
 def is_urgent_case(case: dict[str, Any]) -> bool:

@@ -13,6 +13,7 @@ import {
   getIndexedEpsTestItems,
 } from "./epsTestItemUtils";
 import { requiresEquipmentTestTracking } from "./equipmentTrackingUtils";
+import { isOpenIssue } from "./issueUtils";
 import { hasInfralinkCableTestReport, parseCableAttachmentNames } from "./cableTestUtils";
 import { getNetaReportNames } from "./netaReports";
 import { isDefaultCxalloyUploadExcluded } from "./cxalloyUploadScope";
@@ -77,15 +78,6 @@ export interface EquipmentSummaryMetrics {
   mostCommonStatus: string | null;
   mostCommonStatusCount: number;
 }
-
-const CLOSED_CASE_STATUSES = new Set([
-  "closed",
-  "complete",
-  "cancelled",
-  "canceled",
-  "void",
-  "resolved",
-]);
 
 export function isBlank(value: unknown): boolean {
   return value === null || value === undefined || String(value).trim() === "";
@@ -343,16 +335,8 @@ export function flattenEquipmentFromPdms(
   return [...rows, ...standaloneRows];
 }
 
-export function isOpenCase(caseItem: CaseIssue): boolean {
-  if (isBlank(caseItem.status)) {
-    return true;
-  }
-
-  return !CLOSED_CASE_STATUSES.has(String(caseItem.status).trim().toLowerCase());
-}
-
 export function getOpenCaseCount(equipment: FlattenedEquipmentRow): number {
-  const caseCount = equipment.cases.filter(isOpenCase).length;
+  const caseCount = equipment.cases.filter(isOpenIssue).length;
   if (equipment.cases.length > 0) {
     return caseCount;
   }

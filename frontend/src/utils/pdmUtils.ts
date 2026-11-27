@@ -5,6 +5,7 @@ import type {
   PdmRecord,
 } from "../types/data";
 import { requiresEquipmentTestTracking } from "./equipmentTrackingUtils";
+import { isOpenIssue } from "./issueUtils";
 
 export type PdmReadinessLevel = "Not Started" | "Good" | "Watch" | "Attention" | "Critical";
 
@@ -35,15 +36,6 @@ export interface PdmTableRow {
   readinessLevel: PdmReadinessLevel;
 }
 
-const CLOSED_CASE_STATUSES = new Set([
-  "closed",
-  "complete",
-  "cancelled",
-  "canceled",
-  "void",
-  "resolved",
-]);
-
 export function isBlank(value: unknown): boolean {
   return value === null || value === undefined || String(value).trim() === "";
 }
@@ -59,14 +51,6 @@ export function asNumber(value: unknown): number | null {
   }
 
   return null;
-}
-
-export function isOpenCase(caseItem: CaseIssue): boolean {
-  if (isBlank(caseItem.status)) {
-    return true;
-  }
-
-  return !CLOSED_CASE_STATUSES.has(String(caseItem.status).trim().toLowerCase());
 }
 
 export function hasMissingIssueImage(caseItem: CaseIssue): boolean {
@@ -114,7 +98,7 @@ export function hasEpsTestingStarted(
 
 export function getOpenCaseCountForEquipment(equipment: PdmEquipmentRecord): number {
   if ((equipment.cases ?? []).length > 0) {
-    return (equipment.cases ?? []).filter(isOpenCase).length;
+    return (equipment.cases ?? []).filter(isOpenIssue).length;
   }
 
   const calculatedOpenCases = asNumber(equipment.calculated_open_case_count);

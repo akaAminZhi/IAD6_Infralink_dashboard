@@ -6,21 +6,13 @@ import type {
   PdmRecord,
 } from "../types/data";
 import { requiresEquipmentTestTracking } from "./equipmentTrackingUtils";
+import { isOpenIssue } from "./issueUtils";
 
 export interface ChartDatum {
   name: string;
   value: number;
   pdm_name?: string | null;
 }
-
-const CLOSED_STATUSES = new Set([
-  "closed",
-  "complete",
-  "cancelled",
-  "canceled",
-  "void",
-  "resolved",
-]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -148,14 +140,6 @@ export function arrayToChartData(
   return limit ? rows.slice(0, limit) : rows;
 }
 
-export function isOpenCase(caseIssue: CaseIssue): boolean {
-  const status = caseIssue.status;
-  if (!status) {
-    return true;
-  }
-  return !CLOSED_STATUSES.has(status.trim().toLowerCase());
-}
-
 export function getTopPdmsByOpenCases(pdms: PdmRecord[], limit = 10): ChartDatum[] {
   return pdms
     .map((pdm) => ({
@@ -182,7 +166,7 @@ export function getTopPdmsByMissingNetaReports(pdms: PdmRecord[], limit = 10): C
 
 export function countOpenCasesFromPdm(pdm: PdmRecord): number {
   return (pdm.equipment ?? []).reduce((total, equipment) => {
-    return total + (equipment.cases ?? []).filter(isOpenCase).length;
+    return total + (equipment.cases ?? []).filter(isOpenIssue).length;
   }, 0);
 }
 
@@ -197,7 +181,7 @@ export function countMissingNetaReportsFromPdm(pdm: PdmRecord): number {
 }
 
 export function countOpenCases(cases: CaseIssue[]): number {
-  return cases.filter(isOpenCase).length;
+  return cases.filter(isOpenIssue).length;
 }
 
 export function countPriorityContains(cases: CaseIssue[], token: string): number {

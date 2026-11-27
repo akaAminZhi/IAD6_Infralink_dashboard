@@ -9,7 +9,8 @@ from pathlib import Path
 from typing import Any, Iterable
 
 try:
-    from .build_history_comparison import CLOSED_CASE_STATUSES, parse_export_date
+    from .build_history_comparison import parse_export_date
+    from .case_status import is_closed_case
     from .file_discovery import CASES_DIR, SYSTEM_ELEMENTS_DIR, get_input_files
     from .json_utils import (
         load_records_json,
@@ -20,7 +21,8 @@ try:
     from .normalize_equipment import normalize_equipment
     from .tracking_rules import requires_equipment_test_tracking
 except ImportError:
-    from build_history_comparison import CLOSED_CASE_STATUSES, parse_export_date
+    from build_history_comparison import parse_export_date
+    from case_status import is_closed_case
     from file_discovery import CASES_DIR, SYSTEM_ELEMENTS_DIR, get_input_files
     from json_utils import load_records_json, selected_input_files_metadata, write_json
     from normalize_cases import normalize_cases
@@ -180,12 +182,6 @@ def index_cases(records: Iterable[dict[str, Any]]) -> dict[str, dict[str, Any]]:
         if key and key not in indexed:
             indexed[key] = record
     return indexed
-
-
-def is_closed_case(record: dict[str, Any] | None) -> bool:
-    if not record:
-        return False
-    return normalize_key(record.get("status")).casefold() in CLOSED_CASE_STATUSES
 
 
 def is_open_case(record: dict[str, Any] | None) -> bool:

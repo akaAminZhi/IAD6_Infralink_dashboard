@@ -10,6 +10,14 @@ apply. Lift both fingers before starting another single-finger drag. Pinching
 does not select equipment or complete a selection box; mouse/keyboard controls
 and search suggestion scrolling retain their existing behavior.
 
+`usePinchZoom` shares touch-pointer tracking across both pages. Each page owns
+its zoom limits and camera updates. A second touch cancels single-pointer
+pan/selection and anchors the world point under the midpoint, accounting for SVG
+letterboxing. Movement uses the initial two-touch pose. Capture loss and scene
+changes clear the gesture. Click capture consumes a click after the first
+lift/cancel until the next interaction. Layout search controls are outside the
+gesture surface.
+
 ## Duplicate NETA reports
 
 `neta_report_manifest.json.duplicate_audit` supplies equipment-scoped groups,

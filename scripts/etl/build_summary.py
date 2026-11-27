@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 try:
+    from .case_status import is_closed_case
     from .file_discovery import get_input_files
     from .json_utils import (
         load_records_json,
@@ -16,6 +17,7 @@ try:
     )
     from .tracking_rules import requires_equipment_test_tracking
 except ImportError:
+    from case_status import is_closed_case
     from file_discovery import get_input_files
     from json_utils import (
         load_records_json,
@@ -34,15 +36,6 @@ CASES_PATH = DATA_DIR / "cases.json"
 MODULE_LINKS_PATH = DATA_DIR / "module_equipment_links.json"
 SUMMARY_OUTPUT_PATH = DATA_DIR / "summary.json"
 
-OPEN_EXCLUDED_STATUSES = {
-    "closed",
-    "complete",
-    "completed",
-    "cancelled",
-    "canceled",
-    "void",
-    "resolved",
-}
 TOP_LIMIT = 10
 
 
@@ -61,10 +54,7 @@ def sorted_counter(counter: Counter[str]) -> dict[str, int]:
 
 
 def is_open_case(case: dict[str, Any]) -> bool:
-    status = case.get("status")
-    if not isinstance(status, str):
-        return True
-    return status.strip().casefold() not in OPEN_EXCLUDED_STATUSES
+    return not is_closed_case(case)
 
 
 def is_urgent_case(case: dict[str, Any]) -> bool:

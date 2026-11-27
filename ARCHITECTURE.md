@@ -1,100 +1,5 @@
 # Architecture
 
-## NETA duplicate evidence and decisions
-
-The Equipment NETA reports section also lists unresolved completed-report version
-conflicts for authorized operators. The automation API serves the two PDFs by
-opaque conflict ID, revision and side, with the Tracker validating staged hashes.
-Operators can keep the current version or adopt the candidate. The Tracker logs
-the choice, and a manually triggered `--completed-reports refresh` verifies it
-and publishes an eligible formal batch. Daily Data Refresh runs the standard
-download workflow. ETL publishes revised equipment's active formal filenames,
-including Updates-only reports, and fingerprints their PDF links. Normal
-CxAlloy uploads pick up the resulting batch.
-
-The report manifest builder reads the configured Tracker's v2 duplicate audit
-through its `neta_duplicate_decisions` validation API. Candidate GC paths must
-remain within the report root, belong to active rename rows and the current
-stage/batch, retain the recognized-name/category scope, and match both SHA-256
-values. Only candidate files are hashed. Original and GC links resolve through
-the existing public report index; missing public copies invalidate actions.
-The manifest adds `duplicate_audit` with explicit availability, diagnostics and
-typed group records. No equipment readiness or completion contract changes.
-
-The protected duplicate-decision POST accepts a match ID, expected revision,
-confirm/revoke action and explicit confirmation. `update_neta_duplicate_decision`
-is an internal allowlisted runner job with server-derived actor identity; no
-client paths or commands are accepted. Validation runs before scheduling and
-again in the worker. Tracker owns atomic decision history and audit writes,
-report-directory locking and the existing CxAlloy project lock. Manual revocation
-retains history and cannot revoke automatic byte/render evidence. Upload aliases
-also read current decisions, so an interrupted audit rewrite cannot revive a
-revoked confirmation. No network upload is performed by these tasks.
-
-After saving, the worker rebuilds the report manifest. A separate allowlisted
-`refresh_neta_duplicate_evidence` job retries publication without changing a
-decision or rescanning PDFs. React reloads this resource in place; loaded routes,
-filters and drawers remain mounted. Static readers use the published snapshot;
-mutations require the existing operator API and both updated checkouts.
-
-GC report names are renamed from the Equipment drawer only by the loopback
-`local_operator` (Clerk sessions are read only). The drawer previews through
-`POST /neta-report-names/preview`, then `POST /neta-report-names` schedules the
-hidden `rename_neta_gc_report` job with the GC relative path, new name and the
-manifest `source_sha256`. Both the endpoint and `TaskManager.start_job` reject
-other identities. The worker calls Tracker `neta_report_rename.py`, which renames
-the PDF, manifest and lifecycle together and queues a CxAlloy replacement when
-the equipment was already uploaded; the next CxAlloy upload deletes the old
-attachment and uploads the renamed PDF. The worker then republishes the report
-manifest (with `pending_cxalloy_rename`) and the static review snapshot.
-
-## NETA test-position baselines
-
-Equipment of one family should carry the same set of NETA reports. The Tracker's
-`neta_report_fields.py` (NETA post-processing, after result checking) reads the
-header of every GC device report by word coordinates (PyMuPDF), OCRs only the
-header band of pages without a text layer, and writes
-`NETA_eport_To_GC/report_fields.json` keyed by SHA-256 (reused while the bytes and
-parser version are unchanged). The dashboard never opens PDFs for this.
-
-`scripts/etl/neta_positions.py` (pure) reduces the PDF ASSET / CT FILENAME /
-DESIGNATION (falling back to the GC name) to a canonical position key, votes the
-owning equipment from ASSET/SUBSTATION/EQUIPMENT ID/STATION, groups equipment
-into families (`MDS6|A-F`, `PDU6|A-F|sub`, `RP6|H1`), drafts a baseline from
-positions present in more than half of the NETA-complete members, and compares
-each equipment per position. Same-day FAIL beats PASS; otherwise the newest
-result wins; FAIL+PASS without dates needs review. Two PASS reports with
-different SN are flagged. `build_neta_position_check.py` writes
-`neta_position_check.json`; cable (`FDR`/`ATR`/`CB`) reports are excluded.
-A Tracker form classified as `oil_analysis` maps to the separate
-`OIL-SAMPLE` position. For TX6, the transformer test occupies `EQUIPMENT`,
-even when both PDF headers carry the same equipment designation. Tracker uses
-these forms to name verified oil samples and recover ambiguous CT phase names.
-
-Confirmed baselines live in `config/neta_position_baselines.json` (committed).
-`GET/PUT/DELETE /api/automation/neta-position-baselines[/{family}]` validate keys
-and aliases, require the loaded `revision` (409 on a stale save), write
-atomically, and allow edits only by the loopback `local_operator`. Families
-without a confirmed baseline are compared with the draft and labelled as such;
-only confirmed families feed `neta_complete_but_nonconforming` in the
-data-quality report. The `/neta-baselines` page edits baselines; Equipment adds
-a Report baseline filter (`?baselineIssue=`), a drawer Test positions section,
-and PDF-derived GC name suggestions that only pre-fill the existing rename flow.
-When the OCR header and GC name show the same position typo, the Tracker can
-use the dashboard's confirmed positions and aliases to suggest a unique
-correction. It projects suggestions by GC path from the cached fields. The ETL
-reuses the same rules with the current configuration, so a baseline edit takes
-effect on the next ETL without rerunning OCR. Suggestions preserve existing
-filename annotations and require the operator to confirm the rename.
-
-On `/neta-baselines`, the local operator can link a report to a confirmed
-position for one equipment. The revision-checked position-links API saves
-these mappings in the family baseline by equipment ID and report SHA-256.
-ETL applies an unambiguous link before comparing positions, keeps the parsed
-position for inspection, and suppresses the linked report's rename suggestion.
-Result and retest handling use the existing report statuses. Missing,
-ambiguous, or invalid links appear in the position check for review.
-
 ## Purpose
 
 The IAD6 Infralink Dashboard combines engineering exports and locally managed
@@ -108,18 +13,11 @@ The repository contains two distinct runtime surfaces:
 2. A local FastAPI control plane that runs a fixed set of Python automation
    jobs against this repository and a sibling EPS tracker repository.
 
-## System Flow
+Use [README](README.md) for setup, [Data Operations](docs/DATA_OPERATIONS.md)
+and [Report operations](docs/REPORT_OPERATIONS.md) for operator procedures,
+and [AGENTS.md](AGENTS.md) for implementation rules.
 
-The registered CxAlloy upload job directly invokes the configured sibling EPS
-Tracker's `upload_cxalloy_reports.py` in the Tracker working directory, passing
-the operator's auth state and supported options (including Force). The Tracker
-owns the complete upload workflow and all report/lifecycle/replacement checks.
-Dashboard adds no PDF history or site-filename gates and does not override Tracker
-functions. `scripts/automation/cxalloy_upload.py` remains a compatibility CLI that
-only forwards to the same script. Dashboard status builders retain their read-only
-content evidence rules; those rules do not govern upload execution. Operator
-access, personal sessions, task serialization and explicit live-upload confirmation
-remain enforced by the automation service.
+## System Flow
 
 ```mermaid
 flowchart LR
@@ -129,10 +27,51 @@ flowchart LR
     C --> D[React/Vite dashboard]
     X --> E[Linked report and attachment directories]
     E --> D
-    D -->|Data Operations only| F[FastAPI on 127.0.0.1:8765]
+    D -->|Operational requests and selected reads| F[FastAPI on 127.0.0.1:8765]
     F -->|allowlisted subprocesses| G[Dashboard ETL and EPS tracker scripts]
     G --> B
 ```
+
+### Responsibility boundaries
+
+| Layer | Owns |
+| --- | --- |
+| Python ETL | Input discovery and normalization, matching, data quality, aggregate datasets, and published evidence |
+| React | Route data loading, interactive state, presentation, filters, and views derived from loaded records |
+| FastAPI and runner | Request validation, authorization, run ownership and state, allowlisted commands, retries, and logs |
+| EPS Tracker | Provider workflows, raw daily report parsing, report lifecycle, and CxAlloy upload decisions and history |
+
+ETL publishes PDM → equipment → cases. Global Equipment also includes
+unlinked SystemElements records. The dashboard reads evidence from the
+Tracker and owns how that evidence is presented. A successful operator
+write and publication of its dashboard snapshot are separate outcomes.
+The automation runner owns recovery when publication fails after a write.
+
+## Rule ownership
+
+| Rule | Where to look first |
+| --- | --- |
+| Equipment matching and PDM assignment | [`match_equipment.py`](scripts/etl/match_equipment.py) and [`pdm_assignment.py`](scripts/etl/pdm_assignment.py) |
+| EPS/NETA tracking | [`tracking_rules.py`](scripts/etl/tracking_rules.py) and [`equipmentTrackingUtils.ts`](frontend/src/utils/equipmentTrackingUtils.ts) for browser-side and legacy inputs |
+| Open case status | [Python case rule](scripts/etl/case_status.py) and [frontend issue rule](frontend/src/utils/issueUtils.ts). [Shared test cases](scripts/tests/fixtures/case_status.json) check both runtimes. |
+| NETA completion and report evidence | [`build_pdm_dataset.py`](scripts/etl/build_pdm_dataset.py) publishes both facts. [`pdmUtils.ts`](frontend/src/utils/pdmUtils.ts) and [`equipmentReadinessUtils.ts`](frontend/src/utils/equipmentReadinessUtils.ts) derive their respective views. |
+| Cable test evidence and equipment energization readiness | [`cableTestUtils.ts`](frontend/src/utils/cableTestUtils.ts) and [`connectedCables.ts`](frontend/src/utils/connectedCables.ts). Equipment cable scope is specific to readiness. |
+| KPR lifecycle | [`equipment_lifecycle.json`](config/equipment_lifecycle.json) and [`build_kpr_summary.py`](scripts/etl/build_kpr_summary.py) |
+| CxAlloy status and pending equipment | [`build_cxalloy_report_status.py`](scripts/etl/build_cxalloy_report_status.py) publishes file evidence. [`equipmentUtils.ts`](frontend/src/utils/equipmentUtils.ts) applies the shared Overview/Equipment filter. |
+
+Closed case statuses are `closed`, `complete`, `completed`, `cancelled`,
+`canceled`, `void`, and `resolved`, after trimming and ignoring case. Cases
+with missing or blank status count as open. Views with only aggregate data
+keep their existing count fallbacks.
+
+Equipment references containing `BATTERY`, `UPS6`, or `MBC`, and direct
+`INV6` assets, are outside EPS/NETA tracking. `TX-INV6` remains tracked.
+KPR lifecycle stages are mutually exclusive. Cumulative NETA completion
+tracks a separate equipment total.
+
+A NETA completion flag can coexist with a missing report finding. A verified
+upload can coexist with an incomplete NETA flag. A cable scope with all known connections excluded can
+satisfy cable readiness, while missing cable scope leaves it unconfirmed.
 
 ## Frontend Architecture
 
@@ -141,21 +80,11 @@ flowchart LR
 - `frontend/src/main.tsx` mounts `App` inside `BrowserRouter`.
 - `frontend/src/App.tsx` owns route composition, common layout, loading/error
   boundaries, and return-to-Overview/KPR navigation state.
-- Current routes: `/overview`, `/kpr`, `/pdms`, `/equipment`, `/issues`,
-  `/eps-test-execution`, `/power-plan`, `/layout`, `/mv-equipment`, `/data-quality`, and
-  `/data-operations`.
 - All route pages load their code on demand inside a shared Suspense boundary.
 
-### Touch map gestures
-
-`usePinchZoom` shares touch-pointer tracking between Power Plan and Layout.
-The pages retain their own zoom limits and camera update paths. A second touch
-cancels single-pointer pan/selection, anchors the world point under the midpoint
-with SVG letterboxing accounted for, and updates zoom/pan from the initial
-two-touch pose. Remaining fingers are consumed after the first lift/cancel;
-click capture suppresses accidental equipment selection until a new interaction.
-Pointer capture loss and scene changes clear the gesture. Layout search controls
-are excluded from map gesture handling.
+Power Plan and Layout share `usePinchZoom`. See the
+[frontend touch implementation notes](frontend/README.md#touch-map-controls)
+for pointer handling.
 
 ### Data loading
 
@@ -460,13 +389,14 @@ when a deployment does not have the local cache.
    evidence does not change tracker completion or KPR totals.
 5. NETA report manifest and reviews, then the NETA test-position check, then the
    data-quality report (it reads `neta_position_check.json`), then CxAlloy,
-   issue-attachment, and power-plan/MV manifests.
+   issue-attachment, power-plan/MV, Layout, and equipment-link manifests.
 6. ETL metadata and record-count reporting.
 
-Each step writes under `frontend/public/data/`. The directory is generated and
-gitignored. JSON outputs commonly include selected-input metadata and a
-`records` array. The ETL stops on the first failed step; quality findings are
-reported as data and do not stop the pipeline.
+Builders publish under the gitignored `frontend/public/data/`. The ETL stops
+on the first failed step and writes run metadata after success. Earlier steps
+may already have published new outputs when a later step fails. The shared
+`json_utils.write_json` replaces one complete file at a time. Quality findings
+are published in the data-quality report.
 
 Full runs scope a content-addressed normalization cache to the pipeline.
 `workbook_cache.py` verifies source workbook bytes and versions all ETL Python
@@ -505,6 +435,112 @@ The primary hierarchy is PDM -> equipment -> cases. Additional generated models
 cover EPS test items and module/PDM execution, KPR lifecycle/trends, report and
 attachment manifests, power-plan annotations, MV daily test status, and
 CxAlloy upload status.
+
+### Contract changes
+
+- Use `scripts/etl/json_utils.py` and `frontend/src/utils/dataLoaders.ts` for
+  supported record JSON formats, including bare arrays and `{ records }`
+  envelopes with source metadata. Manifest objects have dataset-specific shapes.
+- Keep schemas and builders, `frontend/src/types/data.ts`, resource loaders,
+  and affected views in sync. When introducing a dataset, register its ETL
+  output and declare only the route or drawer dependencies that consume it.
+- Preserve equipment identity, evidence and diagnostic records across the
+  producer/consumer boundary. Define the meanings of missing, empty and false
+  when the contract uses them. Keep metadata and row ordering stable where
+  callers rely on them. Exercise the normal producer and consumer in addition
+  to unit coverage of the changed decision.
+
+## NETA duplicate evidence and decisions
+
+The automation API serves staged completed-report PDFs by opaque conflict ID,
+revision, and side. The Tracker validates staged hashes, stores the version
+decision, and publishes an eligible formal batch on completed-report refresh.
+ETL projects active formal filenames, including Updates-only reports, and their
+PDF fingerprints. The next normal CxAlloy upload uses that batch. See
+[completed report version operations](docs/REPORT_OPERATIONS.md#completed-neta-report-versions).
+
+The report manifest builder reads the configured Tracker's v2 duplicate audit
+through its `neta_duplicate_decisions` validation API. Candidate GC paths must
+remain within the report root, belong to active rename rows and the current
+stage/batch, retain the recognized-name/category scope, and match both SHA-256
+values. Only candidate files are hashed. Original and GC links resolve through
+the existing public report index; missing public copies invalidate actions.
+The manifest adds `duplicate_audit` with explicit availability, diagnostics and
+typed group records. No equipment readiness or completion contract changes.
+
+The protected duplicate-decision POST accepts a match ID, expected revision,
+confirm/revoke action and explicit confirmation. `update_neta_duplicate_decision`
+is an internal allowlisted runner job with server-derived actor identity; no
+client paths or commands are accepted. Validation runs before scheduling and
+again in the worker. Tracker owns atomic decision history and audit writes,
+report-directory locking and the existing CxAlloy project lock. Manual revocation
+retains history and cannot revoke automatic byte/render evidence. Upload aliases
+also read current decisions, so an interrupted audit rewrite cannot revive a
+revoked confirmation. No network upload is performed by these tasks.
+
+After saving, the worker rebuilds the report manifest. A separate allowlisted
+`refresh_neta_duplicate_evidence` job retries publication without changing a
+decision or rescanning PDFs. React reloads this resource in place; loaded routes,
+filters and drawers remain mounted. Static readers use the published snapshot;
+mutations require the existing operator API and both updated checkouts.
+
+GC report names are renamed from the Equipment drawer only by the loopback
+`local_operator` (Clerk sessions are read only). The drawer previews through
+`POST /neta-report-names/preview`, then `POST /neta-report-names` schedules the
+hidden `rename_neta_gc_report` job with the GC relative path, new name and the
+manifest `source_sha256`. Both the endpoint and `TaskManager.start_job` reject
+other identities. The worker calls Tracker `neta_report_rename.py`, which renames
+the PDF, manifest and lifecycle together and queues a CxAlloy replacement when
+the equipment was already uploaded; the next CxAlloy upload deletes the old
+attachment and uploads the renamed PDF. The worker then republishes the report
+manifest (with `pending_cxalloy_rename`) and the static review snapshot.
+
+## NETA test-position baselines
+
+Equipment of one family should carry the same set of NETA reports. The Tracker's
+`neta_report_fields.py` (NETA post-processing, after result checking) reads the
+header of every GC device report by word coordinates (PyMuPDF), OCRs only the
+header band of pages without a text layer, and writes
+`NETA_eport_To_GC/report_fields.json` keyed by SHA-256 (reused while the bytes and
+parser version are unchanged). The dashboard never opens PDFs for this.
+
+`scripts/etl/neta_positions.py` reduces the PDF ASSET / CT FILENAME /
+DESIGNATION (falling back to the GC name) to a canonical position key, votes the
+owning equipment from ASSET/SUBSTATION/EQUIPMENT ID/STATION, groups equipment
+into families (`MDS6|A-F`, `PDU6|A-F|sub`, `RP6|H1`), drafts a baseline from
+positions present in more than half of the NETA-complete members, and compares
+each equipment per position. Same-day FAIL beats PASS; otherwise the newest
+result wins; FAIL+PASS without dates needs review. Two PASS reports with
+different SN are flagged. `build_neta_position_check.py` writes
+`neta_position_check.json`; cable (`FDR`/`ATR`/`CB`) reports are excluded.
+A Tracker form classified as `oil_analysis` maps to the separate
+`OIL-SAMPLE` position. For TX6, the transformer test occupies `EQUIPMENT`,
+even when both PDF headers carry the same equipment designation. Tracker uses
+these forms to name verified oil samples and recover ambiguous CT phase names.
+
+Confirmed baselines live in `config/neta_position_baselines.json` (committed).
+`GET/PUT/DELETE /api/automation/neta-position-baselines[/{family}]` validate keys
+and aliases, require the loaded `revision` (409 on a stale save), write
+atomically, and allow edits only by the loopback `local_operator`. Families
+without a confirmed baseline are compared with the draft and labelled as such;
+only confirmed families feed `neta_complete_but_nonconforming` in the
+data-quality report. The `/neta-baselines` page edits baselines; Equipment adds
+a Report baseline filter (`?baselineIssue=`), a drawer Test positions section,
+and PDF-derived GC name suggestions that only pre-fill the existing rename flow.
+When the OCR header and GC name show the same position typo, the Tracker can
+use the dashboard's confirmed positions and aliases to suggest a unique
+correction. It projects suggestions by GC path from the cached fields. The ETL
+reuses the same rules with the current configuration, so a baseline edit takes
+effect on the next ETL without rerunning OCR. Suggestions preserve existing
+filename annotations and require the operator to confirm the rename.
+
+On `/neta-baselines`, the local operator can link a report to a confirmed
+position for one equipment. The revision-checked position-links API saves
+these mappings in the family baseline by equipment ID and report SHA-256.
+ETL applies an unambiguous link before comparing positions, keeps the parsed
+position for inspection, and suppresses the linked report's rename suggestion.
+Result and retest handling use the existing report statuses. Missing,
+ambiguous, or invalid links appear in the position check for review.
 
 ## Automation Backend
 
@@ -559,18 +595,28 @@ Commands are assembled from `JOB_DEFINITIONS`; clients cannot submit script
 paths or arbitrary commands. Options are validated per job. Live CxAlloy upload
 is marked dangerous and requires confirmation.
 
+Treat a stored decision and its published dashboard snapshot as two outcomes.
+For example, the duplicate-evidence refresh job can retry publishing after a
+decision was saved. Authorization, locking and revision checks belong at the
+existing write boundary. The calculation can report the proposed result before
+that boundary applies it.
+
 ## Authentication and Authorization
 
-- Dashboard viewing is public. Data Operations is gated by Clerk sign-in and
-  server-side operator authorization. The free-plan setup uses Restricted access
-  and invitations; `CLERK_ALLOWED_USER_IDS` independently controls API access.
+- Dashboard pages can be viewed without signing in. Data Operations uses Clerk
+  and server-side authorization, or the opt-in local operator mode.
+  `CLERK_ALLOWED_USER_IDS` controls remote API access independently of Clerk
+  account invitations.
 - The backend validates Clerk RS256 session signatures using the configured
   issuer's JWKS, time claims, session status, and exact authorized frontend
   origins. Missing Clerk configuration denies remote operations. An opt-in local
   bypass permits only direct loopback requests with local host/origin and no
   proxy/forwarding headers; Vite marks every proxy request to prevent bypass.
-  MV comment and NETA review GET endpoints remain public for viewing; their
-  writes and all other automation endpoints require an authorized operator.
+  The GETs for `/api/automation/mv-equipment-comments` and
+  `/api/automation/neta-report-reviews` allow anonymous dashboard reads. All
+  operational reads and writes require an authorized operator. Layout manual
+  energization, GC report renaming and NETA baseline mutations have additional
+  local-operator restrictions.
 - Personal provider logins use owner-bound remote browser windows rendered as
   transient screenshots with restricted click/text/key/scroll actions. An
   isolated Playwright context supports Microsoft phone MFA and CxAlloy login.
@@ -598,65 +644,36 @@ is marked dangerous and requires confirmation.
   and corrective attachments.
 - Sibling EPS tracker: tracker Excel data, EPS and MV daily Markdown reports,
   report downloads, GC rename/upload manifests, and automation scripts.
-- CxAlloy: optional confirmed report upload and upload-status reconciliation.
+- CxAlloy uploads run the sibling Tracker's `upload_cxalloy_reports.py` with
+  the operator's auth state and supported options, including Force. Tracker
+  owns upload selection, lifecycle, replacement and verification. The Dashboard
+  derives read-only status from local evidence. The automation runner enforces
+  serialization and explicit live-upload confirmation.
 - Local filesystem links/junctions expose downloaded NETA and issue files under
   `frontend/public/` for browser viewing.
 
-No integration credentials or endpoints belong in this repository.
+Keep credentials and instance-specific endpoint overrides in local configuration.
 
-## Configuration and Environment
+## Configuration and Deployment
 
-- `IAD6_EPS_TRACKER_ROOT`: overrides the sibling tracker root for automation,
-  CxAlloy status, power-plan/MV processing, and Vite ATP serving where supported.
-- `VITE_AUTOMATION_API_URL`: overrides the frontend automation API base URL.
-- `VITE_CLERK_PUBLISHABLE_KEY`: frontend Clerk instance key.
-- `VITE_LOCAL_OPERATIONS_BYPASS`, `AUTOMATION_LOCAL_AUTH_BYPASS`: opt-in frontend
-  and backend localhost access without Clerk. Local mode calls the loopback API
-  directly; remote clients always use the marked Vite proxy and require auth.
-- `CLERK_ISSUER`, `CLERK_AUTHORIZED_PARTIES`, `CLERK_ALLOWED_USER_IDS`: backend
-  session validation and operator authorization. The local launcher loads these
-  from root `.env.local`; Vite loads its own `frontend/.env.local`.
-- `AUTOMATION_LOGIN_ALLOWED_HOSTS`: optional exact additional SSO/CDN hostnames.
-- `AUTOMATION_LOGIN_HEADLESS`: defaults to true; false uses an interactive host
-  browser while retaining owner-bound remote control.
-- `CXALLOY_PROJECT_URL`: optional personal-login entry URL; default is read from
-  the existing tracker upload script.
-- `LOCALAPPDATA`: used indirectly to locate local browser auth-state files.
-- `config/equipment_lifecycle.json`: lifecycle order, labels, status aliases,
-  and colors used by KPR.
-- The sibling tracker owns the configurable JC2 SystemElements view URL.
+Use [README](README.md#quick-start) for local launch and Tracker location,
+[Data Operations](docs/DATA_OPERATIONS.md#choose-operator-access) for Clerk
+and local operator configuration, and
+[personal provider sessions](docs/DATA_OPERATIONS.md#personal-jc2-and-cxalloy-sessions)
+for login configuration. The sibling Tracker owns the configurable JC2
+SystemElements view URL.
 
-Secret values, browser state, raw exports, generated data, downloads, and
-runtime logs are excluded from version control.
+Static deployments serve dashboard pages and published files. Data Operations
+requires the loopback service, Tracker checkout, and host filesystem.
+The dashboard uses generated files and has no database service.
 
-## Local Development and Deployment
+## Evidence and Metric Invariants
 
-`python scripts/start_dashboard.py` starts Uvicorn with reload on loopback port
-8765 and Vite on loopback port 5173, and terminates both on Ctrl+C. The frontend
-can also run independently with `npm run dev` after ETL data exists.
-
-`npm run build` produces static assets in `frontend/dist/`. A static deployment
-can serve dashboard pages and generated public data, but Data Operations and
-local file integrations require the Python service, tracker repository, and
-filesystem access. No database service is required.
-
-## Important Decisions and Constraints
-
-- PDM data is the principal grouping, while global Equipment also includes
-  unlinked SystemElements records.
-- NETA completion/report evidence and lifecycle inventory are separate metrics.
-  Lifecycle stages are mutually exclusive and ordered by configuration.
-- EPS is tracked at test-item/component level and must not be compared directly
-  to equipment-level NETA totals without an explicit unit label.
-- Issue and corrective evidence is preserved even when missing; missing values
-  drive quality findings.
-- Equipment containing `BATTERY`, `UPS6`, or `MBC`, plus direct `INV6`, is
-  excluded from EPS/NETA tracking. Transformer IDs such as `TX-INV6` remain in
-  scope.
-- Report and attachment binaries remain outside generated JSON; manifests store
-  metadata and browser paths.
-- Data Operations intentionally remains a local control plane rather than a
-  general remote execution API.
+- EPS uses test-item/component units. Label units explicitly when showing EPS
+  alongside equipment-level NETA totals.
+- Preserve issue and corrective evidence. Missing values drive quality findings.
+- Generated report and attachment manifests carry metadata and browser paths.
+  The files are served from their configured public roots.
 
 ## Directory Map
 
@@ -680,6 +697,9 @@ filesystem access. No database service is required.
 
 ## Known Gaps
 
+- **Input mutation:** `neta_positions.compare_equipment` annotates supplied
+  report objects with GC-name fallback positions. Keep that evidence explicit
+  when refactoring this comparison and check the published position diagnostics.
 - **Unknown:** The production hosting, reverse proxy, TLS, and CI/CD design is
   not present in this repository.
 - **Unknown:** Canonical Python and Node.js versions are not pinned by project

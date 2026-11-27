@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 try:
+    from .case_status import is_closed_case
     from .file_discovery import get_input_files
     from .json_utils import (
         load_records_json,
@@ -17,6 +18,7 @@ try:
     )
     from .tracking_rules import requires_equipment_test_tracking
 except ImportError:
+    from case_status import is_closed_case
     from file_discovery import get_input_files
     from json_utils import (
         load_records_json,
@@ -40,24 +42,10 @@ EQUIPMENT_REQUIRED_FIELDS = ["equipment_id"]
 MODULE_LINK_REQUIRED_FIELDS = ["pdm_name", "source_equipment_label"]
 CASE_REQUIRED_FIELDS = ["case_id", "equipment_id", "status", "summary"]
 PDM_REQUIRED_FIELDS = ["pdm_name"]
-CLOSED_CASE_STATUSES = {
-    "closed",
-    "complete",
-    "completed",
-    "cancelled",
-    "canceled",
-    "void",
-    "resolved",
-}
 
 
 def is_blank(value: Any) -> bool:
     return value is None or (isinstance(value, str) and value.strip() == "")
-
-
-def is_closed_case(case: dict[str, Any]) -> bool:
-    status = case.get("status")
-    return isinstance(status, str) and status.strip().casefold() in CLOSED_CASE_STATUSES
 
 
 def make_pdm_lookup(pdms: list[dict[str, Any]]) -> dict[str, list[str]]:

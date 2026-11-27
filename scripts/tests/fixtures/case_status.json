@@ -1,0 +1,14 @@
+[
+  {"case": {"status": "closed"}, "open": false},
+  {"case": {"status": "complete"}, "open": false},
+  {"case": {"status": " CoMpLeTeD "}, "open": false},
+  {"case": {"status": "cancelled"}, "open": false},
+  {"case": {"status": "canceled"}, "open": false},
+  {"case": {"status": "void"}, "open": false},
+  {"case": {"status": "resolved"}, "open": false},
+  {"case": {"status": "Acknowledged"}, "open": true},
+  {"case": {"status": ""}, "open": true},
+  {"case": {"status": " "}, "open": true},
+  {"case": {"status": null}, "open": true},
+  {"case": {}, "open": true}
+]

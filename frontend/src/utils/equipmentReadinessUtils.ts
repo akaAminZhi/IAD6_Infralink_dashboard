@@ -1,5 +1,6 @@
-import type { CaseIssue, PdmEquipmentRecord, PdmRecord } from "../types/data";
+import type { PdmEquipmentRecord, PdmRecord } from "../types/data";
 import { requiresEquipmentTestTracking } from "./equipmentTrackingUtils";
+import { isOpenIssue } from "./issueUtils";
 
 export interface FlatPdmEquipment extends PdmEquipmentRecord {
   pdm_name: string | null;
@@ -59,15 +60,6 @@ export interface EquipmentAttentionRow {
   priority_score: number;
 }
 
-const CLOSED_STATUSES = new Set([
-  "closed",
-  "complete",
-  "cancelled",
-  "canceled",
-  "void",
-  "resolved",
-]);
-
 function isBlank(value: unknown): boolean {
   return value === null || value === undefined || String(value).trim() === "";
 }
@@ -118,17 +110,9 @@ function hasPdmNetaTestingStarted(pdm: PdmRecord): boolean {
   return incompleteCount !== equipmentCount;
 }
 
-export function isOpenCase(caseItem: CaseIssue): boolean {
-  const status = caseItem.status;
-  if (isBlank(status)) {
-    return true;
-  }
-  return !CLOSED_STATUSES.has(String(status).trim().toLowerCase());
-}
-
 function openCaseCount(equipment: PdmEquipmentRecord): number {
   if ((equipment.cases ?? []).length > 0) {
-    return (equipment.cases ?? []).filter(isOpenCase).length;
+    return (equipment.cases ?? []).filter(isOpenIssue).length;
   }
 
   const calculated = equipment.calculated_open_case_count;

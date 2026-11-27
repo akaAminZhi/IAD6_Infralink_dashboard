@@ -1,6 +1,26 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
+from typing import Any
+
+import pytest
+
 from scripts.etl.build_summary import build_summary
+
+
+@pytest.mark.parametrize(
+    "example",
+    json.loads(
+        (Path(__file__).parent / "fixtures" / "case_status.json").read_text(encoding="utf-8")
+    ),
+)
+def test_open_case_totals_follow_shared_status_examples(example: dict[str, Any]) -> None:
+    case = example["case"]
+    pdms = [{"pdm_name": "PDM-1", "equipment": [{"cases": [case]}]}]
+    summary = build_summary(pdms, [], [case], [])
+    assert summary["open_cases"] == int(example["open"])
+    assert summary["pdms_with_open_cases"] == int(example["open"])
 
 
 def test_build_summary_is_pdm_centric_and_uses_closed_case_rules() -> None:

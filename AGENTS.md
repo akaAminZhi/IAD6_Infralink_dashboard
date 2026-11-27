@@ -1,134 +1,71 @@
 # Codex Project Instructions
 
-## Project
+## Start here
 
-IAD6 Infralink Dashboard is a PDM-centric engineering dashboard for equipment
-readiness, Infralink NETA completion and reports, issues, third-party EPS test
-execution, KPR reporting, and power-plan/MV visualization.
+Inspect `git status` first and preserve existing uncommitted changes. Trace the
+affected path from the normal entry point through the rule or side effect to its
+consumers. Check nearby tests and helpers before editing.
 
-## Stack
+- Setup, launch, refresh, or test commands → [README](README.md).
+- Resuming work or investigating a recent change → [handoff](CODEX_HANDOFF.md).
+- Matching, readiness, issue counts, or other business rules → [rule ownership](ARCHITECTURE.md#rule-ownership).
+- ETL or generated data changes → [system flow](ARCHITECTURE.md#system-flow)
+  and [data contracts](ARCHITECTURE.md#contract-changes).
+- Data Operations jobs, writes, or auth → [automation backend](ARCHITECTURE.md#automation-backend),
+  [authorization](ARCHITECTURE.md#authentication-and-authorization), and
+  [runner.py](scripts/automation/runner.py). Follow the [operator guide](docs/DATA_OPERATIONS.md)
+  when running a workflow.
 
-- Frontend: React 18, TypeScript (strict), Vite, React Router, Tailwind CSS,
-  TanStack Table, Nivo/Recharts, ExcelJS, Lucide icons.
-- Data pipeline: Python, openpyxl, PyMuPDF, dataclasses, JSON/CSV outputs.
-- Local operations: FastAPI/Uvicorn and Playwright; no database.
-- Tests: pytest and Vitest/Testing Library.
+## Implementation
 
-## Read First
+- Keep changes in the owning path and necessary callers. Check that existing
+  helpers match the intended inputs and semantics before extending them. Give
+  each business decision one implementation per runtime. Use equivalent cases
+  in Python and TypeScript tests when both implement the rule. Extract a helper
+  when it names a business decision or has real callers.
+- Keep calculations pure. Pass in evidence, policy, and time when they affect
+  the result. Keep reads, writes, and subprocesses at their owning boundaries.
+  Derive React rows and totals from loaded data and current selections.
+- Preserve missing, empty, and false as distinct contract states. Report
+  expected failures at the owning boundary with actionable context.
+- For writes and jobs, identify what stays saved if publication fails. Reuse
+  locks, revision checks, and resume or refresh entry points so retries avoid
+  repeating completed mutations.
+- Preserve strict TypeScript and shared React, Tailwind, and Lucide patterns.
+  Follow nearby Python type hints, pathlib, and module/script import fallbacks.
+- Reuse `load_records_json` and `unwrapRecords` for bare arrays and record
+  envelopes. Use `scripts/etl/json_utils.py` for single-file JSON writes.
+  For contract changes, update producers, schemas, types, loaders, consumers,
+  and tests together. Verify old and new formats and regenerate local outputs
+  when inputs are available.
 
-- `README.md` and `frontend/README.md`
-- `ARCHITECTURE.md` for system boundaries and data flow
-- `CODEX_HANDOFF.md` for current work only
-- `scripts/etl/run_etl.py`, `scripts/etl/schemas.py`, and
-  `scripts/etl/tracking_rules.py` for data changes
-- `frontend/src/types/data.ts` and `frontend/src/hooks/useDashboardData.ts` for
-  frontend data contracts
-- `scripts/automation/runner.py` before changing Data Operations
+## Project constraints
 
-## Important Paths
+- Preserve PDM → equipment → cases, plus unmatched and ambiguous records for
+  diagnostics. Carry `issue_image` and `corrective_images` through to consumers.
+- Report missing evidence through Data Quality, including a missing report
+  alongside explicit NETA completion. Follow the rule map for tracking
+  exclusions and the distinction between lifecycle inventory and cumulative totals.
+- Keep FastAPI on loopback. Require server-side operator authorization for
+  operations and preserve owner checks and direct-loopback restrictions.
+  Run only jobs registered in `scripts/automation/runner.py`. A live CxAlloy
+  upload requires explicit confirmation.
+- Keep raw exports, generated datasets, downloaded reports, logs, browser
+  auth state, credentials, tokens, and environment files out of commits.
 
-- `raw_data/{module,system_elements,cases,power_plan}/`: local source files
-- `scripts/etl/`: ETL, matching, aggregation, manifests, and quality checks
-- `scripts/automation/`: local allowlisted task API and daily-report handling
-- `scripts/tests/`: Python tests
-- `frontend/src/`: application code and colocated `*.test.ts[x]` tests
-- `frontend/public/data/`: generated, gitignored dashboard datasets
-- `config/equipment_lifecycle.json`: ordered KPR lifecycle mapping
-- `runtime/automation/`: local, gitignored run state and logs
+## Local environment and verification
 
-## Default Agent Environment
-
-- Use the existing conda `base` environment by default for Python scripts,
-  pytest, Playwright, browser testing, and debugging. This is a standing user
-  preference; do not ask the user to repeat or confirm it for each task.
-- On this workstation, conda base is `C:\anaconda3` and its Python interpreter
-  is `C:\anaconda3\python.exe`. Invoke that interpreter directly when the shell's
-  `python` is ambiguous. On another machine, locate base with `conda info --base`
-  or use `conda run -n base python ...`.
-- Reuse base's installed packages and Playwright browsers. Do not create a new
-  virtual environment or switch Python environments unless the task requires
-  isolation or the user explicitly requests it. Run Python package/browser tools
-  through the same interpreter (`python -m pip`, `python -m playwright`).
-- An unavailable browser-control connector does not mean local browsers are
-  unavailable. For browser testing/debugging, use Playwright from conda base
-  when the connector is unavailable. When user sign-in is needed, notify the user
-  and open a visible browser window for them to complete login.
-- Frontend Node/npm commands retain the existing project workflow below.
-
-## Verified Commands
-
-Run from the repository root unless noted. Python commands below use conda base:
-
-```powershell
-python -m pip install -r requirements.txt
-python -m playwright install chromium
-python scripts/etl/run_etl.py
-python scripts/start_dashboard.py
-python -m pytest scripts/tests
-python -m pytest scripts/tests/test_name.py -q
-```
-
-Run frontend commands from `frontend/`:
-
-```powershell
-npm install
-npm run dev
-npm run build
-npm test
-npm test -- src/path/to/file.test.tsx
-npm run test:coverage
-```
-
-No lint command or ESLint configuration is currently defined. Do not claim a
-lint check was run.
-
-## Conventions
-
-- Preserve strict TypeScript, functional React components, typed props, and
-  interfaces in `frontend/src/types/`.
-- Follow existing Tailwind utility and shared component patterns; use Lucide
-  icons rather than custom inline SVG for ordinary controls.
-- Python uses type hints, `pathlib.Path`, dataclasses for normalized schemas,
-  small pure transformation helpers, and import fallbacks for module/script use.
-- Generated JSON may be a list or a `{ selected_input_files, records }`
-  envelope; use `load_records_json`/`unwrapRecords` rather than ad hoc parsing.
-- Use `snake_case` for Python/data fields, `PascalCase` for React components and
-  TypeScript interfaces, and `camelCase` for frontend functions/state.
-
-## Non-Negotiable Rules
-
-- Preserve the PDM-centric hierarchy: PDM -> equipment -> cases.
-- Never drop `issue_image` or `corrective_images`; missing evidence belongs in
-  the data-quality report.
-- NETA complete with a missing report must remain visible as a quality problem.
-- Open-case counts exclude closed/complete/cancelled/void/resolved statuses as
-  defined by the existing shared helpers; reuse those helpers.
-- Equipment references containing `BATTERY`, `UPS6`, or `MBC`, and direct
-  `INV6` assets, do not require EPS/NETA tracking. `TX-INV6` remains tracked.
-- Preserve unmatched and ambiguous module/case records for debugging.
-- Keep lifecycle stage inventory mutually exclusive. Cumulative NETA totals are
-  a separate metric from equipment currently in the NETA lifecycle stage.
-- Do not expose arbitrary command execution. Data Operations may run only jobs
-  registered in `scripts/automation/runner.py`.
-- A live CxAlloy upload requires explicit confirmation.
-
-## Database, Auth, and Security
-
-- There is no database and therefore no migration framework. If a data contract
-  changes, update Python schemas/builders, TypeScript interfaces/loaders,
-  targeted tests, and regenerated outputs together.
-- The dashboard has no application authentication. The automation API is
-  designed for loopback use and localhost CORS only; do not expose it externally
-  without adding authentication, authorization, TLS, and deployment controls.
-- Never commit raw exports, generated datasets, downloaded reports, runtime
-  logs, browser auth-state files, credentials, tokens, or environment files.
-
-## Change Discipline
-
-- Inspect `git status` first and preserve all user/uncommitted changes.
-- Keep changes scoped; do not refactor unrelated code or reformat whole files.
-- Preserve existing behavior unless the task explicitly changes it.
-- Prefer existing matching, tracking, readiness, issue-status, and date helpers.
-- Run the narrowest relevant tests first, then build; run the full suites only
-  when risk warrants it or the user requests it.
-
+- Use conda base for Python, pytest, pip, Playwright, and debugging. On this
+  workstation use `C:\anaconda3\python.exe` when `python` is ambiguous. On
+  other machines resolve base with `conda info --base` or use
+  `conda run -n base python`. Reuse installed packages and browsers.
+- Use base Playwright when browser control is unavailable. When a provider
+  requires the user's sign-in, notify them and open a visible browser.
+- Run the narrowest relevant tests first and verify the normal entry point.
+  Build after frontend code or contract changes. Add a focused regression
+  when existing coverage misses the change. Compare behavior-preserving
+  transformations on identical inputs, allowing for run metadata. Cover legacy,
+  missing, ambiguous, and retry paths where applicable.
+- Review the diff for duplicate logic, dead code, and unrelated changes.
+  Report checks actually run and any blocked verification. Update the owning
+  document when its facts change.

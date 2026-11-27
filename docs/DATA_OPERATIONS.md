@@ -81,6 +81,10 @@ with the identity administrator. For host-specific SSO or asset domains, set
 with an interactive desktop can set `AUTOMATION_LOGIN_HEADLESS=false` if the
 provider rejects headless Chromium. Restart the service after configuration changes.
 
+The host stores provider browser state under local app data. Set
+`CXALLOY_PROJECT_URL` if the personal login needs a different project entry URL.
+The default project URL comes from the Tracker upload script.
+
 If the VM shows an **Invalid hook call** in `ClerkProvider`, stop the dashboard,
 sync the Vite configs and lockfile, run `npm ci` in `frontend/`, then restart
 and hard-refresh the remote page. Use `npm ls react react-dom @clerk/react` and
